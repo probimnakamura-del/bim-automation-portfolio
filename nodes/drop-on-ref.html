@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>参照モデルへ着地 GH_DropOnRef — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス dor- で衝突回避
+   ①浮き＆埋まりが混在 → ②落下＆せり上げ → ③支持天端へ0タッチ
+   ============================================================ */
+.dor-svg text { font-family: var(--font); }
+
+/* 参照モデル（動かさない・グレー） */
+.dor-ref     { fill: #10131f; stroke: #5b678f; stroke-width: 2; }
+.dor-reftop  { stroke: #9aa7cc; stroke-width: 3; stroke-linecap: round; }
+
+/* 編集部材（アンバー） */
+.dor-mem  { fill: #1b1707; stroke: var(--accent); stroke-width: 2.4; }
+
+/* 移動矢印 */
+.dor-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.6; }
+.dor-arrow-head  { fill: var(--accent); }
+
+/* 0タッチ成功マーク（緑） */
+.dor-okline { stroke: var(--ok); stroke-width: 3; }
+.dor-oktxt  { fill: var(--ok); font-size: 13px; font-weight: 800; }
+.dor-flash  { fill: none; stroke: var(--ok); stroke-width: 3.5; }
+
+/* テキスト */
+.dor-cap    { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.dor-small  { fill: #9aa7cc; font-size: 12.5px; font-weight: 600; }
+.dor-state  { fill: #cdd6f4; font-size: 13px; font-weight: 700; }
+
+/* 進捗バー */
+.dor-prog-tr { fill: #2a2410; }
+.dor-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.dor-fall    { animation: dorFall  10s cubic-bezier(.55,0,.9,.5) infinite; }
+.dor-rise    { animation: dorRise  10s cubic-bezier(.2,.6,.4,1)   infinite; }
+.dor-adown   { animation: dorADown 10s infinite; }
+.dor-aup     { animation: dorAUp   10s infinite; }
+.dor-state1  { animation: dorState 10s infinite; }
+.dor-okA     { animation: dorOk    10s infinite; }
+.dor-flashA  { animation: dorFlash 10s infinite; }
+.dor-l1      { animation: dorL1    10s infinite; }
+.dor-l2      { animation: dorL2    10s infinite; }
+.dor-l3      { animation: dorL3    10s infinite; }
+.dor-prog    { animation: dorProg  10s linear infinite; }
+
+/* 浮いた部材が落下（下向きへ） */
+@keyframes dorFall {
+  0%,30%  { transform: translateY(-118px); }
+  62%     { transform: translateY(0); }
+  100%    { transform: translateY(0); }
+}
+/* 埋まった部材がせり上がる（上向きへ） */
+@keyframes dorRise {
+  0%,30%  { transform: translateY(70px); }
+  62%     { transform: translateY(0); }
+  100%    { transform: translateY(0); }
+}
+/* 下向き矢印（落下側） */
+@keyframes dorADown {
+  0%,6%   { opacity: 0; }
+  14%     { opacity: 1; }
+  55%     { opacity: 1; }
+  63%,100%{ opacity: 0; }
+}
+/* 上向き矢印（引上げ側） */
+@keyframes dorAUp {
+  0%,6%   { opacity: 0; }
+  14%     { opacity: 1; }
+  55%     { opacity: 1; }
+  63%,100%{ opacity: 0; }
+}
+/* 浮き/埋まり ラベル */
+@keyframes dorState {
+  0%,4%   { opacity: 0; }
+  12%     { opacity: 1; }
+  28%     { opacity: 1; }
+  33%,100%{ opacity: 0; }
+}
+/* 0タッチ成功マーク */
+@keyframes dorOk {
+  0%,64%  { opacity: 0; }
+  72%     { opacity: 1; }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+/* 着地フラッシュ */
+@keyframes dorFlash {
+  0%,62%  { opacity: 0; }
+  67%     { opacity: .9; }
+  73%     { opacity: 0; }
+  78%     { opacity: .6; }
+  84%,100%{ opacity: 0; }
+}
+@keyframes dorL1 { 0%{opacity:0} 5%{opacity:1} 28%{opacity:1} 33%{opacity:0} 100%{opacity:0} }
+@keyframes dorL2 { 0%,33%{opacity:0} 38%{opacity:1} 60%{opacity:1} 65%{opacity:0} 100%{opacity:0} }
+@keyframes dorL3 { 0%,65%{opacity:0} 70%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes dorProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="steel">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">鉄骨モデリング支援</span>
+    <h1 class="node-title">参照モデルへ着地 <span style="opacity:.75;font-weight:700">GH_DropOnRef</span></h1>
+    <p class="catch">浮いた部材は<span class="em">ストンと落下</span>、埋まった部材は<span class="em">せり上げ</span>。参照モデルの上へ<span class="em">0タッチ</span>で一括着地。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">Grasshopper Pythonノード</span>
+      <span class="badge st-ver">Run立上りで実移動</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg dor-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="浮いた部材が落下し埋まった部材がせり上がって参照モデルの天端へ0タッチするアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="dor-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="dor-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== 参照モデル（動かさない） ===== -->
+        <g>
+          <rect class="dor-ref" x="170" y="252" width="96" height="150" rx="2"></rect>
+          <line class="dor-reftop" x1="170" y1="252" x2="266" y2="252"></line>
+          <rect class="dor-ref" x="520" y="252" width="96" height="150" rx="2"></rect>
+          <line class="dor-reftop" x1="520" y1="252" x2="616" y2="252"></line>
+          <text class="dor-small" x="393" y="392" text-anchor="middle">参照モデル（ワークセッション・動かさない）</text>
+        </g>
+
+        <!-- ===== 落下側：浮いた部材 ===== -->
+        <g class="dor-fall">
+          <rect class="dor-mem" x="152" y="234" width="132" height="18" rx="2"></rect>
+        </g>
+        <!-- 下向き矢印 -->
+        <g class="dor-adown">
+          <line class="dor-arrow-shaft" x1="218" y1="150" x2="218" y2="212"></line>
+          <polygon class="dor-arrow-head" points="218,224 211,210 225,210"></polygon>
+        </g>
+        <text class="dor-state dor-state1" x="218" y="140" text-anchor="middle">浮き</text>
+
+        <!-- ===== 引上げ側：埋まった部材 ===== -->
+        <g class="dor-rise">
+          <rect class="dor-mem" x="502" y="234" width="132" height="18" rx="2"></rect>
+        </g>
+        <!-- 上向き矢印 -->
+        <g class="dor-aup">
+          <line class="dor-arrow-shaft" x1="568" y1="212" x2="568" y2="150"></line>
+          <polygon class="dor-arrow-head" points="568,138 561,152 575,152"></polygon>
+        </g>
+        <text class="dor-state dor-state1" x="568" y="140" text-anchor="middle">埋まり</text>
+
+        <!-- ===== 0タッチ成功マーク ===== -->
+        <g class="dor-okA">
+          <line class="dor-okline" x1="152" y1="252" x2="284" y2="252"></line>
+          <line class="dor-okline" x1="502" y1="252" x2="634" y2="252"></line>
+          <text class="dor-oktxt" x="218" y="222" text-anchor="middle">✔ 0タッチ</text>
+          <text class="dor-oktxt" x="568" y="222" text-anchor="middle">✔ 0タッチ</text>
+        </g>
+        <rect class="dor-flash dor-flashA" x="150" y="230" width="490" height="26" rx="6"></rect>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="dor-cap dor-l1" x="400" y="430" text-anchor="middle">① 参照モデルの上で、部材が浮いたり埋まったり</text>
+        <text class="dor-cap dor-l2" x="400" y="430" text-anchor="middle">② 浮きは落下・埋まりはせり上げ（AllowRaise）</text>
+        <text class="dor-cap dor-l3" x="400" y="430" text-anchor="middle">③ それぞれの支持天端へ 0タッチで一括着地</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">浮いた部材は真下の天端へストンと落下、埋まった部材は部材天端までせり上がり——バラバラなレベルの部材を1ノードで一括0タッチする様子を10秒ループで再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>ワークセッションで参照している<strong>下地モデルの上面に、編集中の部材の底面をピタッと突き合わせる（0タッチ）</strong>ためのノードです。選んだ部材の一つひとつが、<strong>自分の真下にある支持面を自動で選んで</strong>個別に着地するので、レベルがバラバラの部材でもまとめて一括処理できます。</p>
+    <p>賢いのは<strong>浮き／埋まりの両対応</strong>。宙に浮いている部材は真下の天端へ「落下」し、下地に食い込んで埋まっている部材はその部材の天端まで「せり上げ」て0タッチにします（<span class="port" style="color:var(--accent)">AllowRaise</span> で引上げのオン／オフ切替）。<span class="port" style="color:var(--accent)">Gap</span> に数値を入れれば、あえて隙間を残した配置もできます。同じRhinoグループの部材は<strong>剛体としてまとめて動く</strong>ので、梁＋スチフナ＋ガセットといった組立は相対位置を崩さずに着地します。</p>
+    <p class="lead">※ 0タッチ＝隙間ゼロで面を突き合わせること。／ ワークセッション＝別ファイルのモデルを「参照」として重ねて開く仕組み。参照側は動かしません。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Ids</td><td>移動する編集部材のGUIDリスト（アクティブモデルの通常オブジェクト。ブロックインスタンス可）。</td></tr>
+          <tr><td class="port">RefIds</td><td>任意。着地先に使う参照パーツのGUID。未接続ならワークセッションの全参照を自動スキャン。</td></tr>
+          <tr><td class="port">Gap</td><td>目標隙間mm（既定 0.0 ＝ 0タッチ）。プラスで意図的なクリアランス。</td></tr>
+          <tr><td class="port">SearchRange</td><td>上面を探す鉛直の窓mm（既定 1000）。底面±この範囲の天端だけを候補にし、遠い別レベルへの誤吸着を防ぐ。</td></tr>
+          <tr><td class="port">XYtol</td><td>XY重心内包／重なり判定の許容mm（既定 10）。</td></tr>
+          <tr><td class="port">GroupAsUnit</td><td>同一Rhinoグループを剛体として一括移動（既定 True）。組立の相対位置を保つ。</td></tr>
+          <tr><td class="port">AllowRaise</td><td>埋まり（干渉）時に部材天端まで引上げて0タッチ（既定 True）。Falseなら落下のみ。</td></tr>
+          <tr><td class="port">Run / Preview / Zoom</td><td>Runの<strong>立上り</strong>で実移動（Button推奨）／緑ゴーストで移動先プレビュー／対象へズーム。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Moved</td><td>移動を適用した部材のGUID（Transform後の新ID）。</td></tr>
+          <tr><td class="port">Dz</td><td>各部材の算出移動量[mm]（Ids順。未マッチは None）。落下=マイナス、引上げ=プラス。</td></tr>
+          <tr><td class="port">Ghost</td><td>移動先位置の表示用ジオメトリ。プレビュー確認・下流受け渡し用。</td></tr>
+          <tr><td class="port">Log</td><td>部材ごとの対応参照・dz・状態のテキスト。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">参照モデルを開く</span><span class="step-body">下地になるモデルを<strong>ワークセッションで参照</strong>として読み込んでおく（着地先の天端がある状態）。</span></li>
+      <li><span class="step-title">部材を渡す</span><span class="step-body">着地させたい編集部材のGUIDを <span class="port" style="color:var(--accent)">Ids</span> へ接続。着地先を絞りたければ <span class="port" style="color:var(--accent)">RefIds</span> も指定（未接続なら全参照から自動選定）。</span></li>
+      <li><span class="step-title">隙間と挙動を決める</span><span class="step-body"><span class="port" style="color:var(--accent)">Gap</span> で目標隙間（0で0タッチ）、<span class="port" style="color:var(--accent)">AllowRaise</span> で埋まり時の引上げ可否、<span class="port" style="color:var(--accent)">GroupAsUnit</span> で組立の一括移動を設定。</span></li>
+      <li><span class="step-title">プレビューで確認</span><span class="step-body"><span class="port" style="color:var(--accent)">Preview</span> をオンにすると、緑のゴーストと移動量(dz)が画面に出る。想定どおりの天端に着地するか目視。</span></li>
+      <li><span class="step-title">Runで実行</span><span class="step-body"><span class="port" style="color:var(--accent)">Run</span> を<strong>押して離す（立上りエッジ）</strong>と実際に移動。Buttonでの運用が安全。ずれても <kbd>Ctrl+Z</kbd> で取消可。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <p class="flow-solo"><b>単独で使えます。</b> 参照モデルさえ開いていれば、他のノードにつながず単体で完結する配置補助ツールです。端をライン基準にそろえたいときは、姉妹ツールの <a href="align-end-to-line.html">GH_AlignEndToLine</a> が同じ操作感で使えます。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\04_落下整列.3dm</span>
+      <p class="sample-desc">梁の上に浮いた部材＋基準ライン。GH_DropOnRef着地とGH_AlignEndToLine整列のデモ用。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\04_落下整列.3dm</span> を開く（下地の梁は参照、または同一ファイル内でもデモ可）。</span></li>
+        <li><span class="step-title">浮いた部材を選ぶ</span><span class="step-body">梁の上に浮いている部材のGUIDを <span class="port" style="color:var(--accent)">Ids</span> に渡す。</span></li>
+        <li><span class="step-title">プレビュー</span><span class="step-body"><span class="port" style="color:var(--accent)">Preview</span> オンで、緑ゴーストが下の梁天端へ落ちる位置を確認。<span class="port" style="color:var(--accent)">Gap</span>=0 で0タッチ。</span></li>
+        <li><span class="step-title">Runで着地</span><span class="step-body"><span class="port" style="color:var(--accent)">Run</span> を立上りで押すと実際に落下。<span class="port" style="color:var(--accent)">Dz</span> でどれだけ落ちたか確認できる。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Runは「立上りエッジ」でのみ実移動。まずPreview</div>
+        <p>実際の移動は <span class="port" style="color:var(--accent)">Run</span> が False→True になった瞬間だけ起きます（Button推奨）。Toggleで放置しても再適用は1回だけ。dzは毎回いまの位置から再計算する冪等設計なので、適用後はdz≒0になります。押す前に必ず <span class="port" style="color:var(--accent)">Preview</span> の緑ゴーストで着地先を確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 参照オブジェクトはワークセッションで読み込んでおく</div>
+        <p>参照モデルの列挙には <code>ObjectEnumeratorSettings(ReferenceObjects=True)</code> が必要で、通常の走査では参照が拾えません。着地先が反応しないときは、下地モデルがワークセッション参照として開かれているかを確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 天端は軸並行BBoxの最大Z。傾いた面は1点接触</div>
+        <p>「上面／底面」は軸に平行なバウンディングボックスの max／min Z で判定します。水平材やスラブのような平らな天端では正確ですが、著しく傾いた天端は1点接触になる点に留意してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 遠い別レベルへは落とさない（SearchRange）</div>
+        <p><span class="port" style="color:var(--accent)">SearchRange</span>（既定1000mm）の外にある天端には吸着しません。これは別の階などへの誤吸着を防ぐためです。意図的に遠いレベルへ落としたいときは値を広げてください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\<span class="fp-accent">GH_DropOnRef.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-steel">鉄骨モデリング支援の一覧</a>
+      <a href="align-end-to-line.html">姉妹ツール：GH_AlignEndToLine</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

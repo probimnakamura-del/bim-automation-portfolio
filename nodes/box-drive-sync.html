@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>BoxDriveSync Box→スプレッドシート同期 — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス bds- で衝突回避
+   ①Boxフォルダに指示書が増える
+   →②ファイル名を走査してFID・資料名を抽出
+   →③スプレッドシートへ差分転記＋GAS同期
+   ============================================================ */
+.bds-svg text { font-family: var(--font); }
+
+/* Box フォルダ */
+.bds-folder    { fill: #0f1a30; stroke: var(--accent); stroke-width: 2; }
+.bds-foldertab { fill: var(--accent); opacity: .85; }
+.bds-boxlbl    { fill: #e6ecff; font-size: 12.5px; font-weight: 800; }
+.bds-file      { fill: #16203a; stroke: #33406a; stroke-width: 1.2; }
+.bds-file-new  { fill: #16203a; stroke: var(--accent); stroke-width: 1.8; }
+.bds-pdf       { fill: #f87171; }
+.bds-pdftxt    { fill: #ffffff; font-size: 8px; font-weight: 800; }
+.bds-fileln    { fill: #6f7db0; opacity: .75; }
+
+/* スキャン＆抽出 */
+.bds-scanbar   { fill: #0a1122; stroke: var(--accent); stroke-width: 1.4; }
+.bds-scanbartxt{ fill: #cdd6f4; font-size: 11px; font-weight: 700; font-family: "Cascadia Code", Consolas, monospace; }
+.bds-beam      { fill: var(--accent); opacity: .55; }
+.bds-token     { fill: #16203a; stroke: var(--accent); stroke-width: 1.5; }
+.bds-tokentxt  { fill: var(--accent); font-size: 11px; font-weight: 800; }
+
+/* 矢印 */
+.bds-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.4; opacity: .8; }
+.bds-arrow-head  { fill: var(--accent); }
+.bds-flow        { fill: #ffffff; }
+
+/* スプレッドシート */
+.bds-sheet     { fill: #0c1428; stroke: #34406a; stroke-width: 1.8; }
+.bds-sheet-bar { fill: #16613a; }
+.bds-sheettxt  { fill: #e6ecff; font-size: 11.5px; font-weight: 800; }
+.bds-gridln    { stroke: #2a3352; stroke-width: 1; }
+.bds-headtxt   { fill: #9aa7cc; font-size: 10.5px; font-weight: 700; }
+.bds-celltxt   { fill: #cdd6f4; font-size: 10.5px; font-weight: 600; }
+.bds-rowhi     { fill: #34d399; opacity: .22; }
+.bds-newtag    { fill: #34d399; }
+.bds-newtagtxt { fill: #06210f; font-size: 9.5px; font-weight: 800; }
+
+/* GAS 同期バッジ */
+.bds-gas      { fill: #101a30; stroke: var(--accent); stroke-width: 1.6; }
+.bds-gastxt   { fill: #e6ecff; font-size: 11px; font-weight: 800; }
+
+/* テキスト */
+.bds-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.bds-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.bds-prog-tr { fill: #223052; }
+.bds-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.bds-anim-folder { animation: bdsFolder 10s infinite; }
+.bds-anim-drop   { animation: bdsDrop   10s infinite; }
+.bds-anim-scan   { animation: bdsScan   10s infinite; }
+.bds-anim-beam   { animation: bdsBeam   10s infinite; }
+.bds-anim-flow   { animation: bdsFlow   10s infinite; }
+.bds-anim-sheet  { animation: bdsSheet  10s infinite; }
+.bds-anim-hi     { animation: bdsHi     10s infinite; }
+.bds-anim-gas    { animation: bdsGas    10s infinite; }
+.bds-t1 { animation: bdsTok 10s infinite; }
+.bds-t2 { animation: bdsTok 10s infinite; animation-delay: -9.6s; }
+.bds-t3 { animation: bdsTok 10s infinite; animation-delay: -9.2s; }
+.bds-l1 { animation: bdsL1 10s infinite; }
+.bds-l2 { animation: bdsL2 10s infinite; }
+.bds-l3 { animation: bdsL3 10s infinite; }
+.bds-prog { animation: bdsProg 10s linear infinite; }
+
+@keyframes bdsFolder {
+  0%,3%   { opacity:0; }
+  8%      { opacity:1; }
+  90%     { opacity:1; }
+  100%    { opacity:.6; }
+}
+/* 新しい指示書PDFがフォルダに落ちてくる */
+@keyframes bdsDrop {
+  0%,10%   { opacity:0; transform:translateY(-40px); }
+  16%      { opacity:1; transform:translateY(-40px); }
+  26%      { opacity:1; transform:translateY(0); }
+  100%     { opacity:1; transform:translateY(0); }
+}
+@keyframes bdsScan {
+  0%,30%  { opacity:0; }
+  36%     { opacity:1; }
+  90%     { opacity:1; }
+  100%    { opacity:.4; }
+}
+/* 走査ビームが左→右へ */
+@keyframes bdsBeam {
+  0%,32%   { opacity:0; transform:translateX(0); }
+  38%      { opacity:.9; transform:translateX(0); }
+  56%      { opacity:.9; transform:translateX(168px); }
+  60%,100% { opacity:0; transform:translateX(168px); }
+}
+/* 抽出トークンがふわっと上に出る（stagger） */
+@keyframes bdsTok {
+  0%,40%   { opacity:0; transform:translateY(6px) scale(.9); }
+  47%      { opacity:1; transform:translateY(0) scale(1); }
+  62%      { opacity:1; }
+  66%,100% { opacity:0; transform:translateY(-4px); }
+}
+@keyframes bdsFlow {
+  0%,58%   { opacity:0; transform:translateX(0); }
+  63%      { opacity:1; transform:translateX(0); }
+  72%      { opacity:1; transform:translateX(40px); }
+  76%,100% { opacity:0; transform:translateX(40px); }
+}
+@keyframes bdsSheet {
+  0%,56%  { opacity:0; transform:translateY(6px); }
+  64%     { opacity:1; transform:translateY(0); }
+  100%    { opacity:1; }
+}
+@keyframes bdsHi {
+  0%,68%  { opacity:0; }
+  74%     { opacity:1; }
+  84%     { opacity:.5; }
+  90%     { opacity:1; }
+  100%    { opacity:1; }
+}
+@keyframes bdsGas {
+  0%,82%  { opacity:0; transform:translateY(6px); }
+  88%     { opacity:1; transform:translateY(0); }
+  100%    { opacity:1; }
+}
+@keyframes bdsL1 { 0%{opacity:0} 4%{opacity:1} 29%{opacity:1} 34%{opacity:0} 100%{opacity:0} }
+@keyframes bdsL2 { 0%,34%{opacity:0} 39%{opacity:1} 57%{opacity:1} 62%{opacity:0} 100%{opacity:0} }
+@keyframes bdsL3 { 0%,62%{opacity:0} 67%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes bdsProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ops">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">運用・監視・事務</span>
+    <h1 class="node-title">BoxDriveSync <span style="opacity:.75;font-weight:700">Box→スプレッドシート同期</span></h1>
+    <p class="catch">Boxに積まれた指示書を、<span class="em">ファイル名から読み取って</span><span class="em">スプレッドシートへ自動転記</span>する——手入力ゼロの事務ロボット。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中と推定（1日3回 自動実行）</span>
+      <span class="badge st-ver">タスクスケジューラ常駐</span>
+      <span class="badge st-ver">Rhino/GH とは独立</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg bds-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Boxフォルダのファイル名を走査して抽出しスプレッドシートへ同期するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="bds-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="bds-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① Box フォルダ ＋ 新規PDF ===== -->
+        <g class="bds-anim-folder">
+          <rect class="bds-foldertab" x="40" y="150" width="86" height="18" rx="5"></rect>
+          <rect class="bds-folder" x="40" y="164" width="196" height="180" rx="8"></rect>
+          <text class="bds-boxlbl" x="58" y="186">📦 Box Drive</text>
+          <!-- 既存ファイル3件 -->
+          <g>
+            <rect class="bds-file" x="58" y="200" width="160" height="26" rx="4"></rect>
+            <rect class="bds-pdf" x="66" y="206" width="20" height="14" rx="2"></rect>
+            <text class="bds-pdftxt" x="76" y="216" text-anchor="middle">PDF</text>
+            <rect class="bds-fileln" x="94" y="209" width="112" height="7" rx="2"></rect>
+          </g>
+          <g>
+            <rect class="bds-file" x="58" y="232" width="160" height="26" rx="4"></rect>
+            <rect class="bds-pdf" x="66" y="238" width="20" height="14" rx="2"></rect>
+            <text class="bds-pdftxt" x="76" y="248" text-anchor="middle">PDF</text>
+            <rect class="bds-fileln" x="94" y="241" width="92" height="7" rx="2"></rect>
+          </g>
+          <g>
+            <rect class="bds-file" x="58" y="264" width="160" height="26" rx="4"></rect>
+            <rect class="bds-pdf" x="66" y="270" width="20" height="14" rx="2"></rect>
+            <text class="bds-pdftxt" x="76" y="280" text-anchor="middle">PDF</text>
+            <rect class="bds-fileln" x="94" y="273" width="104" height="7" rx="2"></rect>
+          </g>
+          <!-- 新しく落ちてくるPDF -->
+          <g class="bds-anim-drop">
+            <rect class="bds-file-new" x="58" y="296" width="160" height="26" rx="4"></rect>
+            <rect class="bds-pdf" x="66" y="302" width="20" height="14" rx="2"></rect>
+            <text class="bds-pdftxt" x="76" y="312" text-anchor="middle">PDF</text>
+            <rect class="bds-fileln" x="94" y="305" width="120" height="7" rx="2" style="fill:var(--accent);opacity:.8"></rect>
+          </g>
+        </g>
+
+        <!-- ===== ② 走査＆抽出 ===== -->
+        <g class="bds-anim-scan">
+          <!-- ファイル名バー -->
+          <rect class="bds-scanbar" x="270" y="238" width="190" height="30" rx="6"></rect>
+          <text class="bds-scanbartxt" x="280" y="257">FID1234_付帯鉄骨_v2.pdf</text>
+          <!-- 走査ビーム -->
+          <rect class="bds-anim-beam bds-beam" x="272" y="240" width="4" height="26" rx="2"></rect>
+        </g>
+        <!-- 抽出トークン -->
+        <g class="bds-anim-scan">
+          <g class="bds-t1">
+            <rect class="bds-token" x="270" y="196" width="70" height="22" rx="11"></rect>
+            <text class="bds-tokentxt" x="305" y="211" text-anchor="middle">FID:1234</text>
+          </g>
+          <g class="bds-t2">
+            <rect class="bds-token" x="346" y="196" width="66" height="22" rx="11"></rect>
+            <text class="bds-tokentxt" x="379" y="211" text-anchor="middle">付帯鉄骨</text>
+          </g>
+          <g class="bds-t3">
+            <rect class="bds-token" x="418" y="196" width="42" height="22" rx="11"></rect>
+            <text class="bds-tokentxt" x="439" y="211" text-anchor="middle">v2</text>
+          </g>
+        </g>
+
+        <!-- 矢印 抽出→シート ＋ データドット -->
+        <g class="bds-anim-sheet">
+          <line class="bds-arrow-shaft" x1="464" y1="253" x2="500" y2="253"></line>
+          <polygon class="bds-arrow-head" points="502,253 489,246 489,260"></polygon>
+        </g>
+        <circle class="bds-anim-flow bds-flow" cx="464" cy="253" r="4.5"></circle>
+
+        <!-- ===== ③ Google スプレッドシート ===== -->
+        <g class="bds-anim-sheet">
+          <rect class="bds-sheet" x="508" y="120" width="256" height="228" rx="8"></rect>
+          <rect class="bds-sheet-bar" x="508" y="120" width="256" height="26" rx="8"></rect>
+          <rect class="bds-sheet-bar" x="508" y="133" width="256" height="13"></rect>
+          <text class="bds-sheettxt" x="522" y="138">Google スプレッドシート</text>
+          <!-- 列見出し -->
+          <text class="bds-headtxt" x="524" y="166">FID</text>
+          <text class="bds-headtxt" x="596" y="166">資料名</text>
+          <text class="bds-headtxt" x="690" y="166">Ver</text>
+          <line class="bds-gridln" x1="508" y1="174" x2="764" y2="174"></line>
+          <!-- 行 -->
+          <text class="bds-celltxt" x="524" y="196">1201</text>
+          <text class="bds-celltxt" x="596" y="196">アンカー図</text>
+          <text class="bds-celltxt" x="690" y="196">v1</text>
+          <line class="bds-gridln" x1="508" y1="204" x2="764" y2="204"></line>
+          <text class="bds-celltxt" x="524" y="226">1198</text>
+          <text class="bds-celltxt" x="596" y="226">ベースPL</text>
+          <text class="bds-celltxt" x="690" y="226">v3</text>
+          <line class="bds-gridln" x1="508" y1="234" x2="764" y2="234"></line>
+          <!-- ハイライトされる新規行 -->
+          <rect class="bds-anim-hi bds-rowhi" x="509" y="236" width="254" height="28"></rect>
+          <text class="bds-celltxt" x="524" y="256">1234</text>
+          <text class="bds-celltxt" x="596" y="256">付帯鉄骨</text>
+          <text class="bds-celltxt" x="690" y="256">v2</text>
+          <g class="bds-anim-hi">
+            <rect class="bds-newtag" x="712" y="242" width="44" height="16" rx="8"></rect>
+            <text class="bds-newtagtxt" x="734" y="254" text-anchor="middle">＋更新</text>
+          </g>
+          <line class="bds-gridln" x1="508" y1="264" x2="764" y2="264"></line>
+          <text class="bds-celltxt" x="524" y="286">1150</text>
+          <text class="bds-celltxt" x="596" y="286">柱リスト</text>
+          <text class="bds-celltxt" x="690" y="286">v2</text>
+
+          <!-- GAS 同期バッジ -->
+          <g class="bds-anim-gas">
+            <rect class="bds-gas" x="546" y="308" width="180" height="26" rx="13"></rect>
+            <text class="bds-gastxt" x="636" y="325" text-anchor="middle">⇄ GAS Webhook 双方向同期</text>
+          </g>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="bds-cap bds-l1" x="400" y="430" text-anchor="middle">① Box フォルダに新しい指示書PDFが増える</text>
+        <text class="bds-cap bds-l2" x="400" y="430" text-anchor="middle">② ファイル名を走査して FID・資料名・版 を抽出</text>
+        <text class="bds-cap bds-l3" x="400" y="430" text-anchor="middle">③ スプレッドシートへ差分転記 ＋ GAS で双方向同期</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">Boxフォルダに増えた指示書のファイル名を走査し、FID・資料名・版を抜き出してスプレッドシートへ差分転記、GASで双方向同期するまでを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>Rhino/Grasshopper とは関係のない、<strong>純粋な事務作業の自動化ツール</strong>です。ある実案件（大型新築工事・付帯鉄骨関連）の<strong>Box Drive の指示書フォルダ</strong>を定期的に見に行き、増えた・変わったファイルを<strong>Googleスプレッドシートへ自動で書き込みます</strong>。「フォルダの中身を目視で台帳に転記する」あの地味な作業を、まるごと肩代わりします。</p>
+    <p>やっていることは3つ。フォルダを<strong>再帰スキャン</strong>してファイル一覧を取り、<strong>ファイル名から FID・資料名・バージョン</strong>などの情報を切り出し、スプレッドシートと突き合わせて<strong>差分だけ同期</strong>します。仕上げに <strong>GAS（Google Apps Script）のWebhook</strong>を叩き、スプレッドシート側でのシート一括更新・双方向同期を自動で発火させます。<strong>タスクスケジューラで1日3回</strong>、勝手に走る想定です。</p>
+    <p class="lead">※ FID＝資料を管理する番号のこと。／ GAS（Google Apps Script）＝Googleスプレッドシート側で動く自動化スクリプト。／ 再帰スキャン＝サブフォルダの奥まで全部たどって調べること。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力（操作/結果） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入口と出口</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>読み取るもの（入力）</caption>
+        <thead><tr><th>対象</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port"><span class="io-dir in">入</span>Box フォルダ</td><td><code>BOX_ROOT_PATH</code> 配下のファイル一覧（再帰スキャン）。ファイル名からFID・資料名・版を抽出。</td></tr>
+          <tr><td class="port"><span class="io-dir in">入</span>既存シート</td><td>Googleスプレッドシートの現在値。差分（新規・更新）を判定するための突き合わせ元。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>書き込むもの（出力）</caption>
+        <thead><tr><th>対象</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port"><span class="io-dir out">出</span>スプレッドシート</td><td>差分だけを転記（新規行の追加・既存行の更新）。</td></tr>
+          <tr><td class="port"><span class="io-dir out">出</span>GAS Webhook</td><td>同期後にGoogle側スクリプトを呼び出し、シート一括更新・双方向同期を発火。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">認証情報を置く</span><span class="step-body">Google Cloud のサービスアカウント鍵 <code>credentials.json</code> を <code>BoxDriveSync\</code> に配置。これが <code>gspread</code> 認証に必須。</span></li>
+      <li><span class="step-title">対象を設定する</span><span class="step-body"><code>box_to_sheets.py</code> の <code>BOX_ROOT_PATH</code>（見に行くBoxフォルダ）／<code>SPREADSHEET_KEY</code>（書き込む先）／<code>WORKSHEET_NAME</code> を対象案件に合わせる。既定は特定案件の付帯鉄骨フォルダ。</span></li>
+      <li><span class="step-title">実行する（または自動化）</span><span class="step-body">手動なら <code>box_to_sheets.py</code> を実行。常駐させるなら <code>register_task.ps1</code> でタスクスケジューラに<strong>1日3回</strong>登録する。</span></li>
+      <li><span class="step-title">同期を確認する</span><span class="step-body">スプレッドシートに新規・更新行が反映される。ファイル名から抽出したFID・資料名・版が列に入る。</span></li>
+      <li><span class="step-title">Google側の連携が走る</span><span class="step-body">同期の最後に <code>GAS_WEBHOOK_URL</code> が叩かれ、Google側の <code>BoxDriveSync_GAS.js</code> がシート一括更新・双方向同期を実行する。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <p class="flow-solo"><b>単独で使えます。</b> Rhino/Grasshopper のツール群とは<strong>独立した事務ツール</strong>で、他のノードとの入出力連携はありません（<a href="bim-shield.html">BIM_Shield</a> や <a href="bim-dashboard.html">BIM Dashboard</a> とも連携なし）。相方はローカルのBox Driveと、Google側にデプロイ済みの GAS スクリプトだけです。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 特定案件がハードコードされている</div>
+        <p><code>BOX_ROOT_PATH</code> は特定案件（大型新築工事・付帯鉄骨）の実パスを直接指しています。汎用化されていないので、<strong>他案件に使うには <code>BOX_ROOT_PATH</code> / <code>SPREADSHEET_KEY</code> / <code>WORKSHEET_NAME</code> の書き換えが必要</strong>です。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> GAS本体はGoogle側にデプロイ済み。jsを直しても効かない</div>
+        <p>リポジトリ内の <code>BoxDriveSync_GAS.js</code> は<strong>ソース保管用のコピー</strong>です。実体はスプレッドシートにバインドされてGoogle側にデプロイ済みなので、<strong>このファイルを編集しても、Googleでデプロイし直さない限りWebhook側の挙動は変わりません</strong>。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> credentials.json は秘密鍵。取り扱い注意</div>
+        <p><code>credentials.json</code> は Google Cloud のサービスアカウント鍵で、<strong>これが無いと認証に失敗</strong>して何も同期できません。逆に秘密情報なので、<strong>共有やバックアップの際は流出しないよう注意</strong>してください（一般公開リポジトリ等に入れない）。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 実行ログが見当たらず、直近稼働は要確認</div>
+        <p>タスクスケジューラに1日3回で登録されている構成は確認できましたが、フォルダ内に実行ログが見当たらず、<strong>直近で実際に動いているかは本調査だけでは確定できません</strong>。運用状況はご自身で最終確認してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\BoxDriveSync\<span class="fp-accent">box_to_sheets.py</span>　＋　credentials.json（秘密鍵）/ BoxDriveSync_GAS.js（Google側）/ register_task.ps1
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ops">運用・監視・事務の一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

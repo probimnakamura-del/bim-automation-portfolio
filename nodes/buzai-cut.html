@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>部材カット自動延長ツール（v3） — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス bzc- で衝突回避
+   ①端に隙間 → ②赤いカッターで端を削ぐ → ③自動延長で突き合わせ
+   ============================================================ */
+.bzc-svg text { font-family: var(--font); }
+
+/* 部材＝簡略矩形（アンバー） */
+.bzc-mem  { fill: #1b1707; stroke: var(--accent); stroke-width: 2.4; }
+.bzc-ext  { fill: #1b1707; stroke: var(--accent); stroke-width: 2.4;
+            transform-box: fill-box; transform-origin: left center; }
+.bzc-base { fill: #141a2b; stroke: var(--accent); stroke-width: 2.4; }
+
+/* 隙間の寸法補助線 */
+.bzc-dim   { stroke: #9aa7cc; stroke-width: 1.4; }
+.bzc-dim-t { stroke: #9aa7cc; stroke-width: 1.4; }
+
+/* 赤いカッター箱（切る＝赤で表現） */
+.bzc-cutbox  { fill: #ef4444; opacity: .22; stroke: #f87171; stroke-width: 2.2; }
+.bzc-cutedge { fill: none; stroke: #f87171; stroke-width: 2.4; stroke-dasharray: 6 4; }
+
+/* 延長・突き合わせの矢印＋フラッシュ */
+.bzc-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.6; }
+.bzc-arrow-head  { fill: var(--accent); }
+.bzc-flash       { fill: none; stroke: var(--accent); stroke-width: 3.5; }
+
+/* テキスト */
+.bzc-cap     { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.bzc-small   { fill: #9aa7cc; font-size: 12.5px; font-weight: 600; }
+.bzc-gaplbl  { fill: #cdd6f4; font-size: 13px; font-weight: 700; }
+.bzc-cutlbl  { fill: #fca5a5; font-size: 13px; font-weight: 700; }
+
+/* 進捗バー */
+.bzc-prog-tr { fill: #2a2410; }
+.bzc-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.bzc-gap    { animation: bzcGap    10s infinite; }
+.bzc-cutter { animation: bzcCutter 10s infinite; }
+.bzc-ext    { animation: bzcExt    10s infinite; }
+.bzc-join   { animation: bzcJoin   10s infinite; }
+.bzc-flashA { animation: bzcFlash  10s infinite; }
+.bzc-l1     { animation: bzcL1     10s infinite; }
+.bzc-l2     { animation: bzcL2     10s infinite; }
+.bzc-l3     { animation: bzcL3     10s infinite; }
+.bzc-prog   { animation: bzcProg   10s linear infinite; }
+
+/* ① 端の隙間を測る */
+@keyframes bzcGap {
+  0%,4%   { opacity: 0; }
+  9%      { opacity: 1; }
+  26%     { opacity: 1; }
+  30%,100%{ opacity: 0; }
+}
+/* ② 赤カッターが降りて端を削ぐ（パルス） */
+@keyframes bzcCutter {
+  0%,30%   { opacity: 0; transform: translateY(-16px); }
+  35%      { opacity: 1; transform: translateY(0); }
+  44%      { opacity: .45; }
+  50%      { opacity: 1; }
+  56%      { opacity: 1; transform: translateY(0); }
+  60%,100% { opacity: 0; transform: translateY(0); }
+}
+/* ③ 延長セグメントが伸びて隙間を埋める */
+@keyframes bzcExt {
+  0%,58%  { transform: scaleX(0); }
+  80%     { transform: scaleX(1); }
+  100%    { transform: scaleX(1); }
+}
+/* ③ 延長矢印＋ラベル */
+@keyframes bzcJoin {
+  0%,60%  { opacity: 0; }
+  67%     { opacity: 1; }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+/* 突き合わせ成立フラッシュ */
+@keyframes bzcFlash {
+  0%,78%  { opacity: 0; }
+  82%     { opacity: .9; }
+  87%     { opacity: 0; }
+  92%     { opacity: .6; }
+  98%,100%{ opacity: 0; }
+}
+@keyframes bzcL1 { 0%{opacity:0} 5%{opacity:1} 26%{opacity:1} 31%{opacity:0} 100%{opacity:0} }
+@keyframes bzcL2 { 0%,31%{opacity:0} 36%{opacity:1} 56%{opacity:1} 61%{opacity:0} 100%{opacity:0} }
+@keyframes bzcL3 { 0%,61%{opacity:0} 66%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes bzcProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="steel">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">鉄骨モデリング支援</span>
+    <h1 class="node-title">部材カット自動延長ツール <span style="opacity:.75;font-weight:700">v3</span></h1>
+    <p class="catch">部材の端を<span class="em">自動でカット</span>して、そのまま<span class="em">延長</span>——鉄骨の突き合わせをワンノードで片付ける「Smart Member Processor」。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">v3系（現行・GrooveSide対応）</span>
+      <span class="badge st-ver">Grasshopper Pythonノード</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg bzc-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="部材の端を赤いカッターで削いで自動延長し基準部材へ突き合わせるアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="bzc-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="bzc-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- 基準部材 ID（柱＝縦長矩形） -->
+        <rect class="bzc-base" x="560" y="96" width="56" height="268" rx="2"></rect>
+        <text class="bzc-small" x="588" y="384" text-anchor="middle">基準部材 ID</text>
+
+        <!-- 対象部材 A（本体・固定部） -->
+        <rect class="bzc-mem" x="150" y="208" width="300" height="46" rx="2"></rect>
+        <text class="bzc-small" x="152" y="288">対象部材 A</text>
+
+        <!-- ③ 延長セグメント（伸びて隙間を埋める） -->
+        <rect class="bzc-ext" x="450" y="208" width="106" height="46" rx="2"></rect>
+
+        <!-- ① 隙間の寸法補助線 -->
+        <g class="bzc-gap">
+          <line class="bzc-dim"   x1="452" y1="231" x2="558" y2="231"></line>
+          <line class="bzc-dim-t" x1="452" y1="221" x2="452" y2="241"></line>
+          <line class="bzc-dim-t" x1="558" y1="221" x2="558" y2="241"></line>
+          <text class="bzc-gaplbl" x="505" y="212" text-anchor="middle">隙間</text>
+        </g>
+
+        <!-- ② 赤いカッター箱（端を削ぐ・開先の斜め） -->
+        <g class="bzc-cutter">
+          <rect class="bzc-cutbox"  x="422" y="184" width="60" height="94" rx="2"></rect>
+          <line class="bzc-cutedge" x1="430" y1="184" x2="466" y2="278"></line>
+          <text class="bzc-cutlbl"  x="452" y="174" text-anchor="middle">カッター</text>
+        </g>
+
+        <!-- ③ 延長矢印＋ラベル -->
+        <g class="bzc-join">
+          <line class="bzc-arrow-shaft" x1="470" y1="288" x2="544" y2="288"></line>
+          <polygon class="bzc-arrow-head" points="556,288 542,281 542,295"></polygon>
+          <text class="bzc-small" x="503" y="308" text-anchor="middle">自動延長 → 突き合わせ</text>
+        </g>
+
+        <!-- 突き合わせ成立フラッシュ -->
+        <rect class="bzc-flash bzc-flashA" x="540" y="200" width="86" height="62" rx="4"></rect>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="bzc-cap bzc-l1" x="400" y="428" text-anchor="middle">① 対象部材の端と基準部材のあいだに隙間</text>
+        <text class="bzc-cap bzc-l2" x="400" y="428" text-anchor="middle">② カッター形状を生成し、端を削ぎ落とす</text>
+        <text class="bzc-cap bzc-l3" x="400" y="428" text-anchor="middle">③ 自動で延長し、基準へピタッと突き合わせ</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">端に隙間がある部材 → カッター形状で端を削ぐ → 自動延長で基準部材へ突き合わせる、という一連の流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>鉄骨部材どうしの<strong>端部の取り合い（カット＆延長）を自動化する</strong>ノードです。「基準になる部材（ID）」と「加工したい部材（A）」を選ぶと、基準の形にぴったり合うカッター形状を自動で作り、対象部材の端を<strong>ブーリアンで削ぎ落として</strong>から、<strong>基準面へ届くまで自動で延長</strong>します。手作業なら1本ずつやる「端を切って、伸ばして、突き合わせる」を一括で片付けます。</p>
+    <p><strong>TrimMode</strong> で加工のやり方を4通りに切り替えられます。ふつうの梁柱は「通常カット＆延長（0）」、かさ上げ材やデッキ受けのような固定寸法スリットが要るものは「上フランジ溶接特殊カット（1）」、削るだけで伸ばさないなら「単純ブーリアン（2）」、複数の板を1枚とみなしてスリットを切るなら「PL強制統合（3）」。<strong>v3</strong> では TrimMode1 のときに開先（斜めの溶接開口）がどちら側かを <span class="port" style="color:var(--accent)">GrooveSide</span> で手動指定できるようになりました。</p>
+    <p class="lead">※ カッター形状＝相手にめり込ませてブーリアン差で削り取るための立体。／ 開先＝溶接のために部材端を斜めに削った開口。／ クリアランス＝突き合わせに残す意図的な隙間。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">ID</td><td>基準部材（GuidまたはGeometry）。カット・延長の相手（突き合わせ先）。リスト入力可。</td></tr>
+          <tr><td class="port">A</td><td>加工対象部材。カット＆延長される側。リスト入力可。</td></tr>
+          <tr><td class="port">Clearance</td><td>突き合わせに残す隙間。数値でも <code>"C20"</code> のような文字列でもOK。</td></tr>
+          <tr><td class="port">TrimMode</td><td>加工方式。<strong>0</strong>=通常カット＆延長／<strong>1</strong>=上フランジ溶接特殊（固定寸法スリット）／<strong>2</strong>=単純ブーリアン（延長なし）／<strong>3</strong>=PL強制統合スリット。</td></tr>
+          <tr><td class="port">GrooveSide</td><td><strong>v3の新機能</strong>。TrimMode1で開先側を手動指定（<code>auto</code> / <code>L</code> / <code>R</code>）。</td></tr>
+          <tr><td class="port">CutSide</td><td>カットする端の指定。0=両側／1=始点側のみ／2=終点側のみ。</td></tr>
+          <tr><td class="port">FlipDir</td><td>クリアランスをかける向き。0=片側／1=片側反転／2=両側。</td></tr>
+          <tr><td class="port">show / zoom</td><td>ブロック内サブオブジェクト選択UIの表示トリガと、対象へのズーム。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Result</td><td><strong>主出力</strong>。加工・延長が済んだ部材ジオメトリ（Brep）。</td></tr>
+          <tr><td class="port">Cutters</td><td>削り取りに使ったカッター形状（Brep）。確認用に出せる。</td></tr>
+          <tr><td class="port">Log</td><td>処理ログ・履歴メッセージ。パネルにつないで結果確認。</td></tr>
+          <tr><td class="port">CalcBeamWidth</td><td>計算された基準部材の幅リスト（スリット位置などの根拠値）。</td></tr>
+          <tr><td class="port">Srf / All</td><td>抽出したサーフェスと、パースした全ジオメトリ（デバッグ・中間確認用）。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">ノードを置く</span><span class="step-body">Grasshopper に本ノードを配置。フォルダ直下の <code>部材カット自動延長ツール_v3.py</code> が<strong>現行版</strong>（v1/v2は旧版として温存）。</span></li>
+      <li><span class="step-title">基準と対象を渡す</span><span class="step-body">突き合わせ先の部材を <span class="port" style="color:var(--accent)">ID</span> へ、削って伸ばしたい部材を <span class="port" style="color:var(--accent)">A</span> へ接続（どちらもリスト可）。</span></li>
+      <li><span class="step-title">加工方式を選ぶ</span><span class="step-body"><span class="port" style="color:var(--accent)">TrimMode</span> を用途に合わせて設定（通常は 0）。かさ上げ材など特殊スリットは 1、削るだけなら 2、板の統合スリットは 3。</span></li>
+      <li><span class="step-title">隙間と向きを調整</span><span class="step-body"><span class="port" style="color:var(--accent)">Clearance</span> で突き合わせ隙間、<span class="port" style="color:var(--accent)">CutSide</span> でどちらの端を加工するかを指定。TrimMode1なら <span class="port" style="color:var(--accent)">GrooveSide</span> で開先側を明示。</span></li>
+      <li><span class="step-title">結果を確認する</span><span class="step-body"><span class="port" style="color:var(--accent)">Result</span> に延長済み部材が出る。うまく削れないときは <span class="port" style="color:var(--accent)">Cutters</span> と <span class="port" style="color:var(--accent)">Log</span> でカッター形状とログを確認。</span></li>
+      <li><span class="step-title">モデルへ反映</span><span class="step-body">仕上がったら Bake などでモデルに反映。上流の<a href="kasage-steel.html">かさ上げ鋼材</a>で生成した部材の端処理にそのまま使える。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <a class="chip chip-up" href="kasage-steel.html">かさ上げ鋼材オートモデラー</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">部材カット自動延長ツール（このノード）</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <span class="flow-solo">この先は特にありません。<b>端部加工が済んだ製作用部材</b>として完成します。</span>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">かさ上げ鋼材が作った梁上部材の端を、下の基準部材へ突き合わせる仕上げに使うのが定番の流れです。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\01_柱梁フレーム.3dm</span>
+      <p class="sample-desc">2×1スパンの柱梁フレーム＋通り芯線＋ガセット／浮きピース入り。接触検出・Make2D・部材記号・かさ上げ・部材カットのデモ用。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> を開く。</span></li>
+        <li><span class="step-title">基準と対象を選ぶ</span><span class="step-body">柱（または大梁）を <span class="port" style="color:var(--accent)">ID</span>、それに取り付く小梁・ピースを <span class="port" style="color:var(--accent)">A</span> に指定。</span></li>
+        <li><span class="step-title">通常モードで実行</span><span class="step-body"><span class="port" style="color:var(--accent)">TrimMode</span>=0、<span class="port" style="color:var(--accent)">Clearance</span>=0 前後で solve。端が削られ、隙間が延長で閉じるのを確認。</span></li>
+        <li><span class="step-title">特殊モードも試す</span><span class="step-body">かさ上げ材を対象にして <span class="port" style="color:var(--accent)">TrimMode</span>=1 にすると、固定寸法スリットの挙動を確認できる。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> フォルダに v1 / v2 / v3 が同居。使うのは v3</div>
+        <p>直下に3世代が並んでいます。現行は <code>部材カット自動延長ツール_v3.py</code>（GrooveSide対応版）。v1/v2 はロールバック用に温存されているだけなので、間違って古い版をノードに読み込まないよう注意。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> TrimMode1 は固定寸法スリットの専用モード</div>
+        <p>「上フランジ溶接特殊カット（1）」は、かさ上げ材・デッキ受け向けに 140／287・19／10mm逃げといった<strong>固定寸法のスリット</strong>を切る用途特化です。一般的な梁柱の突き合わせには通常カット（0）を使ってください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 複数ノードで同じブロックを参照するとサブ選択が漏れる</div>
+        <p>ブロック内サブオブジェクト選択（<span class="port" style="color:var(--accent)">show</span>）は、複数ノードで同じブロックを参照するとRhino側の選択状態が共有され、事前フィルタが漏れることがあります。本ツールはノード／位置ごとに独立記録する設計ですが、同時に複数のピックUIを開かないのが安全です。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Clearance は数値でも "C20" でも受け付ける</div>
+        <p>クリアランスは <code>20</code> のような数値のほか、<code>"C20"</code> のような文字列でも指定できます。0タッチにしたいときは 0 を渡します。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\<span class="fp-accent">部材カット自動延長ツール_v3.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-steel">鉄骨モデリング支援の一覧</a>
+      <a href="kasage-steel.html">前工程：かさ上げ鋼材</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

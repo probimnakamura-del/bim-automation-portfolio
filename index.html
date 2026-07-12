@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>建築BIM自動化ポートフォリオ — 中村勇太 | Rhino/Grasshopper/Python</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+/* ============================================================
+   index 専用の少しの追加スタイル（共通は assets/style.css）
+   ============================================================ */
+/* セクション見出しの共通枠（マップ・ダイジェスト用） */
+.idx-sec { padding: 40px 20px; border-bottom: 1px solid var(--line); }
+.idx-sec h2 {
+  display: inline-block; margin: 0 0 6px; font-size: 24px; font-weight: 800;
+  padding-bottom: 6px;
+  background: linear-gradient(90deg, var(--accent), transparent) bottom left / 100% 3px no-repeat;
+}
+.idx-sec .idx-lead { color: var(--sub); margin: 0 0 22px; max-width: 68ch; }
+
+/* --- 全体関係マップ SVG --- */
+.omap text { font-family: var(--font); }
+.omap .om-block rect { fill: #151b2e; stroke-width: 2.2; transition: fill .2s, transform .2s; }
+.omap .om-block:hover rect { fill: #1c2440; }
+.omap .om-title { font-size: 17px; font-weight: 800; }
+.omap .om-count { font-size: 12.5px; fill: #9aa7cc; font-weight: 700; }
+.omap .om-hub rect { fill: #10283a; }
+.omap .om-conn { fill: none; stroke-width: 2.4; opacity: .55; }
+.omap .om-conn.dash { stroke-dasharray: 8 6; opacity: .5; }
+.omap .om-lbl { font-size: 12.5px; fill: #9aa7cc; font-weight: 700; }
+.omap .om-dot { fill: #eafcff; }
+
+/* --- Make2D ダイジェスト --- */
+.pdg text { font-family: var(--font); }
+.pdg .pd-box rect { fill: #0f1a30; stroke: #22d3ee; stroke-width: 2; }
+.pdg .pd-name { fill: #e6ecff; font-size: 14.5px; font-weight: 700; }
+.pdg .pd-conn { fill: none; stroke: #22d3ee; stroke-width: 2.2; opacity: .6; }
+.pdg .pd-dot { fill: #eafcff; }
+.digest-cta { margin-top: 22px; text-align: center; }
+.digest-cta .cta-btn { font-size: 17px; }
+
+/* カード内の下段（バッジ）位置調整 */
+.card .card-foot .badge { font-size: 12px; padding: 4px 10px; }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 6カテゴリ共通のミニアイコン（symbol 定義。currentColor でカテゴリ色に着色） -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="ico-m2d" viewBox="0 0 48 48">
+      <g fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 17 L18 11 L28 17 L28 31 L18 37 L8 31 Z"/>
+        <path d="M8 17 L18 23 L28 17 M18 23 L18 37"/>
+        <path d="M35 15 V33 M40 19 V29" stroke-dasharray="28" stroke-dashoffset="0">
+          <animate attributeName="stroke-dashoffset" begin="0s" dur="7s" repeatCount="indefinite" values="28;0;0;28" keyTimes="0;0.28;0.85;1"/>
+        </path>
+      </g>
+    </symbol>
+    <symbol id="ico-steel" viewBox="0 0 48 48">
+      <g fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 37 H35 M24 11 V37"/>
+        <path d="M13 11 H35">
+          <animateTransform attributeName="transform" type="translate" begin="0s" dur="6s" repeatCount="indefinite" values="0 0;0 0;0 -3;0 1;0 0" keyTimes="0;0.5;0.66;0.82;1"/>
+        </path>
+      </g>
+    </symbol>
+    <symbol id="ico-ifc" viewBox="0 0 48 48">
+      <g fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="6" y="8" width="16" height="16" rx="2"/>
+        <rect x="26" y="24" width="16" height="16" rx="2"/>
+        <g>
+          <path d="M22 13 H32 A4 4 0 0 1 36 17 V22"/>
+          <path d="M32 18 L36 22 L40 18"/>
+          <animate attributeName="opacity" begin="0s" dur="4s" repeatCount="indefinite" values="1;1;0.3;0.3;1" keyTimes="0;0.4;0.5;0.9;1"/>
+        </g>
+        <g>
+          <path d="M26 35 H16 A4 4 0 0 1 12 31 V26"/>
+          <path d="M16 30 L12 26 L8 30"/>
+          <animate attributeName="opacity" begin="0s" dur="4s" repeatCount="indefinite" values="0.3;0.3;1;1;0.3" keyTimes="0;0.4;0.5;0.9;1"/>
+        </g>
+      </g>
+    </symbol>
+    <symbol id="ico-rhino" viewBox="0 0 48 48">
+      <g fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="6" y="10" width="36" height="28" rx="3"/>
+        <path d="M6 18 H42" opacity=".5"/>
+        <path d="M13 25 L18 29 L13 33"/>
+        <path d="M22 33 H31">
+          <animate attributeName="opacity" begin="0s" dur="1.8s" repeatCount="indefinite" values="1;0" keyTimes="0;0.5" calcMode="discrete"/>
+        </path>
+      </g>
+    </symbol>
+    <symbol id="ico-ai" viewBox="0 0 48 48">
+      <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="24" cy="24" r="4.5">
+          <animate attributeName="r" begin="0s" dur="5s" repeatCount="indefinite" values="4.5;5.4;4.5" keyTimes="0;0.5;1"/>
+        </circle>
+        <circle cx="11" cy="12" r="3"/>
+        <circle cx="37" cy="12" r="3"/>
+        <circle cx="11" cy="36" r="3"/>
+        <circle cx="37" cy="36" r="3"/>
+        <path d="M13.5 14 L20.5 21"><animate attributeName="opacity" begin="0s" dur="4s" repeatCount="indefinite" values="0.4;1;0.4" keyTimes="0;0.5;1"/></path>
+        <path d="M34.5 14 L27.5 21"><animate attributeName="opacity" begin="1s" dur="4s" repeatCount="indefinite" values="0.4;1;0.4" keyTimes="0;0.5;1"/></path>
+        <path d="M34.5 34 L27.5 27"><animate attributeName="opacity" begin="2s" dur="4s" repeatCount="indefinite" values="0.4;1;0.4" keyTimes="0;0.5;1"/></path>
+        <path d="M13.5 34 L20.5 27"><animate attributeName="opacity" begin="3s" dur="4s" repeatCount="indefinite" values="0.4;1;0.4" keyTimes="0;0.5;1"/></path>
+      </g>
+    </symbol>
+    <symbol id="ico-ops" viewBox="0 0 48 48">
+      <g fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="6" y="9" width="36" height="23" rx="3"/>
+        <path d="M18 38 H30 M24 32 V38"/>
+        <path d="M11 21 H16 L19 15 L23 27 L26 21 H37" stroke-dasharray="18 8">
+          <animate attributeName="stroke-dashoffset" begin="0s" dur="2.2s" repeatCount="indefinite" values="26;0"/>
+        </path>
+      </g>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <span class="brand" style="margin-left:0"><b>Python1</b> ツールカタログ</span>
+  <a class="back-link" href="pipeline.html" style="margin-left:auto">Make2Dパイプライン詳細図 →</a>
+</header>
+
+<!-- ヒーロー -->
+<section class="hero">
+  <p class="hero-eyebrow">BIM AUTOMATION PORTFOLIO</p>
+  <h1>建築BIMの実務を、コードで自動化する。</h1>
+  <p class="hero-sub">Rhino / Grasshopper / Python で自作した <strong>45+ の建築BIM自動化ツール</strong>のカタログです。3Dモデルから製作図を自動作図する Make2D パイプライン、IFC 相互運用ツール群、ローカルLLM を組み込んだ GHノード自動生成基盤まで——要件定義・設計・実装・チーム展開のすべてを一人で担いました。各ツールはアニメーションデモ付きで「何ができるか」が一目で分かります。</p>
+  <p class="hero-credit">製作：中村 勇太　／　このサイト自体も AI（Claude）をディレクションして構築 — コードベースの調査・解説の執筆・アニメデモの生成・サイト実装までを AI エージェントに伴走させ、1日で仕上げています。</p>
+  <div class="pipe-band" aria-hidden="true">
+    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+  </div>
+  <input class="search-box" type="search" placeholder="🔍 ツール名・キーワードで検索（例：通り芯 / IFC / 断面 / 注記）" oninput="filterCards(this)" aria-label="ツール検索">
+</section>
+
+<!-- カテゴリタブ（sticky・クリックで該当カテゴリのみ表示） -->
+<nav class="cat-tabs" aria-label="カテゴリで絞り込み">
+  <div class="cat-tabs-inner">
+    <button type="button" class="cat-tab is-active" data-cat-filter="all">すべて</button>
+    <button type="button" class="cat-tab" data-cat-filter="cat-m2d"   style="--tab:#22d3ee">図面化パイプライン</button>
+    <button type="button" class="cat-tab" data-cat-filter="cat-steel" style="--tab:#fbbf24">鉄骨モデリング支援</button>
+    <button type="button" class="cat-tab" data-cat-filter="cat-ifc"   style="--tab:#a78bfa">IFC・データ連携</button>
+    <button type="button" class="cat-tab" data-cat-filter="cat-rhino" style="--tab:#34d399">Rhinoコマンド・配布ツール</button>
+    <button type="button" class="cat-tab" data-cat-filter="cat-ai"    style="--tab:#f472b6">開発・AI基盤</button>
+    <button type="button" class="cat-tab" data-cat-filter="cat-ops"   style="--tab:#a3e635">運用・監視・事務</button>
+  </div>
+</nav>
+
+<!-- 全体関係マップ -->
+<section class="idx-sec">
+  <div class="wrap">
+    <h2>全体マップ</h2>
+    <p class="idx-lead">6つのカテゴリと、その間の主なデータの流れです。ブロックをクリックすると、その分類の一覧へジャンプします。<b style="color:var(--text)">IFCと鉄骨モデリングが「図面化パイプライン」へ素材を送り、AI基盤がノード自体を自動生成、運用系が全体を横断で見張る</b>——という関係になっています。</p>
+    <div class="map-wrap">
+      <svg class="omap" viewBox="0 0 920 500" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" role="img" aria-label="6カテゴリの関係マップ">
+        <!-- 接続線（先に描いて箱を上に重ねる） -->
+        <path id="om-p1" class="om-conn" stroke="#a78bfa" d="M240 112 C320 150 300 175 352 205"/>
+        <path id="om-p2" class="om-conn" stroke="#fbbf24" d="M680 112 C600 150 620 175 568 205"/>
+        <path class="om-conn dash" stroke="#f472b6" d="M240 388 C330 350 300 300 352 272"/>
+        <path class="om-conn dash" stroke="#a3e635" d="M680 388 C590 350 620 300 568 272"/>
+        <path class="om-conn dash" stroke="#34d399" d="M460 395 L460 340"/>
+
+        <!-- 流れるドット（IFC→図面化 / 鉄骨→図面化） -->
+        <circle class="om-dot" r="4"><animateMotion dur="3.2s" repeatCount="indefinite"><mpath xlink:href="#om-p1"/></animateMotion></circle>
+        <circle class="om-dot" r="4"><animateMotion dur="3.2s" begin="1.6s" repeatCount="indefinite"><mpath xlink:href="#om-p2"/></animateMotion></circle>
+
+        <!-- 接続ラベル -->
+        <text class="om-lbl" x="300" y="150" text-anchor="middle">IFC変換・属性</text>
+        <text class="om-lbl" x="620" y="150" text-anchor="middle">3Dモデル供給</text>
+        <text class="om-lbl" x="285" y="332" text-anchor="middle">ノードを自動生成</text>
+        <text class="om-lbl" x="635" y="332" text-anchor="middle">横断で監視</text>
+
+        <!-- IFC -->
+        <g class="om-block" data-jump="cat-ifc" role="link" tabindex="0" aria-label="IFC・データ連携へ移動">
+          <rect x="40" y="63" width="200" height="74" rx="12" stroke="#a78bfa"/>
+          <text class="om-title" x="140" y="97" text-anchor="middle" fill="#a78bfa">IFC・データ連携</text>
+          <text class="om-count" x="140" y="118" text-anchor="middle">10 ツール</text>
+        </g>
+        <!-- 鉄骨 -->
+        <g class="om-block" data-jump="cat-steel" role="link" tabindex="0" aria-label="鉄骨モデリング支援へ移動">
+          <rect x="680" y="63" width="200" height="74" rx="12" stroke="#fbbf24"/>
+          <text class="om-title" x="780" y="97" text-anchor="middle" fill="#fbbf24">鉄骨モデリング支援</text>
+          <text class="om-count" x="780" y="118" text-anchor="middle">9 ツール</text>
+        </g>
+        <!-- AI -->
+        <g class="om-block" data-jump="cat-ai" role="link" tabindex="0" aria-label="開発・AI基盤へ移動">
+          <rect x="40" y="358" width="200" height="74" rx="12" stroke="#f472b6"/>
+          <text class="om-title" x="140" y="392" text-anchor="middle" fill="#f472b6">開発・AI基盤</text>
+          <text class="om-count" x="140" y="413" text-anchor="middle">2 ツール</text>
+        </g>
+        <!-- 運用 -->
+        <g class="om-block" data-jump="cat-ops" role="link" tabindex="0" aria-label="運用・監視・事務へ移動">
+          <rect x="680" y="358" width="200" height="74" rx="12" stroke="#a3e635"/>
+          <text class="om-title" x="780" y="392" text-anchor="middle" fill="#a3e635">運用・監視・事務</text>
+          <text class="om-count" x="780" y="413" text-anchor="middle">4 ツール</text>
+        </g>
+        <!-- Rhino配布 -->
+        <g class="om-block" data-jump="cat-rhino" role="link" tabindex="0" aria-label="Rhinoコマンド・配布ツールへ移動">
+          <rect x="335" y="398" width="250" height="66" rx="12" stroke="#34d399"/>
+          <text class="om-title" x="460" y="430" text-anchor="middle" fill="#34d399">Rhinoコマンド・配布</text>
+          <text class="om-count" x="460" y="450" text-anchor="middle">3 ツール</text>
+        </g>
+        <!-- 図面化ハブ（中央） -->
+        <g class="om-block om-hub" data-jump="cat-m2d" role="link" tabindex="0" aria-label="図面化パイプラインへ移動">
+          <rect x="345" y="192" width="230" height="96" rx="14" stroke="#22d3ee" stroke-width="3"/>
+          <text class="om-title" x="460" y="230" text-anchor="middle" fill="#22d3ee" font-size="19">図面化パイプライン</text>
+          <text class="om-title" x="460" y="252" text-anchor="middle" fill="#22d3ee" font-size="16">Make2D</text>
+          <text class="om-count" x="460" y="273" text-anchor="middle">17 ツール・中心</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- Make2D パイプライン ダイジェスト + CTA -->
+<section class="idx-sec">
+  <div class="wrap">
+    <h2>Make2D 図面化パイプライン</h2>
+    <p class="idx-lead">このカタログの中心。<b style="color:var(--text)">3Dモデルと2D図面から情報を集め → 切断を計画 → Make2Dで断面を起こし → 元の図面ファイルへ書き戻す</b>という一連の流れを、たくさんのGHノードが分担しています。全体像は詳細図でどうぞ。</p>
+    <div class="map-wrap">
+      <svg class="pdg" viewBox="0 0 960 130" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" role="img" aria-label="Make2Dパイプラインのダイジェスト">
+        <path id="pd-line" class="pd-conn" d="M200 65 H290 M490 65 H540 M780 65 H830"/>
+        <!-- 各区間の矢印 -->
+        <g stroke="#22d3ee" fill="#22d3ee" opacity=".7">
+          <path d="M288 60 L298 65 L288 70 Z"/>
+          <path d="M538 60 L548 65 L538 70 Z"/>
+          <path d="M828 60 L838 65 L828 70 Z"/>
+        </g>
+        <path id="pd-flow" class="pd-conn" style="opacity:0" d="M35 65 H930"/>
+        <circle class="pd-dot" r="4.5"><animateMotion dur="4.5s" repeatCount="indefinite"><mpath xlink:href="#pd-flow"/></animateMotion></circle>
+
+        <g class="pd-box">
+          <rect x="35" y="40" width="165" height="50" rx="10"/>
+          <text class="pd-name" x="117" y="63" text-anchor="middle">3Dモデル＋2D図面</text>
+          <text class="pd-name" x="117" y="80" text-anchor="middle" font-size="11" fill="#9aa7cc">情報を集める</text>
+        </g>
+        <g class="pd-box">
+          <rect x="298" y="40" width="192" height="50" rx="10"/>
+          <text class="pd-name" x="394" y="63" text-anchor="middle">切断を計画（Planner）</text>
+          <text class="pd-name" x="394" y="80" text-anchor="middle" font-size="11" fill="#9aa7cc">どこをどう切るか</text>
+        </g>
+        <g class="pd-box">
+          <rect x="548" y="40" width="232" height="50" rx="10"/>
+          <text class="pd-name" x="664" y="63" text-anchor="middle">Make2D 実行（Executor）</text>
+          <text class="pd-name" x="664" y="80" text-anchor="middle" font-size="11" fill="#9aa7cc">3D→2D断面線に</text>
+        </g>
+        <g class="pd-box">
+          <rect x="838" y="40" width="120" height="50" rx="10"/>
+          <text class="pd-name" x="898" y="63" text-anchor="middle">元図面へ</text>
+          <text class="pd-name" x="898" y="80" text-anchor="middle" font-size="11" fill="#9aa7cc">WriteBack</text>
+        </g>
+      </svg>
+    </div>
+    <div class="digest-cta">
+      <a class="cta-btn" href="pipeline.html">▶ パイプライン全体図をひらく（アニメ付き）</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     カテゴリ別カード
+     ============================================================ -->
+
+<!-- 図面化パイプライン -->
+<section class="cat-section" id="cat-m2d">
+  <div class="wrap">
+    <div class="cat-head"><span class="cat-dot" style="--cat:#22d3ee"></span><h2>図面化パイプライン (Make2D)</h2></div>
+    <p class="cat-desc">3Dモデルから2D製作図を自動生成し、元図面へ書き戻す一連のGHノード群。このカタログの中心です。</p>
+    <div class="card-grid">
+
+      <article class="card" data-cat="m2d" data-search="make2d_system ワンボタン 構築 M2D SystemBuilder 自動配線 一括">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">make2d_system（ワンボタン構築）</div>
+        <div class="card-catch">「M2D」と打つだけ。9ノードを自動配線でドンと一括構築。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/make2d-system.html" aria-label="make2d_system の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="grid_extractor_v2 通り芯 一括抽出 グリッド X1 Y1 AddIds DelIds">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">通り芯一括抽出 grid_extractor_v2</div>
+        <div class="card-catch">図面の通り芯をまとめて一発抽出。手動の追加・除外もOK。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/grid-extractor-v2.html" aria-label="通り芯一括抽出 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="GH_SectionSymbolTitle 断面符号 切断図 タイトル 抽出 大文字 A-A">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">断面符号＆タイトル抽出 GH_SectionSymbolTitle</div>
+        <div class="card-catch">A-Aなどの断面符号と切断図タイトルを自動で読み取り。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/section-symbol-title.html" aria-label="断面符号＆タイトル抽出 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="section_lower 小文字 断面 記号 AI Ollama 部材名 照合">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">小文字断面パイプライン section_lower</div>
+        <div class="card-catch">小文字a,bの断面記号をAIで部材名と照合するパイプライン。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/section-lower.html" aria-label="小文字断面パイプライン の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="GH_SectionDataJSON 統合JSON 生成 レベル線 結節点">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">統合JSON生成 GH_SectionDataJSON</div>
+        <div class="card-catch">通り芯・断面・レベルをひとつのJSONに束ねる結節点。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/section-data-json.html" aria-label="統合JSON生成 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="GH_GridIntersect 通り芯 交点 抽出 X1 Y3 名前付き モデル">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">通り芯交点抽出 GH_GridIntersect</div>
+        <div class="card-catch">3Dモデルの通り芯交点を X1-Y3 の名前付きで抽出。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/grid-intersect.html" aria-label="通り芯交点抽出 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="GH_Make2DPlanner プランナー 切断計画 Plan_JSON ProductKey">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">Make2Dプランナー GH_Make2DPlanner</div>
+        <div class="card-catch">どこをどの向きで切るか——切断計画を自動で立案。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/make2d-planner.html" aria-label="Make2Dプランナー の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="GH_Make2DPreCut 切断 プレプロセッサ 単体 簡易 CutInfo">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">切断プレプロセッサ GH_Make2DPreCut</div>
+        <div class="card-catch">統合JSONなしでも動く、切断だけの手軽ルート。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/make2d-precut.html" aria-label="切断プレプロセッサ の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="GH_Make2DExecutor Make2D実行 WriteBack 書き戻し 断面 最終工程">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">Make2D実行 GH_Make2DExecutor</div>
+        <div class="card-catch">モデルをスパッと切って、そのまま元図面へ書き戻す。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中（活発に更新）</span></div>
+        <a class="card-link" href="nodes/make2d-executor.html" aria-label="Make2D実行 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="ifc_attr_search_v2 IFC属性検索 本体 附帯 SplitPick UserText">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">IFC属性検索 ifc_attr_search_v2</div>
+        <div class="card-catch">IFC属性で部材を検索、本体と附帯をきれいに仕分け。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中（活発に更新）</span></div>
+        <a class="card-link" href="nodes/ifc-attr-search-v2.html" aria-label="IFC属性検索 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="touch_finder ref_touch_finder touch_picker 接触 周辺 部材 抽出">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">接触検出ファミリー touch_finder / ref_touch_finder</div>
+        <div class="card-catch">くっついている周辺部材を自動で拾い出す3点セット。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/touch-finder.html" aria-label="接触検出ファミリー の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="GH_FinalSelect 最終選択 ハブ 中継 Ids Geos AddIds DelIds">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">最終選択ハブ GH_FinalSelect</div>
+        <div class="card-catch">あちこちの選択を一本化する、最終セットの中継ハブ。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/final-select.html" aria-label="最終選択ハブ の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="GH_PartMark GH_PartsList 部材記号 採番 部材表 材質 寸法">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">部材記号システム GH_PartMark / GH_PartsList</div>
+        <div class="card-catch">同じ形は同じ記号。部材記号を自動採番して部材表に。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/partmark.html" aria-label="部材記号システム の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="GH_AnnotateDim 寸法 注記 AI 自動 annodim">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">寸法注記GH版 GH_AnnotateDim</div>
+        <div class="card-catch">AIが寸法位置を提案。図面注記をGHで自動化。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/annotate-dim-gh.html" aria-label="寸法注記GH版 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="GH_Unroll 曲面 展開図 曲げ板 折り線 板厚 Unroller">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">曲面展開図 GH_Unroll</div>
+        <div class="card-catch">曲げ板・立体を1枚の展開図に。折り線と板厚ラベル付き。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/unroll.html" aria-label="曲面展開図 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="hokan_system 柱詳細図 補完 ギャップ スキャン 前後比較 PDF">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">柱詳細図補完 hokan_system</div>
+        <div class="card-catch">柱詳細図の描き漏れをスキャンして自動で補完注記。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中（実機検証済）</span></div>
+        <a class="card-link" href="nodes/hokan-system.html" aria-label="柱詳細図補完 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="m2d" data-search="easy_make2d 簡単 クイック GH不要 クリック 断面 EasyM2D">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-m2d" href="#ico-m2d"/></svg>
+        <div class="card-name">簡単Make2D easy_make2d</div>
+        <div class="card-catch">GH不要。切断位置をクリックすれば即Make2D。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/easy-make2d.html" aria-label="簡単Make2D の詳細"></a>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- 鉄骨モデリング支援 -->
+<section class="cat-section" id="cat-steel">
+  <div class="wrap">
+    <div class="cat-head"><span class="cat-dot" style="--cat:#fbbf24"></span><h2>鉄骨モデリング支援</h2></div>
+    <p class="cat-desc">鉄骨部材の自動生成・カット・整列・展開など、モデリングを速くするツール群。</p>
+    <div class="card-grid">
+
+      <article class="card" data-cat="steel" data-search="kasage_steel かさ上げ 鋼材 オートモデラー 梁上 通り芯 FL Base_Ref">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-steel" href="#ico-steel"/></svg>
+        <div class="card-name">かさ上げ鋼材オートモデラー kasage_steel</div>
+        <div class="card-catch">梁上のかさ上げ鋼材を通り芯FL基準で自動モデリング。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/kasage-steel.html" aria-label="かさ上げ鋼材オートモデラー の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="steel" data-search="kasage_nodes かさ上げ 7分割 クラスター 姉妹版 ReStamp Bake">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-steel" href="#ico-steel"/></svg>
+        <div class="card-name">かさ上げ鋼材 7分割版 kasage_nodes</div>
+        <div class="card-catch">かさ上げ鋼材を7分割クラスターに整理した姉妹版。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中（姉妹実装）</span></div>
+        <a class="card-link" href="nodes/kasage-nodes.html" aria-label="かさ上げ鋼材 7分割版 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="steel" data-search="部材カット 自動延長 Smart Member Processor v3 TrimMode 開先">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-steel" href="#ico-steel"/></svg>
+        <div class="card-name">部材カット自動延長ツール（v3）</div>
+        <div class="card-catch">部材の端部を接合相手に合わせて自動でカット・延長。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/buzai-cut.html" aria-label="部材カット自動延長ツール の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="steel" data-search="GH_DropOnRef 参照モデル 着地 スナップ 0タッチ 落下 引上げ AllowRaise">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-steel" href="#ico-steel"/></svg>
+        <div class="card-name">参照モデルへ着地 GH_DropOnRef</div>
+        <div class="card-catch">浮いた部材を参照モデル上面へピタッと0タッチ着地。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/drop-on-ref.html" aria-label="参照モデルへ着地 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="steel" data-search="GH_AlignEndToLine ライン 整列 オフセット アウトセット 端 揃える">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-steel" href="#ico-steel"/></svg>
+        <div class="card-name">ライン整列 GH_AlignEndToLine</div>
+        <div class="card-catch">部材の端を基準ラインへ平行移動でピシッと整列。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/align-end-to-line.html" aria-label="ライン整列 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="steel" data-search="subpick_block_multinode ブロック 内部 サブオブジェクト 選択 複数ノード">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-steel" href="#ico-steel"/></svg>
+        <div class="card-name">ブロック内サブ選択 subpick_block_multinode</div>
+        <div class="card-catch">ブロック内部のパーツを複数ノードで別々に選択記録。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/subpick.html" aria-label="ブロック内サブ選択 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="steel" data-search="防煙垂れ壁 プレート 配置 梁 Elefront Bake beam_plate_placer">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-steel" href="#ico-steel"/></svg>
+        <div class="card-name">防煙垂れ壁プレート配置</div>
+        <div class="card-catch">防煙垂れ壁のプレートを梁に沿って自動配置。</div>
+        <div class="card-foot"><span class="badge st-exp">要確認（版が並存）</span></div>
+        <a class="card-link" href="nodes/beam-plate-placer.html" aria-label="防煙垂れ壁プレート配置 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="steel" data-search="梁面 アウトライン 抽出 beam_face_extractor beam_outline member_brep">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-steel" href="#ico-steel"/></svg>
+        <div class="card-name">梁面・アウトライン抽出群</div>
+        <div class="card-catch">梁の面やアウトラインを抜き出すヘルパー群。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/beam-face-extractor.html" aria-label="梁面・アウトライン抽出群 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="steel" data-search="steel_profile_parser JIS 鋼材 断面 H BOX PIPE C L T PL メッシュ">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-steel" href="#ico-steel"/></svg>
+        <div class="card-name">JIS鋼材断面パーサ steel_profile_parser</div>
+        <div class="card-catch">H・BOX・PIPEなどJIS断面名から3Dメッシュを生成。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/steel-profile-parser.html" aria-label="JIS鋼材断面パーサ の詳細"></a>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- IFC・データ連携 -->
+<section class="cat-section" id="cat-ifc">
+  <div class="wrap">
+    <div class="cat-head"><span class="cat-dot" style="--cat:#a78bfa"></span><h2>IFC・データ連携</h2></div>
+    <p class="cat-desc">Tekla / Solibri 等のIFCデータをRhinoと行き来させる変換・結合・検証ツール群。</p>
+    <a href="nodes/ifc-guide.html" style="display:inline-flex;align-items:center;gap:8px;margin:0 0 20px;padding:9px 16px;border-radius:999px;border:1px solid color-mix(in srgb,#a78bfa 45%,var(--line));background:color-mix(in srgb,#a78bfa 12%,transparent);color:var(--text);font-size:14px;font-weight:700">🧭 IFCツール使い分けガイド <span style="color:#a78bfa">→</span></a>
+    <div class="card-grid">
+
+      <article class="card" data-cat="ifc" data-search="ifc2rhino IFC Rhino 変換 IFCIMP IFCINFO IFCEXPORT 属性 UserText 往復 QC">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ifc" href="#ico-ifc"/></svg>
+        <div class="card-name">IFC⇔Rhino変換 ifc2rhino</div>
+        <div class="card-catch">孔もキレイなIFC⇔Rhino変換。属性を焼き込んで往復可。</div>
+        <div class="card-foot"><span class="badge st-dist">稼働中（配布済）</span></div>
+        <a class="card-link" href="nodes/ifc2rhino.html" aria-label="IFC⇔Rhino変換 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="ifc" data-search="ライノセラスに変換 IFC 自動変換 パイプライン 色分け ヘッドレス BIM Conversion">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ifc" href="#ico-ifc"/></svg>
+        <div class="card-name">IFC自動変換パイプライン（ライノセラスに変換）</div>
+        <div class="card-catch">IFCを置くだけ→色分け.3dmを自動出力するパイプライン。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/rhino-henkan.html" aria-label="IFC自動変換パイプライン の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="ifc" data-search="Solibri SMC 抽出 solibri_extractor ifc_strip_props folder_watcher 監視">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ifc" href="#ico-ifc"/></svg>
+        <div class="card-name">Solibri/SMC抽出ツール群</div>
+        <div class="card-catch">SMCからIFC抽出→軽量化→フォルダ監視で自動処理。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/solibri-smc.html" aria-label="Solibri/SMC抽出ツール群 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="ifc" data-search="Tekla Solibri IFC GH インポータ tekla_ifc_importer Hops flask DataTree">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ifc" href="#ico-ifc"/></svg>
+        <div class="card-name">Tekla/Solibri IFC→GHインポータ群</div>
+        <div class="card-catch">Tekla/SolibriのIFCをGHへ高速インポート（Hops対応）。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/tekla-gh-import.html" aria-label="Tekla/Solibri IFC→GHインポータ群 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="ifc" data-search="Join_IFC_model 原点キューブ 結合 位置合わせ ズレ 補正 基準">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ifc" href="#ico-ifc"/></svg>
+        <div class="card-name">IFC原点キューブ結合 Join_IFC_model</div>
+        <div class="card-catch">原点キューブのズレを見て複数IFCを自動位置合わせ結合。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/join-ifc-model.html" aria-label="IFC原点キューブ結合 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="ifc" data-search="Join_IF_model Tekla 色 転写 結合 レイヤー 合算 merge_service">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ifc" href="#ico-ifc"/></svg>
+        <div class="card-name">Tekla色転写結合 Join_IF_model</div>
+        <div class="card-catch">Teklaの色・レイヤーを転写しながら2ファイルを合算。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/join-if-model.html" aria-label="Tekla色転写結合 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="ifc" data-search="IFC_Converter スキーマ 変換 IFC2X3 IFC4 Migrator entity_patches">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ifc" href="#ico-ifc"/></svg>
+        <div class="card-name">IFCスキーマ変換 IFC_Converter</div>
+        <div class="card-catch">IFC2X3を4へスキーマ変換。非対応要素は事前に置換。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/ifc-converter.html" aria-label="IFCスキーマ変換 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="ifc" data-search="IFC編集ツール IFC_Clipper 範囲 抽出 クリップ 軽量化 PyQt6 PyVista bbox">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ifc" href="#ico-ifc"/></svg>
+        <div class="card-name">IFC範囲抽出 IFC編集ツール（IFC_Clipper）</div>
+        <div class="card-catch">巨大IFCを範囲でクリップして軽く抽出（開発中）。</div>
+        <div class="card-foot"><span class="badge st-exp">実験的（開発途上）</span></div>
+        <a class="card-link" href="nodes/ifc-clipper.html" aria-label="IFC範囲抽出 の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="ifc" data-search="IFCMerger IFC統合 結合 範囲抽出 クリップ bbox マージ Web UI Flask レポート 原点キューブ Tekla 色転写 GUID">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ifc" href="#ico-ifc"/></svg>
+        <div class="card-name">IFC統合 IFCMerger（結合＋範囲抽出）</div>
+        <div class="card-catch">3系統の結合ツールをWeb UIで一本化。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中（v1.0・NEW）</span></div>
+        <a class="card-link" href="nodes/ifc-merger.html" aria-label="IFCMerger の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="ifc" data-search="BIM-Shield BIM_Shield IFC Rhino 品質保証 検証 レポート Excel PDF Compute">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ifc" href="#ico-ifc"/></svg>
+        <div class="card-name">BIM-Shield（IFC⇔Rhino品質保証）</div>
+        <div class="card-catch">IFC⇔Rhinoを検証レポート付きで往復する品質保証。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中（v2.7 / v3.2）</span></div>
+        <a class="card-link" href="nodes/bim-shield.html" aria-label="BIM-Shield の詳細"></a>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- Rhinoコマンド・配布ツール -->
+<section class="cat-section" id="cat-rhino">
+  <div class="wrap">
+    <div class="cat-head"><span class="cat-dot" style="--cat:#34d399"></span><h2>Rhinoコマンド・配布ツール</h2></div>
+    <p class="cat-desc">GH不要でRhinoから直接使うコマンド型ツールと、チーム配布パッケージ。</p>
+    <div class="card-grid">
+
+      <article class="card" data-cat="rhino" data-search="annotate_dim_text 注記 ANNO 寸法 文言 連続 作図 AnnotateTools 配布">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-rhino" href="#ico-rhino"/></svg>
+        <div class="card-name">注記ツール annotate_dim_text</div>
+        <div class="card-catch">寸法と文言を連続でサクサク作図（「注記」で起動）。</div>
+        <div class="card-foot"><span class="badge st-dist">稼働中（チーム配布済）</span></div>
+        <a class="card-link" href="nodes/annotate-dim-text.html" aria-label="注記ツール の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="rhino" data-search="方位修正 方位文字 一括 修正 東 西 南 北 DXF DWG PDF 確認PDF">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-rhino" href="#ico-rhino"/></svg>
+        <div class="card-name">方位文字一括修正ツール</div>
+        <div class="card-catch">図面の方位文字1字だけを安全に一括修正（確認PDF付き）。</div>
+        <div class="card-foot"><span class="badge st-dist">稼働中（EXE配布）</span></div>
+        <a class="card-link" href="nodes/houi-shusei.html" aria-label="方位文字一括修正ツール の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="rhino" data-search="DWG 図面チェック 一括 3dm 変換 図番 表題 検図 Excel batch_check">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-rhino" href="#ico-rhino"/></svg>
+        <div class="card-name">DWG図面チェック</div>
+        <div class="card-catch">DWGを一括3dm化＋図面名と表題の一致を検図。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中（手動実行）</span></div>
+        <a class="card-link" href="nodes/dwg-check.html" aria-label="DWG図面チェック の詳細"></a>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- 開発・AI基盤 -->
+<section class="cat-section" id="cat-ai">
+  <div class="wrap">
+    <div class="cat-head"><span class="cat-dot" style="--cat:#f472b6"></span><h2>開発・AI基盤</h2></div>
+    <p class="cat-desc">コードからGHノードを自動生成する開発基盤（ローカルOllama連携）。このカタログのツール自体を生み出す土台です。</p>
+    <div class="card-grid">
+
+      <article class="card" data-cat="ai" data-search="NodeGen rh_nodegen コード GHノード 一括 生成 ランチャー 自動配線 NODEGEN">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ai" href="#ico-ai"/></svg>
+        <div class="card-name">NodeGen（コード→GHノード一括生成）</div>
+        <div class="card-catch">フォルダの.pyをまとめてGHノード化＋自動配線。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中（コア実機検証済）</span></div>
+        <a class="card-link" href="nodes/nodegen.html" aria-label="NodeGen の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="ai" data-search="ghkit ghai_studio AIコンポーネント Ollama fix_ghdoc_hints エンジン ラッパー">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ai" href="#ico-ai"/></svg>
+        <div class="card-name">ghkit＋AIコンポーネント群</div>
+        <div class="card-catch">共有エンジンghkit＋AIノード群（ローカルOllama）。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/ghai-components.html" aria-label="ghkit＋AIコンポーネント群 の詳細"></a>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- 運用・監視・事務 -->
+<section class="cat-section" id="cat-ops">
+  <div class="wrap">
+    <div class="cat-head"><span class="cat-dot" style="--cat:#a3e635"></span><h2>運用・監視・事務</h2></div>
+    <p class="cat-desc">変換パイプラインの監視や事務作業を自動化する常駐系ツール。</p>
+    <div class="card-grid">
+
+      <article class="card" data-cat="ops" data-search="BIM Dashboard 変換 パイプライン 監視 ダッシュボード webhook localhost 8765">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ops" href="#ico-ops"/></svg>
+        <div class="card-name">BIM Dashboard（変換パイプライン監視）</div>
+        <div class="card-catch">変換パイプラインの処理状況を見張るダッシュボード。</div>
+        <div class="card-foot"><span class="badge st-frozen">休止気味</span></div>
+        <a class="card-link" href="nodes/bim-dashboard.html" aria-label="BIM Dashboard の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="ops" data-search="BoxDriveSync Box Google Sheets 同期 付帯鉄骨 GAS Webhook スケジューラ">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ops" href="#ico-ops"/></svg>
+        <div class="card-name">BoxDriveSync（Box→シート同期）</div>
+        <div class="card-catch">Boxの付帯鉄骨データをスプレッドシートへ自動同期。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中と推定</span></div>
+        <a class="card-link" href="nodes/box-drive-sync.html" aria-label="BoxDriveSync の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="ops" data-search="特定案件 メール 要約 転送 Gmail Ollama Gemini Drive Obsidian シート">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ops" href="#ico-ops"/></svg>
+        <div class="card-name">メール要約転送システム</div>
+        <div class="card-catch">メールを20分ごとにAI要約して社内へ転送・記録。</div>
+        <div class="card-foot"><span class="badge st-live">稼働中</span></div>
+        <a class="card-link" href="nodes/sannomiya.html" aria-label="メール要約転送システム の詳細"></a>
+      </article>
+
+      <article class="card" data-cat="ops" data-search="portfolio_build 使い方 ガイド PPTX 自動生成 build_pptx node ポートフォリオ">
+        <svg class="card-ico" viewBox="0 0 48 48" aria-hidden="true"><use xlink:href="#ico-ops" href="#ico-ops"/></svg>
+        <div class="card-name">使い方ガイドPPTX自動生成 _portfolio_build</div>
+        <div class="card-catch">使い方ガイドのPPTXをコマンド一発で自動生成。</div>
+        <div class="card-foot"><span class="badge st-dist">補助ツール</span></div>
+        <a class="card-link" href="nodes/portfolio-build.html" aria-label="使い方ガイドPPTX自動生成 の詳細"></a>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ヒット0件メッセージ -->
+<div class="no-result"><p>該当するツールが見つかりませんでした。別のキーワードでお試しください。</p></div>
+
+<!-- フッタ -->
+<footer class="site-footer">
+  <div class="wrap">
+    <p><b style="color:var(--text)">Python1 ツールカタログ</b>　全45ツール / 6カテゴリ。<br>
+    C:\Python1 のツール群を、初めて使うメンバー向けに調査してまとめた社内向けの説明サイトです（CDN・外部通信なしで <code>file://</code> でも動きます）。</p>
+    <p style="color:var(--sub);font-size:13px;margin-top:10px">生成日: 2026-07-12　／　製作: 中村 勇太　／　本サイトは AI エージェント（Claude）のオーケストレーションにより、コードベース調査（並列エージェント13体）→解説執筆→アニメデモ生成→サイト実装の全工程を1日で構築したものです。</p>
+    <div class="foot-links">
+      <a href="pipeline.html">Make2Dパイプライン詳細図 →</a>
+      <a href="#cat-m2d">図面化パイプライン</a>
+      <a href="#cat-steel">鉄骨モデリング支援</a>
+      <a href="#cat-ifc">IFC・データ連携</a>
+      <a href="#cat-rhino">Rhinoコマンド・配布</a>
+      <a href="#cat-ai">開発・AI基盤</a>
+      <a href="#cat-ops">運用・監視・事務</a>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

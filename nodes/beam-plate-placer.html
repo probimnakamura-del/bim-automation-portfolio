@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>防煙垂れ壁プレート配置 beam_plate_placer — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス bpp- で衝突回避
+   ①梁を選択 → ②解析して継手を避ける → ③プレートを等ピッチ配置
+   ============================================================ */
+.bpp-svg text { font-family: var(--font); }
+
+/* 梁本体 */
+.bpp-beam    { fill: #0f1a30; stroke: var(--accent); stroke-width: 2.4; animation: bppBeam 10s infinite; }
+.bpp-beam-hl { fill: none;    stroke: var(--accent); stroke-width: 4; opacity: 0; animation: bppBeamHl 10s infinite; }
+/* 通り芯（薄緑・一点鎖線） */
+.bpp-grid    { fill: none; stroke: #86efac; stroke-width: 1.6; opacity: .8; stroke-dasharray: 12 4 3 4;
+               animation: bppGrid 10s infinite; }
+.bpp-gridlbl { fill: none; stroke: #86efac; stroke-width: 1.6; opacity: .85; animation: bppGrid 10s infinite; }
+.bpp-gridtxt { fill: #86efac; font-size: 12px; font-weight: 700; animation: bppGrid 10s infinite; }
+
+/* ノイズ部品（ボルト・SPLブロック）＝解析で消える */
+.bpp-noise   { fill: #23304e; stroke: #6f7db0; stroke-width: 1.6; animation: bppNoise 10s infinite; }
+
+/* 中心軸線＋スプライスゾーン */
+.bpp-axis    { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-dasharray: 10 4 2 4;
+               opacity: 0; animation: bppAxis 10s infinite; }
+.bpp-splice  { fill: color-mix(in srgb, #f87171 34%, transparent); stroke: #f87171; stroke-width: 1.6;
+               opacity: 0; animation: bppSplice 10s infinite; }
+.bpp-splicetxt { fill: #fca5a5; font-size: 11px; font-weight: 700; opacity: 0; animation: bppSplice 10s infinite; }
+
+/* プレート（状態色: ok=シアン / warn=アンバー / ng=レッド） */
+.bpp-plate     { stroke-width: 2; transform-box: fill-box; transform-origin: center top; }
+.bpp-plate.ok  { fill: color-mix(in srgb, #22d3ee 34%, #0f1a30); stroke: #22d3ee; }
+.bpp-plate.wn  { fill: color-mix(in srgb, #fbbf24 34%, #0f1a30); stroke: #fbbf24; }
+.bpp-plate.ng  { fill: color-mix(in srgb, #f87171 34%, #0f1a30); stroke: #f87171; }
+.bpp-p1 { animation: bppPop 10s infinite; }
+.bpp-p2 { animation: bppPop 10s infinite; animation-delay: -9.4s; }
+.bpp-p3 { animation: bppPop 10s infinite; animation-delay: -9.1s; }
+.bpp-p4 { animation: bppPop 10s infinite; animation-delay: -8.8s; }
+.bpp-p5 { animation: bppPop 10s infinite; animation-delay: -8.5s; }
+.bpp-p6 { animation: bppPop 10s infinite; animation-delay: -8.2s; }
+
+/* 凡例 */
+.bpp-legend { opacity: 0; animation: bppLegend 10s infinite; }
+.bpp-legtxt { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* Elefront Bake タグ */
+.bpp-bake { opacity: 0; animation: bppBake 10s infinite; }
+.bpp-bake-box { fill: #0b1428; stroke: var(--accent); stroke-width: 1.4; }
+.bpp-baketxt  { fill: #e6ecff; font-size: 12.5px; font-weight: 700; }
+
+/* テキスト */
+.bpp-cap    { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.bpp-small  { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.bpp-prog-tr { fill: #223052; }
+.bpp-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center;
+               animation: bppProg 10s linear infinite; }
+
+/* ラベル */
+.bpp-l1 { animation: bppL1 10s infinite; }
+.bpp-l2 { animation: bppL2 10s infinite; }
+.bpp-l3 { animation: bppL3 10s infinite; }
+
+/* ---- キーフレーム（全10秒周期・infinite） ---- */
+@keyframes bppBeam   { 0%,4%{opacity:0} 9%{opacity:1} 100%{opacity:1} }
+@keyframes bppBeamHl { 0%,10%{opacity:0} 16%{opacity:.9} 26%{opacity:0} 100%{opacity:0} }
+@keyframes bppGrid   { 0%,6%{opacity:0} 12%{opacity:.85} 100%{opacity:.85} }
+@keyframes bppNoise  {
+  0%,30%  { opacity: 1; }
+  40%     { opacity: 0; }
+  100%    { opacity: 0; }
+}
+@keyframes bppAxis   { 0%,34%{opacity:0} 42%{opacity:.95} 100%{opacity:.95} }
+@keyframes bppSplice { 0%,40%{opacity:0} 48%{opacity:1} 100%{opacity:1} }
+@keyframes bppPop {
+  0%,58%  { opacity: 0; transform: translateY(-14px) scaleY(.2); }
+  66%     { opacity: 1; transform: translateY(0) scaleY(1); }
+  100%    { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+@keyframes bppLegend { 0%,66%{opacity:0} 72%{opacity:1} 100%{opacity:1} }
+@keyframes bppBake   { 0%,74%{opacity:0} 80%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes bppProg   { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+@keyframes bppL1 { 0%{opacity:0} 4%{opacity:1} 26%{opacity:1} 31%{opacity:0} 100%{opacity:0} }
+@keyframes bppL2 { 0%,31%{opacity:0} 36%{opacity:1} 56%{opacity:1} 61%{opacity:0} 100%{opacity:0} }
+@keyframes bppL3 { 0%,61%{opacity:0} 66%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+</style>
+</head>
+<body data-cat="steel">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">鉄骨モデリング支援</span>
+    <h1 class="node-title">防煙垂れ壁プレート配置 <span style="opacity:.75;font-weight:700">beam_plate_placer</span></h1>
+    <p class="catch">梁を<span class="em">選ぶだけ</span>で、防煙垂れ壁を固定する<span class="em">プレート（フラットバー）を等ピッチ自動配置</span>。</p>
+    <div class="badges">
+      <span class="badge st-exp">要確認（2実装が並存）</span>
+      <span class="badge st-ver">v7 相当</span>
+      <span class="badge st-ver">GHパイソン群 ＋ Elefront</span>
+    </div>
+  </div>
+</section>
+
+<!-- 要確認バンド -->
+<section class="section" style="padding-top:22px;padding-bottom:22px">
+  <div class="wrap">
+    <div class="trap-box">
+      <div class="trap-title"><span class="ico">❓</span> どちらが最新版か要確認</div>
+      <p>このツールは <strong>(A) 単体オールインワン版</strong>（<code>beam_plate_placer_v2.py</code>）と <strong>(B) クラスター分割版</strong>（<code>module1〜4</code>）の<strong>2つのアーキテクチャが並存</strong>しています。どちらを正とするかはメモリ記録が無く未確定です。まずは案件担当者に「どちらの版を使うか」を確認してから運用してください。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg bpp-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="梁を選択してプレートを等ピッチ配置するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="bpp-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="bpp-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- 通り芯（薄緑） -->
+        <line class="bpp-grid" x1="470" y1="90" x2="470" y2="300"></line>
+        <circle class="bpp-gridlbl" cx="470" cy="82" r="12"></circle>
+        <text class="bpp-gridtxt" x="470" y="86" text-anchor="middle">Y2</text>
+
+        <!-- 梁本体（横長） -->
+        <rect class="bpp-beam" x="110" y="176" width="560" height="42" rx="2"></rect>
+        <rect class="bpp-beam-hl" x="110" y="176" width="560" height="42" rx="2"></rect>
+
+        <!-- ノイズ部品（ボルト・SPLブロック）＝解析で消える -->
+        <circle class="bpp-noise" cx="210" cy="197" r="7"></circle>
+        <circle class="bpp-noise" cx="300" cy="197" r="7"></circle>
+        <circle class="bpp-noise" cx="560" cy="197" r="7"></circle>
+        <circle class="bpp-noise" cx="620" cy="197" r="7"></circle>
+        <rect class="bpp-noise" x="446" y="170" width="48" height="54" rx="2"></rect>
+
+        <!-- 中心軸線 -->
+        <line class="bpp-axis" x1="118" y1="197" x2="662" y2="197"></line>
+
+        <!-- スプライスゾーン（継手・避けるべき範囲） -->
+        <rect class="bpp-splice" x="440" y="170" width="60" height="54" rx="2"></rect>
+        <text class="bpp-splicetxt" x="470" y="242" text-anchor="middle">継手（回避）</text>
+
+        <!-- プレート（梁下面に等ピッチ・状態色） -->
+        <rect class="bpp-plate ok bpp-p1" x="164" y="218" width="15" height="30" rx="1"></rect>
+        <rect class="bpp-plate ok bpp-p2" x="248" y="218" width="15" height="30" rx="1"></rect>
+        <rect class="bpp-plate ok bpp-p3" x="332" y="218" width="15" height="30" rx="1"></rect>
+        <rect class="bpp-plate wn bpp-p4" x="416" y="218" width="15" height="30" rx="1"></rect>
+        <rect class="bpp-plate ng bpp-p5" x="463" y="218" width="15" height="30" rx="1"></rect>
+        <rect class="bpp-plate ok bpp-p6" x="560" y="218" width="15" height="30" rx="1"></rect>
+
+        <!-- 凡例 -->
+        <g class="bpp-legend" transform="translate(120,300)">
+          <rect x="0"   y="0" width="13" height="13" rx="2" fill="color-mix(in srgb,#22d3ee 34%,#0f1a30)" stroke="#22d3ee" stroke-width="2"></rect>
+          <text class="bpp-legtxt" x="20" y="11">配置OK</text>
+          <rect x="98"  y="0" width="13" height="13" rx="2" fill="color-mix(in srgb,#fbbf24 34%,#0f1a30)" stroke="#fbbf24" stroke-width="2"></rect>
+          <text class="bpp-legtxt" x="118" y="11">継手近接=警告</text>
+          <rect x="238" y="0" width="13" height="13" rx="2" fill="color-mix(in srgb,#f87171 34%,#0f1a30)" stroke="#f87171" stroke-width="2"></rect>
+          <text class="bpp-legtxt" x="258" y="11">干渉=要調整</text>
+        </g>
+
+        <!-- Elefront Bake タグ -->
+        <g class="bpp-bake">
+          <rect class="bpp-bake-box" x="470" y="330" width="200" height="26" rx="13"></rect>
+          <text class="bpp-baketxt" x="482" y="347">プレートBrep → Elefront Bake</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="bpp-cap bpp-l1" x="400" y="428" text-anchor="middle">① 梁を選択（通り芯レイヤー付き）</text>
+        <text class="bpp-cap bpp-l2" x="400" y="428" text-anchor="middle">② 梁を解析し、継手（スプライス）を避ける</text>
+        <text class="bpp-cap bpp-l3" x="400" y="428" text-anchor="middle">③ プレートを等ピッチ配置（色＝配置状態）</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">梁を選ぶ → ボルトやSPLブロックを取り除いて梁だけ解析 → 継手を避けつつプレートを等ピッチで配置（状態を色分け）、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>鉄骨梁に、<strong>防煙垂れ壁（煙の広がりを防ぐ間仕切り）を固定するためのフラットバー（プレート）</strong>を自動配置するGrasshopperツール群です。<strong>梁を選ぶだけ</strong>で、梁の抽出 → 軸（芯線）の解析 → 継手（スプライス）との干渉回避 → 配置ピッチの計算 → プレート形状（孔あきフラットバー）の生成まで、一連を自動で行います。</p>
+    <p>ボルトやスプライスプレートといった余計な部品はいったん取り除いて<strong>本物の梁だけを解析</strong>し、継手位置には金物を置かないよう避けます。配置結果は<strong>状態ごとに色分け</strong>（OK／継手近接の警告／干渉）されるので、目で見て調整できます。生成したプレートBrepの実際の書き込み（ベイク）は、外部プラグイン <strong>Elefront</strong> に任せます。</p>
+    <p class="lead">※ スプライス＝梁の継手部。ここに金物を重ねると納まらないため回避が必要。／ プレート＝防煙垂れ壁を梁に留める平鋼（フラットバー）。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <p class="lead" style="margin-bottom:14px">下表は単体版（<code>beam_plate_placer_v2</code>）を基準にした主な端子です。版により端子名・粒度が異なります（クラスター分割版はモジュール間で受け渡し）。</p>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>おもな入力</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">GetSelection</td><td>Rhinoで<strong>選択した梁</strong>を取り込むトリガ（v2の高速方式）。旧版は <span class="port">LayerName</span> でレイヤー指定。</td></tr>
+          <tr><td class="port">通り芯レイヤー</td><td>通り芯（グリッド）のレイヤー名。配置の基準・スパン把握に使う。</td></tr>
+          <tr><td class="port">Pitch / EndOffset /<br>SpliceMargin / Run</td><td>配置ピッチ、端部の逃げ、継手からの余裕、実行トリガなどの配置パラメータ。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>おもな出力</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Planes</td><td>各プレートの<strong>配置面（基準平面）</strong>。プレート形状を置く座標系。</td></tr>
+          <tr><td class="port">プレートBrep</td><td>生成された孔あきフラットバーの<strong>ソリッド</strong>。Elefrontでベイクする対象。</td></tr>
+          <tr><td class="port">Statuses / Colors /<br>Report / BeamList</td><td>各配置の状態・色分け・レポート・対象梁の一覧。目視チェック用。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <!-- 2アーキテクチャ＋ユーティリティ -->
+    <div class="io-grid" style="margin-top:22px">
+      <div class="sample-box">
+        <span class="sample-file"><span class="ico">🅰</span> 単体オールインワン版</span>
+        <p class="sample-desc"><code>beam_plate_placer.py</code>（初期・レイヤー検索）→ <code>beam_plate_placer_v2.py</code>（"v7"・選択方式に高速化）。1ノードで抽出〜生成まで完結。</p>
+      </div>
+      <div class="sample-box">
+        <span class="sample-file"><span class="ico">🅱</span> クラスター分割版</span>
+        <p class="sample-desc"><code>module1</code>通り芯 →<code>module2</code>梁抽出（並列2段フィルタ）→<code>module3</code>スプライス解析 →<code>module4</code>配置計算（斜め梁対応）。役割ごとに分離。</p>
+      </div>
+    </div>
+    <div class="sample-box" style="margin-top:16px">
+      <span class="sample-file"><span class="ico">🧰</span> 同梱の汎用ユーティリティ</span>
+      <p class="sample-desc"><code>selection_id_capture.py</code>＝Rhinoで選択したオブジェクトのGUIDを取得。<code>zoom_to_objects.py</code>＝任意ジオメトリへビューを自動ズーム（デバッグ確認用）。特定業務に依存しない小型コンポーネントで、他のGHでも使い回せます。<code>flat_bar_generator.py</code>＝プレート形状Brepの生成のみ担当（ベイクはElefront委譲）。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">対象の梁を選ぶ</span><span class="step-body">Rhinoで防煙垂れ壁を付ける鉄骨梁を選択し、<span class="port" style="color:var(--accent)">GetSelection</span> を押して取り込む（旧版はレイヤー名指定）。</span></li>
+      <li><span class="step-title">通り芯レイヤーを指定</span><span class="step-body">グリッド（通り芯）のレイヤーを渡す。スパンや配置基準の把握に使われる。</span></li>
+      <li><span class="step-title">配置パラメータを決める</span><span class="step-body"><span class="port" style="color:var(--accent)">Pitch</span>（ピッチ）・<span class="port" style="color:var(--accent)">EndOffset</span>（端部の逃げ）・<span class="port" style="color:var(--accent)">SpliceMargin</span>（継手からの余裕）を設定。</span></li>
+      <li><span class="step-title">実行して色で確認</span><span class="step-body"><span class="port" style="color:var(--accent)">Run</span> でプレートが生成される。<strong>状態色</strong>を見て、継手に近い・干渉している箇所があればピッチや余裕を調整。</span></li>
+      <li><span class="step-title">Elefrontでベイク</span><span class="step-body">仕上がりを確認したら、<span class="port" style="color:var(--accent)">プレートBrep</span> を <strong>Elefront v5 Bake</strong> コンポーネントへつないでモデルへ書き込む。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-solo">
+      <b>単独で使えます。</b> 選択した梁から完結してプレートを生成します。出力の<strong>プレートBrep</strong>は外部プラグイン <strong>Elefront v5 Bake</strong> へ渡してモデルに書き込む点だけ、外部連携があります。
+    </div>
+  </div>
+</section>
+
+<!-- 7. 自分のモデルで試す -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>自分のモデルで試す</h2>
+    <div class="sample-box">
+      <p class="sample-desc">専用サンプルはありません。防煙垂れ壁が付く実案件の鉄骨梁モデル（通り芯レイヤー付き）で試すのが確実です。Elefront v5がインストールされている環境が前提です。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">まず版を確認</span><span class="step-body">担当者に (A)単体版 / (B)分割版 のどちらを使うか確認。分からなければ単体版 <code>beam_plate_placer_v2.py</code> から試す。</span></li>
+        <li><span class="step-title">梁を数本選んで実行</span><span class="step-body">継手を含む梁を選ぶと、回避ロジックの効きが確認できる。</span></li>
+        <li><span class="step-title">色を見て調整</span><span class="step-body">警告・干渉色が出たらピッチ／余裕を変えて再実行。Bakeは最後に。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 2アーキテクチャ並存＝最新版が未確定</div>
+        <p>単体版と分割版が同居しており、どちらが正か記録がありません。<strong>混用せず、片方に統一</strong>して運用してください。初期版 <code>beam_plate_placer.py</code>（レイヤー検索方式）はレガシーで、選択方式の <code>v2</code> に置き換えられたとみられます。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Elefront（外部プラグイン）が必須</div>
+        <p>プレートの実書き込みは <strong>Elefront v5 Bake</strong> に委譲する設計です。<code>flat_bar_generator.py</code> は形状生成のみでベイク機能を持ちません。Elefront未導入の環境ではモデルに焼き込めません。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 選択キャプチャが一本化されていない</div>
+        <p>汎用の <code>selection_id_capture.py</code> がある一方、<code>module2</code> 内にも同型の選択取り込みが独立実装されています。改造時は「どこの選択ロジックを直すのか」を取り違えないよう注意してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル（単体版）</span>
+      C:\Python1\グラスホッパーパイソンコンポーネント\<span class="fp-accent">beam_plate_placer_v2.py</span>
+    </div>
+    <div class="file-path" style="margin-top:10px">
+      <span class="fp-label">分割版・ユーティリティ</span>
+      C:\Python1\グラスホッパーパイソンコンポーネント\<span class="fp-accent">module1〜4 / flat_bar_generator / selection_id_capture / zoom_to_objects</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-steel">鉄骨モデリング支援の一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

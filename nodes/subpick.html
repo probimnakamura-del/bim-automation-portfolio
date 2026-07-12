@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>ブロック内サブ選択 subpick_block_multinode — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス subp- で衝突回避
+   ①ブロックを指定 → ②ダイアログで部品を選ぶ → ③選んだ部品だけ取り出す
+   ============================================================ */
+.subp-svg text { font-family: var(--font); }
+
+/* ブロックの外枠（点線）と内部パーツ */
+.subp-block  { fill: none; stroke: #6f7db0; stroke-width: 2; stroke-dasharray: 8 6; opacity: .9; rx: 10; }
+.subp-part   { fill: #0f1a30; stroke: #6f7db0; stroke-width: 2; }
+.subp-partedge { fill: none; stroke: #6f7db0; stroke-width: 2; }
+/* ハイライト（選択された部品＝アンバー） */
+.subp-hi     { fill: color-mix(in srgb, var(--accent) 30%, #0f1a30); stroke: var(--accent); stroke-width: 2.6;
+               animation: subpHi 10s infinite; }
+.subp-hi-edge{ fill: none; stroke: var(--accent); stroke-width: 2.6; animation: subpHi 10s infinite; }
+
+/* ダイアログ */
+.subp-dlg    { animation: subpDlg 10s infinite; }
+.subp-dlg-bg { fill: #121a30; stroke: var(--accent); stroke-width: 1.6; }
+.subp-dlg-bar{ fill: color-mix(in srgb, var(--accent) 22%, #121a30); }
+.subp-row-bg { fill: #0d1526; stroke: #2a3352; stroke-width: 1; }
+.subp-box    { fill: #0a0e1c; stroke: #6f7db0; stroke-width: 1.6; }
+.subp-check  { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.subp-chk1   { animation: subpChk1 10s infinite; }
+.subp-chk2   { animation: subpChk2 10s infinite; }
+.subp-rowlbl { fill: #cdd6f4; font-size: 13px; font-weight: 600; }
+
+/* 取り出し（矢印＋抽出結果＋出力タグ） */
+.subp-arrow  { animation: subpArrow 10s infinite; }
+.subp-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.6; opacity: .85; }
+.subp-arrow-head  { fill: var(--accent); }
+.subp-out    { animation: subpOut 10s infinite; }
+.subp-out-part { fill: color-mix(in srgb, var(--accent) 30%, #0f1a30); stroke: var(--accent); stroke-width: 2.6; }
+.subp-tag-box  { fill: #0b1428; stroke: var(--accent); stroke-width: 1.4; }
+.subp-tagtxt   { fill: #e6ecff; font-size: 12.5px; font-weight: 700; }
+.subp-nodebadge{ fill: color-mix(in srgb, var(--accent) 24%, #0b1428); stroke: var(--accent); stroke-width: 1.4; }
+.subp-nodetxt  { fill: var(--accent); font-size: 12px; font-weight: 800; }
+
+/* テキスト */
+.subp-cap    { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.subp-small  { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.subp-prog-tr { fill: #223052; }
+.subp-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center;
+                animation: subpProg 10s linear infinite; }
+
+/* ラベル */
+.subp-l1 { animation: subpL1 10s infinite; }
+.subp-l2 { animation: subpL2 10s infinite; }
+.subp-l3 { animation: subpL3 10s infinite; }
+
+/* ---- キーフレーム（全10秒周期・infinite） ---- */
+@keyframes subpDlg {
+  0%,28%  { opacity: 0; transform: translateX(20px); }
+  34%     { opacity: 1; transform: translateX(0); }
+  60%     { opacity: 1; transform: translateX(0); }
+  66%,100%{ opacity: 0; transform: translateX(20px); }
+}
+@keyframes subpChk1 { 0%,38%{opacity:0} 43%{opacity:1} 60%{opacity:1} 66%,100%{opacity:0} }
+@keyframes subpChk2 { 0%,46%{opacity:0} 51%{opacity:1} 60%{opacity:1} 66%,100%{opacity:0} }
+@keyframes subpHi {
+  0%,42%   { opacity: 0; }
+  50%      { opacity: 1; }
+  96%      { opacity: 1; }
+  100%     { opacity: 0; }
+}
+@keyframes subpArrow { 0%,62%{opacity:0} 68%{opacity:1} 95%{opacity:1} 100%{opacity:0} }
+@keyframes subpOut {
+  0%,64%  { opacity: 0; transform: translateX(-14px); }
+  72%     { opacity: 1; transform: translateX(0); }
+  95%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes subpProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+@keyframes subpL1 { 0%{opacity:0} 4%{opacity:1} 26%{opacity:1} 31%{opacity:0} 100%{opacity:0} }
+@keyframes subpL2 { 0%,31%{opacity:0} 36%{opacity:1} 60%{opacity:1} 65%{opacity:0} 100%{opacity:0} }
+@keyframes subpL3 { 0%,65%{opacity:0} 70%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+</style>
+</head>
+<body data-cat="steel">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">鉄骨モデリング支援</span>
+    <h1 class="node-title">ブロック内サブ選択 <span style="opacity:.75;font-weight:700">subpick_block_multinode</span></h1>
+    <p class="catch"><span class="em">ブロックの中の部品だけ</span>をクリックで選んで記録——複数ノードでも選択が混ざらないピッカー。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">GHパイソンコンポーネント</span>
+      <span class="badge st-ver">Rhino7/8 両対応</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg subp-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="ブロック内の部品を選んで取り出すアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="subp-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="subp-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ブロックインスタンス（外枠＋内部パーツ） ===== -->
+        <rect class="subp-block" x="60" y="110" width="250" height="238"></rect>
+        <text class="subp-small" x="72" y="132">ブロック（アセンブリ）</text>
+
+        <!-- 梁（上） -->
+        <rect class="subp-part" x="92" y="150" width="188" height="22" rx="1"></rect>
+        <!-- 柱（左） -->
+        <rect class="subp-part" x="92" y="150" width="26" height="176" rx="1"></rect>
+        <!-- ガセット（三角）＝選択対象1 -->
+        <polygon class="subp-part" points="120,174 166,174 120,214"></polygon>
+        <!-- ボルト2つ（選択対象2は右のボルト） -->
+        <circle class="subp-part" cx="176" cy="250" r="9"></circle>
+        <circle class="subp-part" cx="228" cy="250" r="9"></circle>
+
+        <!-- 選択ハイライト（ガセット＋右ボルト＝アンバー） -->
+        <polygon class="subp-hi" points="120,174 166,174 120,214"></polygon>
+        <circle class="subp-hi" cx="228" cy="250" r="9"></circle>
+
+        <!-- ===== ② 選択ダイアログ ===== -->
+        <g class="subp-dlg">
+          <rect class="subp-dlg-bg"  x="342" y="96" width="214" height="250" rx="8"></rect>
+          <rect class="subp-dlg-bar" x="342" y="96" width="214" height="30" rx="8"></rect>
+          <text class="subp-small" x="356" y="116" style="fill:#e6ecff;font-size:13px;font-weight:700">部品を選択…</text>
+
+          <!-- 行1: 梁 -->
+          <rect class="subp-row-bg" x="356" y="140" width="186" height="34" rx="5"></rect>
+          <rect class="subp-box"    x="366" y="149" width="16" height="16" rx="3"></rect>
+          <text class="subp-rowlbl" x="396" y="162">梁</text>
+          <!-- 行2: 柱 -->
+          <rect class="subp-row-bg" x="356" y="180" width="186" height="34" rx="5"></rect>
+          <rect class="subp-box"    x="366" y="189" width="16" height="16" rx="3"></rect>
+          <text class="subp-rowlbl" x="396" y="202">柱</text>
+          <!-- 行3: ガセット（チェック） -->
+          <rect class="subp-row-bg" x="356" y="220" width="186" height="34" rx="5"></rect>
+          <rect class="subp-box"    x="366" y="229" width="16" height="16" rx="3"></rect>
+          <polyline class="subp-check subp-chk1" points="369,237 373,242 380,231"></polyline>
+          <text class="subp-rowlbl" x="396" y="242">ガセットプレート</text>
+          <!-- 行4: ボルト（チェック） -->
+          <rect class="subp-row-bg" x="356" y="260" width="186" height="34" rx="5"></rect>
+          <rect class="subp-box"    x="366" y="269" width="16" height="16" rx="3"></rect>
+          <polyline class="subp-check subp-chk2" points="369,277 373,282 380,271"></polyline>
+          <text class="subp-rowlbl" x="396" y="282">ボルト（右）</text>
+        </g>
+
+        <!-- ===== ③ 取り出し（矢印＋抽出＋出力タグ） ===== -->
+        <g class="subp-arrow">
+          <line class="subp-arrow-shaft" x1="330" y1="228" x2="470" y2="228"></line>
+          <polygon class="subp-arrow-head" points="470,228 456,220 456,236"></polygon>
+        </g>
+        <g class="subp-out">
+          <polygon class="subp-out-part" points="520,180 566,180 520,220"></polygon>
+          <circle  class="subp-out-part" cx="600" cy="230" r="10"></circle>
+          <!-- 出力タグ Srf -->
+          <g>
+            <rect class="subp-tag-box" x="512" y="252" width="196" height="26" rx="13"></rect>
+            <text class="subp-tagtxt" x="524" y="269">Srf → 選んだ部品ジオメトリ</text>
+          </g>
+          <!-- ノード独立バッジ -->
+          <rect class="subp-nodebadge" x="512" y="286" width="90" height="26" rx="8"></rect>
+          <text class="subp-nodetxt" x="524" y="303">Node A</text>
+          <rect class="subp-nodebadge" x="612" y="286" width="96" height="26" rx="8"></rect>
+          <text class="subp-nodetxt" x="624" y="303">Node B…</text>
+          <text class="subp-small" x="512" y="330">ノードごとに記録は独立</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="subp-cap subp-l1" x="400" y="428" text-anchor="middle">① ブロック（アセンブリ）を指定</text>
+        <text class="subp-cap subp-l2" x="400" y="428" text-anchor="middle">② ダイアログで内部の部品を選ぶ</text>
+        <text class="subp-cap subp-l3" x="400" y="428" text-anchor="middle">③ 選んだ部品だけ取り出す（ノード毎に独立記録）</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">ブロックを指定 → ダイアログで内部部品にチェック → チェックした部品だけがアンバーで確定し、Srf端子から取り出せる、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>Rhinoの<strong>ブロック（＝複数部品をひとまとめにしたアセンブリ）</strong>の中から、欲しい部品だけをクリックで選び出して記録する<strong>ピッカー</strong>です。ブロックは普通そのままだと「中の1部品だけ選ぶ」のが面倒ですが、このノードは専用のダイアログを開いて<strong>内部パーツを一覧チェックで選択</strong>できます。</p>
+    <p>選んだ部品は画面上でアンバーにハイライトされ、<span class="port" style="color:var(--accent)">Srf</span> 端子からそのジオメトリだけを取り出せます。かさ上げ鋼材の生成など「アセンブリの特定の面・部材を基準に何かを作る」下ごしらえに使います。</p>
+    <p class="lead">※ サブオブジェクト＝ブロックやポリサーフェスの「中の一部」。／ このノードの選択記録はブロックのIDと結びついて保持されるので、<strong>一度選べば再solveしても選択が残ります</strong>。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート（4）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">ID</td><td>対象のブロックインスタンスのID（Guid）を入力。</td></tr>
+          <tr><td class="port">show</td><td>Toggleを接続。Trueにすると<strong>選択ダイアログが開く</strong>。ここで内部部品をチェックする。</td></tr>
+          <tr><td class="port">zoom</td><td>Toggleを接続。Trueにすると選択した部材へビューをズーム。</td></tr>
+          <tr><td class="port">NodeID</td><td>（任意）パネル等で <code>"A"</code> <code>"B"</code> 等の文字を入れると、<strong>強制的に別ノードとして記録を独立</strong>させる。同じブロックを複数ノードで扱うとき用。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート（3）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Srf</td><td>ダイアログで<strong>選択された部材</strong>のジオメトリ。これが主役の出力。</td></tr>
+          <tr><td class="port">All</td><td>ブロックインスタンス内の<strong>すべての部材</strong>ジオメトリ。</td></tr>
+          <tr><td class="port">Log</td><td>選択履歴やエラーなどのログテキスト。うまく選べないときの確認用。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">ノードを置いてブロックIDをつなぐ</span><span class="step-body">GHにこのコンポーネントを置き、<span class="port" style="color:var(--accent)">ID</span> に対象ブロックインスタンスのGuidを渡す。</span></li>
+      <li><span class="step-title">ダイアログを開く</span><span class="step-body"><span class="port" style="color:var(--accent)">show</span> のToggleを<kbd>True</kbd>にすると選択ダイアログが開く。内部部品の一覧が並ぶ。</span></li>
+      <li><span class="step-title">部品にチェックする</span><span class="step-body">取り出したい部品にチェックを入れる。選んだ部品はビューでアンバーにハイライトされる。</span></li>
+      <li><span class="step-title">結果を受け取る</span><span class="step-body"><span class="port" style="color:var(--accent)">Srf</span> に選択部材のジオメトリが出る。ビューを寄せたいときは <span class="port" style="color:var(--accent)">zoom</span> をオン。</span></li>
+      <li><span class="step-title">複数ノードで使うときは NodeID を分ける</span><span class="step-body">同じブロックを別のノードでも扱う場合は、それぞれの <span class="port" style="color:var(--accent)">NodeID</span> に別々の文字を入れて記録を独立させる。これで選択が混ざらない。</span></li>
+    </ol>
+
+    <!-- 姉妹ノード -->
+    <div class="sample-box" style="margin-top:22px">
+      <span class="sample-file"><span class="ico">🔧</span> 派生ノード: subpick_l_angle_trim.py</span>
+      <p class="sample-desc">同じ「ブロック内サブ選択」UIをベースにした<strong>アングル（L形鋼）トリム用</strong>の派生版。選んだ部材から切断用のカッターソリッド（<span class="port" style="color:var(--accent)">Cutters</span>）と算出した部材幅（<span class="port" style="color:var(--accent)">CalcBeamWidth</span>）を追加で出力し、アングルの端部処理に使います。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">subpick_block_multinode（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="kasage-steel.html">かさ上げ鋼材オートモデラー kasage_steel</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">選んだ部材（面）を基準に、かさ上げ鋼材を生成する下ごしらえとして使えます。単体でも「ブロック内の1部品だけ取り出す」用途で完結します。</p>
+  </div>
+</section>
+
+<!-- 7. 自分のモデルで試す -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>自分のモデルで試す</h2>
+    <div class="sample-box">
+      <p class="sample-desc">専用サンプルはありません。手元のアセンブリブロック（Tekla由来のブロックや、自作の複数部品ブロック）で試せます。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">ブロックを1つ用意</span><span class="step-body">複数部品からなるブロックインスタンスを1つ選ぶ。<a href="ifc2rhino.html">ifc2rhino</a> で取り込んだアセンブリ（＝ブロック）が最適。</span></li>
+        <li><span class="step-title">IDを渡してダイアログを開く</span><span class="step-body">そのブロックのGuidを <span class="port" style="color:var(--accent)">ID</span> へ、<span class="port" style="color:var(--accent)">show</span> をTrueに。中の部品が一覧で出る。</span></li>
+        <li><span class="step-title">1部品だけ選ぶ</span><span class="step-body">1つだけチェックして <span class="port" style="color:var(--accent)">Srf</span> を確認。狙った部品だけが取り出せることを体感できる。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> このノードが生まれた理由＝「選択の混線」対策</div>
+        <p>複数ノードで<strong>同じブロックを参照</strong>すると、Rhinoのサブオブジェクト選択が共有されて、あるノードの事前フィルタが別ノードに漏れる問題があります。本ノードは<strong>ノード（InstanceGuidまたは手動NodeID）ごとに選択記録を独立</strong>させることでこれを回避しています。混ざったと感じたら <span class="port" style="color:var(--accent)">NodeID</span> を分けてください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Py3専用構文は避ける（Rhino7互換）</div>
+        <p>本ノードはRhino7（IronPython 2.7）／Rhino8（Python3）の両対応です。改造する場合、<code>f-string</code> や <code>:=</code> などPy3専用構文を入れるとRhino7側で全停止します。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 選択後は解除しておく</div>
+        <p>Rhinoのサブオブジェクト選択状態は、親オブジェクトが <code>GetSelectedObjects</code> に出ないなどAPI挙動にクセがあります。選択状態は保持せず「解除」で運用する設計です。ダイアログを閉じたら選択は記録側に残り、ビュー上の選択は解除されます。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\<span class="fp-accent">subpick_block_multinode.py</span>
+    </div>
+    <div class="file-path" style="margin-top:10px">
+      <span class="fp-label">派生（アングルトリム用）</span>
+      C:\Python1\<span class="fp-accent">subpick_l_angle_trim.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-steel">鉄骨モデリング支援の一覧</a>
+      <a href="kasage-steel.html">かさ上げ鋼材オートモデラー</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

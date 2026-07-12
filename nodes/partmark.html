@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>部材記号システム GH_PartMark / GH_PartsList — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス pm- で衝突回避
+   ①部材群（同形状3本＋別形状1本） → ②形状サインで分類・採番 → ③2段注記＋部材表で員数集計
+   ============================================================ */
+.pm-svg text { font-family: var(--font); }
+
+/* 部材（梁）＝はじめグレー鋼材→採番でアクセント */
+.pm-beam { fill:#1b2740; stroke:#7c88b4; stroke-width:2.2; }
+.pm-beam-a { animation: pmBeamA 10s infinite; }
+.pm-beam-b { animation: pmBeamB 10s infinite; }
+@keyframes pmBeamA {
+  0%,30% { fill:#1b2740; stroke:#7c88b4; }
+  36%,100% { fill: color-mix(in srgb, var(--accent) 14%, #1b2740); stroke: var(--accent); }
+}
+@keyframes pmBeamB {
+  0%,46% { fill:#1b2740; stroke:#7c88b4; }
+  52%,100% { fill: color-mix(in srgb, var(--accent) 14%, #1b2740); stroke: var(--accent); }
+}
+.pm-scene { animation: pmScene 10s infinite; }
+@keyframes pmScene {
+  0%,2% { opacity:0; } 7% { opacity:1; } 97% { opacity:1; } 100% { opacity:0; }
+}
+
+/* 「同形状 ×3」ピル */
+.pm-grp-box { fill:#0b1428; stroke:var(--accent); stroke-width:1.3; }
+.pm-grp-txt { fill:var(--accent); font-size:12px; font-weight:800; }
+.pm-grp { animation: pmGrp 10s infinite; }
+@keyframes pmGrp {
+  0%,32% { opacity:0; } 38% { opacity:1; } 96% { opacity:1; } 100% { opacity:0; }
+}
+
+/* 引出線＋マークタグ */
+.pm-leader { stroke:var(--accent); stroke-width:1.4; opacity:.7; }
+.pm-tag-box { fill:#0b1428; stroke:var(--accent); stroke-width:1.4; }
+.pm-tag-sec { fill:#9aa7cc; font-size:11px; font-weight:700; }
+.pm-tag-mark{ fill:#e6ecff; font-size:13px; font-weight:800; }
+.pm-tag-ul  { stroke:var(--accent); stroke-width:1.8; }
+.pm-tag-a1 { animation: pmTag 10s infinite 3.4s; }
+.pm-tag-a2 { animation: pmTag 10s infinite 3.8s; }
+.pm-tag-a3 { animation: pmTag 10s infinite 4.2s; }
+.pm-tag-b  { animation: pmTag 10s infinite 4.8s; }
+@keyframes pmTag {
+  0% { opacity:0; transform: translateX(8px); }
+  3% { opacity:0; transform: translateX(8px); }
+  6% { opacity:1; transform: translateX(0); }
+  92% { opacity:1; }
+  95%,100% { opacity:0; }
+}
+
+/* 部材表 */
+.pm-tbl-frame { fill:#0c1428; stroke:#34406a; stroke-width:1.4; }
+.pm-tbl-line  { stroke:#2a3352; stroke-width:1; }
+.pm-tbl-head  { fill:#1b2338; }
+.pm-tbl-h     { fill:#9aa7cc; font-size:11.5px; font-weight:700; }
+.pm-tbl-txt   { fill:#e6ecff; font-size:13px; font-weight:700; }
+.pm-tbl-mark  { fill:var(--accent); font-size:13px; font-weight:800; }
+.pm-tbl-title { fill:#e6ecff; font-size:13px; font-weight:800; }
+.pm-th { animation: pmReveal 10s infinite 6.4s; }
+.pm-r1 { animation: pmReveal 10s infinite 7.0s; }
+.pm-r2 { animation: pmReveal 10s infinite 7.8s; }
+.pm-rt { animation: pmReveal 10s infinite 8.6s; }
+@keyframes pmReveal {
+  0% { opacity:0; } 4% { opacity:0; } 8% { opacity:1; } 92% { opacity:1; } 96%,100% { opacity:0; }
+}
+/* 員数の強調パルス */
+.pm-emph { fill:none; stroke:var(--accent); stroke-width:2; animation: pmEmph 10s infinite; }
+@keyframes pmEmph {
+  0%,72% { opacity:0; r:8; } 76% { opacity:.9; r:8; } 84% { opacity:0; r:18; } 100% { opacity:0; r:18; }
+}
+
+/* 3拍ラベル */
+.pm-cap { fill:#e6ecff; font-size:17px; font-weight:700; }
+.pm-l1 { animation: pmL1 10s infinite; }
+.pm-l2 { animation: pmL2 10s infinite; }
+.pm-l3 { animation: pmL3 10s infinite; }
+@keyframes pmL1 { 0%{opacity:0} 5%{opacity:1} 30%{opacity:1} 35%{opacity:0} 100%{opacity:0} }
+@keyframes pmL2 { 0%,35%{opacity:0} 40%{opacity:1} 60%{opacity:1} 65%{opacity:0} 100%{opacity:0} }
+@keyframes pmL3 { 0%,65%{opacity:0} 70%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+
+/* 進捗バー */
+.pm-prog-tr { fill:#223052; }
+.pm-prog { fill:var(--accent); transform-box: fill-box; transform-origin: left center; animation: pmProg 10s linear infinite; }
+@keyframes pmProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">部材記号システム <span style="opacity:.75;font-weight:700">GH_PartMark / GH_PartsList</span></h1>
+    <p class="catch">同じ形の部材には<span class="em">いつも同じ記号</span>を。採番も注記も部材表も<span class="em">まとめて自動</span>。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">v2 ／ 統合版 GH_PartMarkAll</span>
+      <span class="badge st-ver">make2d_system ⑥採用</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg pm-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="同じ形の梁に同じ記号を振り、部材表で員数を集計するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="pm-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="pm-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <g class="pm-scene">
+          <!-- ===== 部材群（左） ===== -->
+          <!-- 同形状の梁3本 -->
+          <rect class="pm-beam pm-beam-a" x="64" y="104" width="132" height="16" rx="1"></rect>
+          <rect class="pm-beam pm-beam-a" x="64" y="150" width="132" height="16" rx="1"></rect>
+          <rect class="pm-beam pm-beam-a" x="64" y="196" width="132" height="16" rx="1"></rect>
+          <!-- 別形状の梁1本（長くて背が高い） -->
+          <rect class="pm-beam pm-beam-b" x="64" y="250" width="176" height="24" rx="1"></rect>
+
+          <!-- 「同形状 ×3」ピル -->
+          <g class="pm-grp">
+            <rect class="pm-grp-box" x="60" y="76" width="104" height="22" rx="11"></rect>
+            <text class="pm-grp-txt" x="72" y="91">◎ 同形状 ×3</text>
+          </g>
+
+          <!-- ===== マークタグ（引出線＋2段注記） ===== -->
+          <!-- A1 -->
+          <g class="pm-tag-a1">
+            <line class="pm-leader" x1="196" y1="112" x2="252" y2="112"></line>
+            <rect class="pm-tag-box" x="252" y="94" width="104" height="36" rx="6"></rect>
+            <text class="pm-tag-sec"  x="262" y="109">H-200×100</text>
+            <text class="pm-tag-mark" x="262" y="124">★-00001</text>
+            <line class="pm-tag-ul" x1="262" y1="127" x2="330" y2="127"></line>
+          </g>
+          <!-- A2 -->
+          <g class="pm-tag-a2">
+            <line class="pm-leader" x1="196" y1="158" x2="252" y2="158"></line>
+            <rect class="pm-tag-box" x="252" y="140" width="104" height="36" rx="6"></rect>
+            <text class="pm-tag-sec"  x="262" y="155">H-200×100</text>
+            <text class="pm-tag-mark" x="262" y="170">★-00001</text>
+            <line class="pm-tag-ul" x1="262" y1="173" x2="330" y2="173"></line>
+          </g>
+          <!-- A3 -->
+          <g class="pm-tag-a3">
+            <line class="pm-leader" x1="196" y1="204" x2="252" y2="204"></line>
+            <rect class="pm-tag-box" x="252" y="186" width="104" height="36" rx="6"></rect>
+            <text class="pm-tag-sec"  x="262" y="201">H-200×100</text>
+            <text class="pm-tag-mark" x="262" y="216">★-00001</text>
+            <line class="pm-tag-ul" x1="262" y1="219" x2="330" y2="219"></line>
+          </g>
+          <!-- B -->
+          <g class="pm-tag-b">
+            <line class="pm-leader" x1="240" y1="262" x2="252" y2="262"></line>
+            <rect class="pm-tag-box" x="252" y="244" width="104" height="36" rx="6"></rect>
+            <text class="pm-tag-sec"  x="262" y="259">H-300×150</text>
+            <text class="pm-tag-mark" x="262" y="274">★-00002</text>
+            <line class="pm-tag-ul" x1="262" y1="277" x2="330" y2="277"></line>
+          </g>
+
+          <!-- ===== 部材表（右） ===== -->
+          <text class="pm-tbl-title pm-th" x="430" y="96">部材表（自動集計）</text>
+          <!-- 外枠 -->
+          <g class="pm-th">
+            <rect class="pm-tbl-head"  x="430" y="104" width="330" height="34"></rect>
+            <rect class="pm-tbl-frame" x="430" y="104" width="330" height="34" fill="none"></rect>
+            <text class="pm-tbl-h" x="440" y="125">記号</text>
+            <text class="pm-tbl-h" x="540" y="125">断面</text>
+            <text class="pm-tbl-h" x="616" y="125">員数</text>
+            <text class="pm-tbl-h" x="676" y="125">重量</text>
+          </g>
+          <!-- 行1: ★-00001 員数3 -->
+          <g class="pm-r1">
+            <rect class="pm-tbl-frame" x="430" y="138" width="330" height="34" fill="none"></rect>
+            <text class="pm-tbl-mark" x="440" y="159">★-00001</text>
+            <text class="pm-tbl-txt"  x="540" y="159">H-200</text>
+            <text class="pm-tbl-txt"  x="620" y="159">3</text>
+            <text class="pm-tbl-txt"  x="676" y="159">47.1kg</text>
+            <circle class="pm-emph" cx="624" cy="154" r="8"></circle>
+          </g>
+          <!-- 行2: ★-00002 員数1 -->
+          <g class="pm-r2">
+            <rect class="pm-tbl-frame" x="430" y="172" width="330" height="34" fill="none"></rect>
+            <text class="pm-tbl-mark" x="440" y="193">★-00002</text>
+            <text class="pm-tbl-txt"  x="540" y="193">H-300</text>
+            <text class="pm-tbl-txt"  x="620" y="193">1</text>
+            <text class="pm-tbl-txt"  x="676" y="193">22.4kg</text>
+          </g>
+          <!-- 合計行 -->
+          <g class="pm-rt">
+            <rect class="pm-tbl-head"  x="430" y="206" width="330" height="34"></rect>
+            <rect class="pm-tbl-frame" x="430" y="206" width="330" height="34" fill="none"></rect>
+            <text class="pm-tbl-h"   x="440" y="227">合計</text>
+            <text class="pm-tbl-txt" x="620" y="227">4</text>
+            <text class="pm-tbl-txt" x="676" y="227">69.5kg</text>
+          </g>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="pm-cap pm-l1" x="400" y="428" text-anchor="middle">① 部材群（同じ形の梁3本＋別の形1本）</text>
+        <text class="pm-cap pm-l2" x="400" y="428" text-anchor="middle">② 形状サインで分類 → 同じ形は同じ記号を自動採番</text>
+        <text class="pm-cap pm-l3" x="400" y="428" text-anchor="middle">③ 2段注記を付け、部材表に員数（3・1）で集計</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">部材群を見て → 形の同じもの（同一の材質×寸法）をまとめて同じ記号を自動採番 → 2段注記を付けて部材表に員数集計、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>製作図に欠かせない<strong>部材の仮記号（符号）付けと、部材表づくりを丸ごと自動化する</strong>システムです。モデルの中の部材を1つずつ見て、<strong>同じ形（同じ材質×同じ寸法）のものには必ず同じ記号を振る</strong>——だから「同じ梁なのに別番号」「別の梁なのに同じ番号」といったミスが起きません。</p>
+    <p>付ける注記は<strong>2段構成</strong>（上段に寸法／断面、下段に「＜記号＞」＋下線＋引出線）で、レイアウトも自動。あわせて<strong>部材表（材質・員数・長さ・面積・重量）</strong>も生成します。心臓部の <code>partmark_core.py</code> が「形状サイン式・断面検索・採番表」の唯一の真実を持ち、記号付けの <strong>GH_PartMark</strong> と一覧表の <strong>GH_PartsList</strong> がそれを共有します。<strong>GH_PartMarkAll</strong> は両者を束ねた統合版で、<a href="make2d-system.html">make2d_system</a> の⑥ノードとして正式採用されています。</p>
+    <p class="lead">※ 仮記号＝製作図で部材を呼ぶための符号（例: ★-00001）。／ 形状サイン＝面数・寸法・材質などから作る“形の指紋”で、同じ指紋なら同じ記号にします。／ 採番表はログ用の.3dmのユーザーテキストに保存され、次回以降も番号がぶつかりません。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート（4系統）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Ids / Geos /<br>SubGeos</td><td>記号を付ける対象の部材（アセンブリ）と形状。材質・断面は属性から読むため <strong>Ids入力が前提</strong>。</td></tr>
+          <tr><td class="port">SectionKey /<br>Round / Prefix /<br>MatDefault</td><td>断面の照合キー、丸め、記号の接頭辞、既定の材質。採番の振る舞いを決める。</td></tr>
+          <tr><td class="port">SecXf / SecBox /<br>SecNames /<br>Target3dm</td><td><a href="make2d-executor.html">Make2D実行</a>から受け取る断面の配置行列・外接ボックス・断面名・書込先。図面上のどこに注記を置くか。</td></tr>
+          <tr><td class="port">Run / Confirm /<br>Bake / Write /<br>Export / Reset</td><td>実行・確認・ベイク・書込・部材表エクスポート・採番リセットのトリガ群。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート（2系統）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Table /<br>TotalWeight /<br>TotalArea /<br>MatSummary</td><td>部材表（記号・断面・員数・重量…）と、総重量・総面積・材質別サマリ。</td></tr>
+          <tr><td class="port">Texts /<br>Underlines /<br>Leaders</td><td>図面に置く注記テキスト・下線・引出線。2段注記の実体。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">対象部材を渡す</span><span class="step-body">記号を付けたい部材の <span class="port" style="color:var(--accent)">Ids</span>（と形状）を接続。材質・断面を属性から読むためGUIDが要る。<a href="final-select.html">GH_FinalSelect</a> の確定セットが便利。</span></li>
+      <li><span class="step-title">Make2Dの配置情報をつなぐ</span><span class="step-body"><a href="make2d-executor.html">Make2D実行</a>の <span class="port" style="color:var(--accent)">SecXf / SecBox / SecNames</span> を渡すと、図面上の正しい位置に注記が並ぶ。</span></li>
+      <li><span class="step-title">採番ルールを決める</span><span class="step-body"><span class="port" style="color:var(--accent)">Prefix</span>（記号の頭）・<span class="port" style="color:var(--accent)">Round</span>（寸法の丸め）・<span class="port" style="color:var(--accent)">SectionKey</span> を設定して <kbd>Run</kbd>。</span></li>
+      <li><span class="step-title">記号と部材表を確認する</span><span class="step-body">同形状に同じ記号が振られ、<span class="port" style="color:var(--accent)">Table</span> に員数・重量が集計される。PL（プレート）判定などは確認ポップアップで承認。</span></li>
+      <li><span class="step-title">図面へ書き込む・書き出す</span><span class="step-body">よければ <span class="port" style="color:var(--accent)">Write / Bake</span> で注記を図面へ、<span class="port" style="color:var(--accent)">Export</span> で部材表を書き出す。採番表はログ.3dmに保存され次回も継続。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <a class="chip chip-up" href="make2d-executor.html">Make2D実行 GH_Make2DExecutor</a>
+        <a class="chip chip-up" href="final-select.html">最終選択ハブ GH_FinalSelect</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">部材記号システム（このノード）</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <span class="flow-solo">パイプラインの<b>終端</b> — ここで記号と部材表が付き、製作図が仕上がります。</span>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px"><a href="make2d-executor.html">Make2D実行</a>が起こした断面線に記号と部材表を付ける、図面化の“仕上げ工程”です。あわせて <a href="annotate-dim-gh.html">寸法注記</a> や <a href="hokan-system.html">補完</a> と並んで最終仕上げを担います。全体像は <a href="../pipeline.html">パイプライン詳細図</a> で確認できます。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\01_柱梁フレーム.3dm</span>
+      <p class="sample-desc">2×1スパンの柱梁フレーム＋通り芯線＋ガセット／浮きピース入り。同形状の梁が複数あり、採番と員数集計のデモに向きます。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> を開く。</span></li>
+        <li><span class="step-title">部材を渡す</span><span class="step-body">柱・梁のアセンブリを <span class="port" style="color:var(--accent)">Ids</span> へ。<kbd>Run</kbd> で採番。</span></li>
+        <li><span class="step-title">同形状に同記号を確認</span><span class="step-body">同じ寸法の梁が同じ記号になり、<span class="port" style="color:var(--accent)">Table</span> の員数がその本数と一致するのを確認。</span></li>
+        <li><span class="step-title">書込は練習ではオフ</span><span class="step-body">練習では <span class="port" style="color:var(--accent)">Write / Bake</span> を押さず、<span class="port" style="color:var(--accent)">Table</span> と注記プレビューだけ眺めると安全。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 材質・断面は属性から読む（Ids入力が前提）</div>
+        <p>記号は「材質×寸法」で決まるため、材質や断面の情報が部材の属性に入っている必要があります。形状（Geos）だけでなく <span class="port" style="color:var(--accent)">Ids</span> を渡してください。属性が無いと既定の <span class="port" style="color:var(--accent)">MatDefault</span> にフォールバックします。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 採番表はログ.3dmに永続化される</div>
+        <p>採番表（PartMarkRegistry_v1）はログ用の.3dmのユーザーテキストに保存され、次回以降も番号が引き継がれます。番号を振り直したいときは <span class="port" style="color:var(--accent)">Reset</span> を使ってください。ログ.3dmを消すと採番の連続性が失われます。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 毎solveの全再計算は署名キャッシュで抑制済み</div>
+        <p>入力の署名でキャッシュし、変化が無ければ再計算しません。最新の状態に強制更新したいときは <kbd>Run</kbd> を立ち上げてください（Runが強制リフレッシュのトリガ）。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> PL（プレート）判定は確認ポップアップで承認</div>
+        <p>プレート系の部材は判定が分かれやすいため、書き込み前に確認ポップアップが出ます。内容を見て承認してから <span class="port" style="color:var(--accent)">Write / Bake</span> を実行してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル（統合版＋共有コア）</span>
+      C:\Python1\図面整理\<span class="fp-accent">GH_PartMarkAll.py</span> ／ <span class="fp-accent">partmark_core.py</span> ／ <span class="fp-accent">GH_PartMark.py</span> ／ <span class="fp-accent">GH_PartsList.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>使い方ガイドPPTX自動生成 _portfolio_build — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス pfb- で衝突回避
+   ①コードでスライド定義 → ②node build_pptx.js 実行 → ③PPTX生成
+   ============================================================ */
+.pfb-svg text { font-family: var(--font); }
+
+/* ウィンドウ枠 */
+.pfb-win    { fill: #0f1a30; stroke: var(--accent); stroke-width: 1.8; }
+.pfb-bar    { fill: #1b2338; }
+.pfb-dot-r  { fill: #ff5f57; }
+.pfb-dot-y  { fill: #febc2e; }
+.pfb-dot-g  { fill: #28c840; }
+
+/* コード行 */
+.pfb-kw   { stroke: var(--accent); stroke-width: 4; stroke-linecap: round; }
+.pfb-str  { stroke: #7f8cb5; stroke-width: 4; stroke-linecap: round; }
+.pfb-var  { stroke: #cdd6f4; stroke-width: 4; stroke-linecap: round; }
+.pfb-gut  { fill: #4a568a; font-size: 11px; font-weight: 700; }
+.pfb-codetxt { fill: #cdd6f4; font-size: 12.5px; font-weight: 600; font-family: "Cascadia Code", Consolas, monospace; }
+
+/* ターミナル */
+.pfb-term    { fill: #080c18; stroke: var(--accent); stroke-width: 1.8; }
+.pfb-prompt  { fill: var(--accent); font-size: 13px; font-weight: 700; font-family: "Cascadia Code", Consolas, monospace; }
+.pfb-out     { fill: #9aa7cc; font-size: 12px; font-weight: 600; font-family: "Cascadia Code", Consolas, monospace; }
+.pfb-ok      { fill: var(--accent); font-size: 12.5px; font-weight: 800; font-family: "Cascadia Code", Consolas, monospace; }
+.pfb-cursor  { fill: var(--accent); }
+.pfb-progtr  { fill: #223052; }
+.pfb-progbar { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* PPTXファイル・スライド */
+.pfb-doc     { fill: #0f1a30; stroke: var(--accent); stroke-width: 1.8; }
+.pfb-doctab  { fill: var(--accent); }
+.pfb-slide   { fill: #0c1830; stroke: color-mix(in srgb, var(--accent) 55%, var(--line)); stroke-width: 1.4; }
+.pfb-slideacc{ fill: var(--accent); opacity: .85; }
+.pfb-sline   { stroke: #46527d; stroke-width: 2.4; stroke-linecap: round; }
+
+/* 矢印＋データドット */
+.pfb-arw-shaft { fill: none; stroke: var(--accent); stroke-width: 2.6; opacity: .85; }
+.pfb-arw-head  { fill: var(--accent); }
+.pfb-dot       { fill: #ffffff; }
+
+/* テキスト */
+.pfb-cap    { fill: #e6ecff; font-size: 16.5px; font-weight: 700; }
+.pfb-lbl    { fill: #cdd6f4; font-size: 13px; font-weight: 700; }
+.pfb-small  { fill: #9aa7cc; font-size: 11.5px; font-weight: 600; }
+
+/* 進捗バー（上部） */
+.pfb-prog-tr { fill: #223052; }
+.pfb-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.pfb-b1   { animation: pfbB1 10s infinite; }
+.pfb-b2   { animation: pfbB2 10s infinite; }
+.pfb-b3   { animation: pfbB3 10s infinite; }
+.pfb-arw1 { animation: pfbArw1 10s infinite; }
+.pfb-arw2 { animation: pfbArw2 10s infinite; }
+.pfb-flow1{ animation: pfbFlow1 10s infinite; }
+.pfb-flow2{ animation: pfbFlow2 10s infinite; }
+.pfb-type { animation: pfbType 10s steps(1) infinite; }
+.pfb-run  { animation: pfbRun 10s steps(1) infinite; }
+.pfb-buildbar { animation: pfbBuild 10s infinite; }
+.pfb-ok   { animation: pfbOk 10s infinite; }
+.pfb-blink{ animation: pfbBlink 1s steps(1) infinite; }
+.pfb-s1   { animation: pfbS1 10s infinite; }
+.pfb-s2   { animation: pfbS2 10s infinite; }
+.pfb-s3   { animation: pfbS3 10s infinite; }
+.pfb-l1   { animation: pfbL1 10s infinite; }
+.pfb-l2   { animation: pfbL2 10s infinite; }
+.pfb-l3   { animation: pfbL3 10s infinite; }
+.pfb-prog { animation: pfbProg 10s linear infinite; }
+
+@keyframes pfbB1 { 0%{opacity:0} 5%{opacity:1} 33%{opacity:1} 41%{opacity:.35} 100%{opacity:.35} }
+@keyframes pfbB2 { 0%,33%{opacity:0} 39%{opacity:1} 63%{opacity:1} 71%{opacity:.35} 100%{opacity:.35} }
+@keyframes pfbB3 { 0%,63%{opacity:0} 69%{opacity:1} 97%{opacity:1} 100%{opacity:1} }
+@keyframes pfbArw1{ 0%,29%{opacity:0} 34%{opacity:1} 66%{opacity:1} 74%{opacity:.3} 100%{opacity:.3} }
+@keyframes pfbArw2{ 0%,59%{opacity:0} 64%{opacity:1} 100%{opacity:1} }
+@keyframes pfbFlow1{ 0%,29%{opacity:0; transform:translateX(0)} 33%{opacity:1; transform:translateX(0)} 39%{opacity:1; transform:translateX(50px)} 43%,100%{opacity:0; transform:translateX(50px)} }
+@keyframes pfbFlow2{ 0%,59%{opacity:0; transform:translateX(0)} 63%{opacity:1; transform:translateX(0)} 69%{opacity:1; transform:translateX(50px)} 73%,100%{opacity:0; transform:translateX(50px)} }
+@keyframes pfbType { 0%,40%{opacity:0} 44%{opacity:1} 100%{opacity:1} }
+@keyframes pfbRun  { 0%,46%{opacity:0} 50%{opacity:1} 100%{opacity:1} }
+@keyframes pfbBuild{ 0%,50%{transform:scaleX(0)} 62%{transform:scaleX(1)} 100%{transform:scaleX(1)} }
+@keyframes pfbOk   { 0%,60%{opacity:0} 64%{opacity:1} 100%{opacity:1} }
+@keyframes pfbBlink{ 0%{opacity:1} 50%{opacity:0} 100%{opacity:1} }
+@keyframes pfbS1{ 0%,66%{opacity:0; transform:translateY(10px)} 72%{opacity:1; transform:translateY(0)} 100%{opacity:1; transform:translateY(0)} }
+@keyframes pfbS2{ 0%,74%{opacity:0; transform:translateY(10px)} 80%{opacity:1; transform:translateY(0)} 100%{opacity:1; transform:translateY(0)} }
+@keyframes pfbS3{ 0%,82%{opacity:0; transform:translateY(10px)} 88%{opacity:1; transform:translateY(0)} 100%{opacity:1; transform:translateY(0)} }
+@keyframes pfbL1{ 0%{opacity:0} 4%{opacity:1} 30%{opacity:1} 35%{opacity:0} 100%{opacity:0} }
+@keyframes pfbL2{ 0%,35%{opacity:0} 39%{opacity:1} 60%{opacity:1} 65%{opacity:0} 100%{opacity:0} }
+@keyframes pfbL3{ 0%,65%{opacity:0} 69%{opacity:1} 97%{opacity:1} 100%{opacity:0} }
+@keyframes pfbProg{ 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ops">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">運用・監視・事務</span>
+    <h1 class="node-title">使い方ガイドPPTX自動生成 <span style="opacity:.7;font-weight:700;font-size:.5em">_portfolio_build</span></h1>
+    <p class="catch"><span class="em">コードを1回走らせるだけ</span>で、鉄骨自動化ツールの<span class="em">「使い方ガイド」スライド</span>を自動で組み上げる資料ビルダー。</p>
+    <div class="badges">
+      <span class="badge st-live">現役（出力ファイル実在）</span>
+      <span class="badge st-ver">補助ツール（資料生成）</span>
+      <span class="badge st-ver">Node.js / pptxgenjs</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg pfb-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="コードからPPTXの使い方ガイドを自動生成するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="pfb-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="pfb-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① build_pptx.js にスライドをコードで定義 ===== -->
+        <g class="pfb-b1">
+          <rect class="pfb-win" x="44" y="86" width="222" height="248" rx="8"></rect>
+          <rect class="pfb-bar" x="44" y="86" width="222" height="26" rx="8"></rect>
+          <rect class="pfb-bar" x="44" y="100" width="222" height="12"></rect>
+          <circle class="pfb-dot-r" cx="60" cy="99" r="4.5"></circle>
+          <circle class="pfb-dot-y" cx="74" cy="99" r="4.5"></circle>
+          <circle class="pfb-dot-g" cx="88" cy="99" r="4.5"></circle>
+          <text class="pfb-small" x="150" y="103" text-anchor="middle">build_pptx.js</text>
+
+          <!-- コード行（行番号＋色分けした擬似コード） -->
+          <text class="pfb-gut" x="58" y="136">1</text>
+          <line class="pfb-kw"  x1="72" y1="132" x2="104" y2="132"></line>
+          <line class="pfb-var" x1="112" y1="132" x2="150" y2="132"></line>
+          <text class="pfb-gut" x="58" y="156">2</text>
+          <line class="pfb-kw"  x1="72" y1="152" x2="96" y2="152"></line>
+          <line class="pfb-str" x1="104" y1="152" x2="200" y2="152"></line>
+          <text class="pfb-gut" x="58" y="176">3</text>
+          <line class="pfb-var" x1="84" y1="172" x2="120" y2="172"></line>
+          <line class="pfb-str" x1="128" y1="172" x2="188" y2="172"></line>
+          <text class="pfb-gut" x="58" y="196">4</text>
+          <line class="pfb-var" x1="84" y1="192" x2="130" y2="192"></line>
+          <line class="pfb-str" x1="138" y1="192" x2="176" y2="192"></line>
+          <text class="pfb-gut" x="58" y="216">5</text>
+          <line class="pfb-kw"  x1="72" y1="212" x2="100" y2="212"></line>
+          <line class="pfb-var" x1="108" y1="212" x2="150" y2="212"></line>
+
+          <!-- 注釈: スライド定義 -->
+          <rect class="pfb-slide" x="58" y="240" width="196" height="76" rx="6"></rect>
+          <rect class="pfb-slideacc" x="58" y="240" width="196" height="6" rx="3"></rect>
+          <text class="pfb-small" x="70" y="264">スライド定義（コード内）</text>
+          <text class="pfb-small" x="70" y="284">・タイトル / 配色</text>
+          <text class="pfb-small" x="70" y="302">・図解 / 説明文</text>
+        </g>
+
+        <!-- 矢印1（コード → ターミナル） -->
+        <g class="pfb-arw1">
+          <line class="pfb-arw-shaft" x1="274" y1="200" x2="316" y2="200"></line>
+          <polygon class="pfb-arw-head" points="316,200 302,192 302,208"></polygon>
+        </g>
+        <circle class="pfb-flow1 pfb-dot" cx="274" cy="200" r="5"></circle>
+
+        <!-- ===== ② node build_pptx.js を実行 ===== -->
+        <g class="pfb-b2">
+          <rect class="pfb-term" x="322" y="120" width="196" height="176" rx="8"></rect>
+          <rect class="pfb-bar" x="322" y="120" width="196" height="24" rx="8"></rect>
+          <rect class="pfb-bar" x="322" y="132" width="196" height="12"></rect>
+          <text class="pfb-small" x="420" y="137" text-anchor="middle">ターミナル</text>
+
+          <!-- コマンド入力 -->
+          <text class="pfb-prompt" x="336" y="170">&gt; node build_pptx.js</text>
+          <rect class="pfb-cursor pfb-blink" x="336" y="184" width="8" height="14"></rect>
+
+          <!-- ビルド中バー -->
+          <g class="pfb-run">
+            <text class="pfb-out" x="336" y="206">building slides…</text>
+            <rect class="pfb-progtr" x="336" y="216" width="168" height="10" rx="5"></rect>
+            <rect class="pfb-progbar pfb-buildbar" x="336" y="216" width="168" height="10" rx="5"></rect>
+          </g>
+
+          <!-- 完了 -->
+          <g class="pfb-ok">
+            <text class="pfb-ok" x="336" y="252">✓ pptx 生成完了</text>
+            <text class="pfb-out" x="336" y="272">→ ポートフォリオ_使い方ガイド.pptx</text>
+          </g>
+        </g>
+
+        <!-- 矢印2（ターミナル → PPTX） -->
+        <g class="pfb-arw2">
+          <line class="pfb-arw-shaft" x1="524" y1="200" x2="566" y2="200"></line>
+          <polygon class="pfb-arw-head" points="566,200 552,192 552,208"></polygon>
+        </g>
+        <circle class="pfb-flow2 pfb-dot" cx="524" cy="200" r="5"></circle>
+
+        <!-- ===== ③ 使い方ガイド.pptx が生成（スライドが並ぶ） ===== -->
+        <g class="pfb-b3">
+          <!-- PPTXファイル本体 -->
+          <rect class="pfb-doc" x="574" y="86" width="200" height="248" rx="8"></rect>
+          <rect class="pfb-doctab" x="574" y="86" width="72" height="24" rx="6"></rect>
+          <text class="pfb-small" x="610" y="103" text-anchor="middle" style="fill:#0b1020;font-weight:800">PPTX</text>
+          <text class="pfb-lbl" x="674" y="103" text-anchor="middle">使い方ガイド</text>
+
+          <!-- スライドサムネイル（順に現れる） -->
+          <g class="pfb-s1">
+            <rect class="pfb-slide" x="588" y="124" width="172" height="56" rx="5"></rect>
+            <rect class="pfb-slideacc" x="588" y="124" width="6" height="56" rx="3"></rect>
+            <line class="pfb-sline" x1="606" y1="140" x2="700" y2="140" style="stroke:var(--accent)"></line>
+            <line class="pfb-sline" x1="606" y1="154" x2="744" y2="154"></line>
+            <line class="pfb-sline" x1="606" y1="166" x2="720" y2="166"></line>
+          </g>
+          <g class="pfb-s2">
+            <rect class="pfb-slide" x="588" y="188" width="172" height="56" rx="5"></rect>
+            <rect class="pfb-slideacc" x="588" y="188" width="6" height="56" rx="3"></rect>
+            <line class="pfb-sline" x1="606" y1="204" x2="690" y2="204" style="stroke:var(--accent)"></line>
+            <rect class="pfb-slide" x="606" y="216" width="60" height="20" rx="3"></rect>
+            <line class="pfb-sline" x1="678" y1="220" x2="744" y2="220"></line>
+            <line class="pfb-sline" x1="678" y1="232" x2="730" y2="232"></line>
+          </g>
+          <g class="pfb-s3">
+            <rect class="pfb-slide" x="588" y="252" width="172" height="56" rx="5"></rect>
+            <rect class="pfb-slideacc" x="588" y="252" width="6" height="56" rx="3"></rect>
+            <line class="pfb-sline" x1="606" y1="268" x2="700" y2="268" style="stroke:var(--accent)"></line>
+            <line class="pfb-sline" x1="606" y1="282" x2="744" y2="282"></line>
+            <line class="pfb-sline" x1="606" y1="294" x2="716" y2="294"></line>
+          </g>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="pfb-cap pfb-l1" x="400" y="430" text-anchor="middle">① build_pptx.js にスライドの中身をコードで定義</text>
+        <text class="pfb-cap pfb-l2" x="400" y="430" text-anchor="middle">② node build_pptx.js を実行してビルド</text>
+        <text class="pfb-cap pfb-l3" x="400" y="430" text-anchor="middle">③ 使い方ガイド.pptx が自動で組み上がる</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">コードでのスライド定義 → node コマンドでビルド → PPTXファイルが生成される、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>鉄骨製作図の自動化ツール群（部材カット・かさ上げ鋼材・部材記号など）を、<strong>人に説明するための「使い方ガイド」スライドをコードから自動生成する</strong>補助ツールです。PowerPointを手で1枚ずつ作る代わりに、<strong>スライドの中身をコードに書いておき、コマンド1回で .pptx を書き出します</strong>。</p>
+    <p>中身は Node.js の <strong>pptxgenjs</strong>（プレゼンをコードで作るライブラリ）を使った <kbd>build_pptx.js</kbd> 1本だけ。タイトル・配色・図解・説明文がスクリプト内に定義してあり、<kbd>node build_pptx.js</kbd> を走らせると <strong>C:\Python1 直下に「ポートフォリオ_使い方ガイド.pptx」が生成</strong>されます。資料を作り直したいときは、コードを直して再実行するだけで毎回同じ体裁のスライドが出来上がります。</p>
+    <p class="lead">※ BIM自動化パイプライン本体ではなく、その<strong>説明資料をつくるためのツール</strong>です。他のツールとファイルをやりとりする連携はありません。／ pptx＝PowerPointのファイル形式。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>操作と結果</h2>
+    <p class="lead" style="margin-top:-6px">GHノードではなくコマンドで動かすビルドスクリプトです。入力はコード内に埋め込まれているため、実質「1コマンドで1ファイルを出す」だけのシンプルな道具です。</p>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>操作（入力）</caption>
+        <thead><tr><th>操作</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">node build_pptx.js</td><td>フォルダ内でこのコマンドを実行するだけ。引数は不要。</td></tr>
+          <tr><td class="port">スライド定義<br>（コード内）</td><td>タイトル・配色・図解・説明文は <kbd>build_pptx.js</kbd> の中に<strong>直書き</strong>。内容を変えたいときはこのコードを編集する。</td></tr>
+          <tr><td class="port">node_modules</td><td>初回は <kbd>npm install</kbd> で pptxgenjs などの依存をそろえておく必要がある。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>結果（出力）</caption>
+        <thead><tr><th>結果</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">ポートフォリオ_<br>使い方ガイド.pptx</td><td><strong>C:\Python1 直下</strong>に生成される PowerPoint ファイル。鉄骨自動化ツールの使い方ガイド。</td></tr>
+          <tr><td class="port">（毎回同じ体裁）</td><td>コードから作るので、再実行すれば同じレイアウト・配色で作り直せる。手作業のばらつきが出ない。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">フォルダへ移動</span><span class="step-body">ターミナルで <span class="port" style="color:var(--accent)">C:\Python1\_portfolio_build</span> に移動する。</span></li>
+      <li><span class="step-title">依存をそろえる（初回のみ）</span><span class="step-body"><kbd>npm install</kbd> を実行して pptxgenjs 等をインストール（<kbd>node_modules</kbd> が既にあればスキップ可）。</span></li>
+      <li><span class="step-title">内容を編集する（必要なら）</span><span class="step-body">スライドのタイトル・配色・図解を変えたいときは <kbd>build_pptx.js</kbd> のスライド定義を書き換える。</span></li>
+      <li><span class="step-title">ビルドする</span><span class="step-body"><kbd>node build_pptx.js</kbd> を実行。数秒で <span class="port" style="color:var(--accent)">ポートフォリオ_使い方ガイド.pptx</span> が生成される。</span></li>
+      <li><span class="step-title">できあがりを開く</span><span class="step-body">C:\Python1 直下に出た .pptx を PowerPoint で開いて確認。体裁を直したければ手順3〜4を繰り返す。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="chip chip-self">使い方ガイドPPTX自動生成（このツール）</span>
+      </div>
+      <p class="flow-solo" style="margin-top:12px">このツールは<b>単独で使えます</b>。他のノードとデータをやりとりする連携はなく、鉄骨自動化ツール群（<a href="buzai-cut.html">部材カット</a>・<a href="kasage-steel.html">かさ上げ鋼材</a>・<a href="partmark.html">部材記号</a>など）を<b>人に説明する資料をつくる</b>ための独立した補助ツールです。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 7. 実際に動かすには -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実際に動かすには</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">📊</span> 専用サンプルモデルはありません（コード実行だけで完結）</span>
+      <p class="sample-desc">3Dモデルを扱うツールではないため .3dm のサンプルはありません。スライドの中身はコードに書いてあるので、コマンドを1回走らせれば結果が確認できます。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">まずそのまま実行</span><span class="step-body"><kbd>_portfolio_build</kbd> フォルダで <kbd>node build_pptx.js</kbd> を実行し、既定のスライドが出ることを確かめる。</span></li>
+        <li><span class="step-title">出力を開く</span><span class="step-body">C:\Python1 直下の <span class="port" style="color:var(--accent)">ポートフォリオ_使い方ガイド.pptx</span> を開いて中身を確認する。</span></li>
+        <li><span class="step-title">1枚だけ変えてみる</span><span class="step-body"><kbd>build_pptx.js</kbd> のタイトル文字などを少し書き換えて再実行し、変更が反映されることを体感する。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Python ではなく Node.js のツール</div>
+        <p>このカタログでは珍しく <strong>JavaScript（Node.js）製</strong>です。実行には Node.js が必要で、<kbd>py</kbd> や Python では動きません。初回は <kbd>npm install</kbd> で依存（pptxgenjs 等）をそろえてください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> スライドの中身はコードにハードコード</div>
+        <p>タイトルや図解は <kbd>build_pptx.js</kbd> の中に直書きされています。GUIで編集する仕組みはないため、<strong>内容を変えるにはコードを編集</strong>する必要があります。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 出力先は C:\Python1 直下（上書きに注意）</div>
+        <p>生成される <kbd>ポートフォリオ_使い方ガイド.pptx</kbd> は毎回<strong>同じ場所に同じ名前で書き出され上書き</strong>されます。手で編集した版があるときは、実行前に別名で退避してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 本体パイプラインとは無関係の補助ツール</div>
+        <p>BIM自動化の処理そのものには関与しません。あくまで<strong>説明資料を作るための道具</strong>なので、鉄骨ツールの動作確認とは切り離して考えてください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\_portfolio_build\<span class="fp-accent">build_pptx.js</span>　→　出力：C:\Python1\<span class="fp-accent">ポートフォリオ_使い方ガイド.pptx</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ops">運用・監視・事務の一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>小文字断面パイプライン section_lower — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス slw- で衝突回避
+   ①図面上の小文字断面記号「a」を検出 → ②AIで部材紐付け・せい/幅/Zを逆算 → ③統合JSONのLowerSectionsへ書込
+   ============================================================ */
+.slw-svg text { font-family: var(--font); }
+.slw-code { font-family: "Cascadia Code", Consolas, monospace; }
+
+/* 図面（梁の立面＝H形鋼） */
+.slw-beam    { fill: #0f1a30; stroke: var(--accent); stroke-width: 2.2; }
+.slw-flange  { fill: none; stroke: var(--accent); stroke-width: 1.6; opacity: .55; }
+.slw-grid    { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: .7;
+               stroke-dasharray: 11 4 2 4; }
+.slw-gridlbl { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: .8; }
+
+/* 小文字断面記号「a」＝切断線＋矢視＋符号 */
+.slw-cut     { fill: none; stroke: var(--accent); stroke-width: 3; }
+.slw-view    { fill: none; stroke: var(--accent); stroke-width: 2; }
+.slw-viewhd  { fill: var(--accent); }
+.slw-symlbl  { fill: #0f1a30; stroke: var(--accent); stroke-width: 1.8; }
+
+/* ハイライト（選択の瞬間） */
+.slw-hl      { fill: var(--accent); opacity: 0; }
+
+/* 部材紐付け（AI照合） */
+.slw-link    { fill: none; stroke: var(--accent); stroke-width: 1.6;
+               stroke-dasharray: 5 4; opacity: .9; }
+.slw-mbox    { fill: #0b1428; stroke: var(--accent); stroke-width: 1.4; }
+/* 寸法（せい・幅） */
+.slw-dim     { fill: none; stroke: #9aa7cc; stroke-width: 1.4; }
+
+/* 変換の矢印＋流れるデータドット */
+.slw-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.6; opacity: .85; }
+.slw-arrow-head  { fill: var(--accent); }
+.slw-flowdot     { fill: #ffffff; }
+
+/* JSONパネル */
+.slw-panel-bg  { fill: #0c1428; }
+.slw-panel-fr  { fill: none; stroke: #34406a; stroke-width: 1.6; }
+.slw-panel-hd  { fill: #0a1122; stroke: #34406a; stroke-width: 1.2; }
+
+/* テキスト */
+.slw-cap    { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.slw-small  { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+.slw-tag    { fill: #e6ecff; font-size: 12.5px; font-weight: 700; }
+.slw-jkey   { fill: var(--accent); font-size: 13px; font-weight: 700; }
+.slw-jval   { fill: #e6ecff; font-size: 13px; }
+.slw-jbrace { fill: #9aa7cc; font-size: 13px; }
+
+/* 進捗バー */
+.slw-prog-tr { fill: #223052; }
+.slw-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.slw-draw  { animation: slwDraw  10s infinite; }
+.slw-hl    { animation: slwHl    10s infinite; }
+.slw-match { animation: slwMatch 10s infinite; }
+.slw-arrow { animation: slwArrow 10s infinite; }
+.slw-flow  { animation: slwFlow  10s infinite; }
+.slw-panel { animation: slwPanel 10s infinite; }
+.slw-j1    { animation: slwJ1 10s infinite; }
+.slw-j2    { animation: slwJ2 10s infinite; }
+.slw-j3    { animation: slwJ3 10s infinite; }
+.slw-j4    { animation: slwJ4 10s infinite; }
+.slw-j5    { animation: slwJ5 10s infinite; }
+.slw-l1    { animation: slwL1 10s infinite; }
+.slw-l2    { animation: slwL2 10s infinite; }
+.slw-l3    { animation: slwL3 10s infinite; }
+.slw-prog  { animation: slwProg 10s linear infinite; }
+
+@keyframes slwDraw {
+  0%,3%    { opacity: 0; }
+  8%       { opacity: 1; }
+  92%      { opacity: 1; }
+  98%,100% { opacity: 0; }
+}
+@keyframes slwHl {
+  0%,28%   { opacity: 0; }
+  33%      { opacity: .42; }
+  40%      { opacity: .12; }
+  46%      { opacity: .34; }
+  58%      { opacity: .2; }
+  70%,100% { opacity: .12; }
+}
+@keyframes slwMatch {
+  0%,38%   { opacity: 0; transform: translateY(6px); }
+  46%      { opacity: 1; transform: translateY(0); }
+  92%      { opacity: 1; }
+  98%,100% { opacity: 0; }
+}
+@keyframes slwArrow {
+  0%,52%  { opacity: 0; }
+  58%     { opacity: 1; }
+  93%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes slwFlow {
+  0%,54%   { opacity: 0; transform: translateX(0); }
+  58%      { opacity: 1; transform: translateX(0); }
+  68%      { opacity: 1; transform: translateX(78px); }
+  72%,100% { opacity: 0; transform: translateX(78px); }
+}
+@keyframes slwPanel {
+  0%,56%  { opacity: 0; transform: translateY(8px); }
+  64%     { opacity: 1; transform: translateY(0); }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes slwJ1 { 0%,64%{opacity:0} 69%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes slwJ2 { 0%,68%{opacity:0} 73%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes slwJ3 { 0%,73%{opacity:0} 78%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes slwJ4 { 0%,78%{opacity:0} 83%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes slwJ5 { 0%,83%{opacity:0} 88%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes slwL1 { 0%{opacity:0} 4%{opacity:1} 30%{opacity:1} 35%{opacity:0} 100%{opacity:0} }
+@keyframes slwL2 { 0%,35%{opacity:0} 39%{opacity:1} 58%{opacity:1} 63%{opacity:0} 100%{opacity:0} }
+@keyframes slwL3 { 0%,63%{opacity:0} 67%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes slwProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">小文字断面パイプライン <span style="opacity:.75;font-weight:700">section_lower</span></h1>
+    <p class="catch">図面の小さな<span class="em">「a」「b」断面記号</span>を、大文字とは<span class="em">別ルール</span>で読み解く専門ライン。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">GH Python3 専用（ghkit.py 依存）</span>
+      <span class="badge st-ver">full → stageBCD の2段</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg slw-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="小文字断面記号aを検出しAIで部材紐付けして統合JSONへ書き込むアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="slw-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="slw-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① 図面（梁立面＋小文字断面記号a） ===== -->
+        <g class="slw-draw">
+          <!-- 通り芯 X2（一点鎖線） -->
+          <line class="slw-grid" x1="138" y1="150" x2="138" y2="300"></line>
+          <circle class="slw-gridlbl" cx="138" cy="142" r="11"></circle>
+          <text class="slw-small" x="138" y="146" text-anchor="middle">X2</text>
+
+          <!-- 梁の立面（H形鋼側面） -->
+          <rect class="slw-beam" x="52" y="204" width="236" height="44" rx="1"></rect>
+          <line class="slw-flange" x1="52" y1="212" x2="288" y2="212"></line>
+          <line class="slw-flange" x1="52" y1="240" x2="288" y2="240"></line>
+
+          <!-- ハイライト（選択の瞬間・記号を包む） -->
+          <rect class="slw-hl" x="186" y="158" width="42" height="116" rx="9"></rect>
+
+          <!-- 小文字断面記号「a」＝切断線＋矢視＋符号 -->
+          <g>
+            <line class="slw-cut" x1="207" y1="176" x2="207" y2="262"></line>
+            <line class="slw-view" x1="207" y1="184" x2="188" y2="184"></line>
+            <polygon class="slw-viewhd" points="188,184 200,179 200,189"></polygon>
+            <circle class="slw-symlbl" cx="207" cy="168" r="12"></circle>
+            <text class="slw-tag" x="207" y="172" text-anchor="middle">a</text>
+          </g>
+        </g>
+
+        <!-- ===== ② AIで部材紐付け＋寸法逆算 ===== -->
+        <g class="slw-match">
+          <!-- 部材名ボックス -->
+          <path class="slw-link" d="M207,156 L140,132"></path>
+          <rect class="slw-mbox" x="40" y="116" width="164" height="28" rx="6"></rect>
+          <text class="slw-small" x="52" y="134">🔗 AI照合  G1 ／ H-600×200</text>
+          <!-- せい（梁せい）寸法 -->
+          <line class="slw-dim" x1="300" y1="204" x2="300" y2="248"></line>
+          <line class="slw-dim" x1="296" y1="204" x2="304" y2="204"></line>
+          <line class="slw-dim" x1="296" y1="248" x2="304" y2="248"></line>
+          <text class="slw-small" x="308" y="230">せい 600</text>
+          <!-- 切断位置・矢視 -->
+          <text class="slw-small" x="130" y="286">切断位置 = X2 ／ 矢視 90°</text>
+        </g>
+
+        <!-- ===== 変換の矢印＋データドット ===== -->
+        <g class="slw-arrow">
+          <line class="slw-arrow-shaft" x1="360" y1="222" x2="432" y2="222"></line>
+          <polygon class="slw-arrow-head" points="432,222 418,214 418,230"></polygon>
+        </g>
+        <circle class="slw-flow slw-flowdot" cx="360" cy="222" r="5"></circle>
+
+        <!-- ===== ③ 統合JSON（LowerSections追記） ===== -->
+        <g class="slw-panel">
+          <rect class="slw-panel-bg" x="452" y="80" width="320" height="284" rx="8"></rect>
+          <rect class="slw-panel-fr" x="452" y="80" width="320" height="284" rx="8"></rect>
+          <rect class="slw-panel-hd" x="452" y="80" width="320" height="30" rx="8"></rect>
+          <text class="slw-small" x="470" y="100">統合JSON  ＋  LowerSections</text>
+
+          <text class="slw-code slw-jbrace slw-j1" x="472" y="146">"LowerSections": {</text>
+          <text class="slw-code slw-j1" x="492" y="170"><tspan class="slw-jbrace">"a": {</tspan></text>
+          <text class="slw-code slw-j2" x="512" y="196"><tspan class="slw-jkey">"せい"</tspan><tspan class="slw-jval">: 600,</tspan></text>
+          <text class="slw-code slw-j3" x="512" y="222"><tspan class="slw-jkey">"梁幅"</tspan><tspan class="slw-jval">: 200,</tspan></text>
+          <text class="slw-code slw-j4" x="512" y="248"><tspan class="slw-jkey">"切断位置"</tspan><tspan class="slw-jval">: "X2",</tspan></text>
+          <text class="slw-code slw-j5" x="512" y="274"><tspan class="slw-jkey">"矢視角"</tspan><tspan class="slw-jval">: 90</tspan></text>
+          <text class="slw-code slw-jbrace slw-j5" x="492" y="300">}</text>
+          <text class="slw-code slw-jbrace slw-j5" x="472" y="326">}</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="slw-cap slw-l1" x="400" y="430" text-anchor="middle">① 図面の小文字断面記号「a」を検出</text>
+        <text class="slw-cap slw-l2" x="400" y="430" text-anchor="middle">② AIで部材紐付け・せい／梁幅／天端Zを逆算</text>
+        <text class="slw-cap slw-l3" x="400" y="430" text-anchor="middle">③ 統合JSONの LowerSections に書き込み</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">小文字の断面記号を検出 → AIで部材（せい・梁幅・切断位置）を割り出し → 統合JSONの LowerSections へ追記、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>図面に描かれた<strong>小文字の断面符号（a・b・g…）だけ</strong>を専門に読み解くパイプラインです。大文字の断面符号（A-A など）は<a href="section-symbol-title.html">別ノード</a>が担当していて、こちらは<strong>ルールがまったく別</strong>の小文字だけを引き受けます。</p>
+    <p>処理は2段構え。まず <strong>full 段</strong>で図面から小文字記号とタイトルを拾い、次の <strong>stageBCD 段</strong>で「その記号がどの梁のことか」を割り出し、<strong>梁のせい・梁幅・天端のZ高さを逆算</strong>し、切断位置を通り芯（例：X2）基準の寸法に直し、矢視の合わせ角まで整えます。結果は上流から受け取った<a href="section-data-json.html">統合JSON</a>の <code>LowerSections</code> ツリーへ追記して返します。記号と部材名の対応づけには、<strong>ローカルのAI（画像認識）</strong>が「この"a"はこの梁だろう」と意味で照合するのを補助に使います。手で選び直したいときは専用ピッカー <code>section_lower_picks</code> で拾えます。</p>
+    <p class="lead">※ 天端Z＝梁の上端の高さ。立面図の位置から逆算します。／ 矢視＝断面をどちら向きに見るかの向き。／ ローカルAI＝この環境内で動く画像認識（Ollama vision）で、外部にデータは出ません。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>主な入力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Names / CutLines /<br>CutAngles / ViewAngles /<br>Anchors</td><td>full 段が拾った小文字記号の<strong>名前・切断線・切断角・矢視角・アンカー点</strong>。</td></tr>
+          <tr><td class="port">In_JSON</td><td>上流の<strong>統合JSON</strong>（<a href="section-data-json.html">GH_SectionDataJSON</a>由来）。ここへ <code>LowerSections</code> を追記する土台。</td></tr>
+          <tr><td class="port">Grid_Points /<br>Grid_Labels</td><td>通り芯の点と名前。切断位置を「X2」のように<strong>通り芯基準の寸法</strong>で表すのに使う。</td></tr>
+          <tr><td class="port">Picks_In</td><td>専用ピッカー <code>section_lower_picks</code> で拾った<strong>手動選択</strong>（記号↔部材の対応）。</td></tr>
+          <tr><td class="port">MemberOverride</td><td>部材の<strong>手動上書き</strong>。AI照合が外したときの修正用。</td></tr>
+          <tr><td class="port">ContextDir /<br>SyncContext</td><td>AI照合が参照する<strong>文脈フォルダ</strong>とその同期。</td></tr>
+          <tr><td class="port">Run / ShowHighlight /<br>TagSize</td><td>実行トリガ（Button）／ハイライト表示のON・OFF／タグ文字サイズ。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>主な出力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Out_JSON</td><td><code>LowerSections</code> を追記した<strong>統合JSON</strong>。次のプランナーへ渡す本命の出力。</td></tr>
+          <tr><td class="port">CornerPoints /<br>OriginPoints /<br>TagPoints / TagTexts</td><td>各断面のコーナー点・原点・タグ位置・タグ文字。確認や作図に使う。</td></tr>
+          <tr><td class="port">BorrowedCutPoints /<br>CutPreview</td><td>借用した切断点と、切断のプレビュー線。</td></tr>
+          <tr><td class="port">MemberDebug</td><td>部材紐付けの<strong>内訳</strong>。AI照合の当たり外れを確認するための診断。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">上流の統合JSONを用意する</span><span class="step-body"><a href="section-data-json.html">GH_SectionDataJSON</a> の <span class="port" style="color:var(--accent)">Out_JSON</span> を本ノードの <span class="port" style="color:var(--accent)">In_JSON</span> へつなぐ。通り芯の点・名前も一緒に渡す。</span></li>
+      <li><span class="step-title">full 段で小文字記号を拾う</span><span class="step-body">図面から小文字断面記号（a・b…）とタイトルを抽出。<span class="port" style="color:var(--accent)">Names / CutLines / CutAngles</span> などが本ノードへ流れ込む。</span></li>
+      <li><span class="step-title">AIで部材を紐付ける</span><span class="step-body"><span class="port" style="color:var(--accent)">Run</span> を押すと、記号と部材名をローカルAIが意味照合。せい・梁幅・天端Zを逆算し、切断位置を通り芯基準に直す。</span></li>
+      <li><span class="step-title">外した所を手で直す</span><span class="step-body">照合が違う記号は <code>section_lower_picks</code> ピッカーで手動選択して <span class="port" style="color:var(--accent)">Picks_In</span> へ、または <span class="port" style="color:var(--accent)">MemberOverride</span> で上書き。</span></li>
+      <li><span class="step-title">統合JSONへ書き戻す</span><span class="step-body"><span class="port" style="color:var(--accent)">Out_JSON</span> に <code>LowerSections</code> が追記される。<span class="port" style="color:var(--accent)">MemberDebug</span> で当たり外れを確認。</span></li>
+      <li><span class="step-title">プランナーへ渡す</span><span class="step-body">仕上がった統合JSONを <a href="make2d-planner.html">GH_Make2DPlanner</a> へ。小文字断面もMake2Dの切断計画に乗る。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <a class="chip chip-up" href="section-data-json.html">統合JSON GH_SectionDataJSON</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">小文字断面パイプライン section_lower（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="make2d-planner.html">Make2Dプランナー GH_Make2DPlanner</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">全体像は <a href="../pipeline.html">Make2Dパイプライン詳細図</a> で確認できます。大文字断面は <a href="section-symbol-title.html">GH_SectionSymbolTitle</a> が担当します。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実データでの試し方</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">📐</span> 専用サンプルは未同梱 — 実際の2D図面で試します</span>
+      <p class="sample-desc">小文字断面は「立面図に小さな a・b 記号が入った実図面」が必要なため、専用サンプルは付属していません。手元の詳細図で次の順に試してください。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">図面と統合JSONを用意</span><span class="step-body">小文字断面記号の入った2D図面と、その図面から作った<a href="section-data-json.html">統合JSON</a>を先に用意する。</span></li>
+        <li><span class="step-title">記号を1つだけで試す</span><span class="step-body">まず「a」1個だけを対象に <span class="port" style="color:var(--accent)">Run</span>。AI照合が正しい梁を選ぶか、<span class="port" style="color:var(--accent)">MemberDebug</span> で確認。</span></li>
+        <li><span class="step-title">せい・幅・切断位置を検算</span><span class="step-body">逆算されたせい・梁幅・切断位置（X2など）が図面の実寸と合うか目で照合する。</span></li>
+        <li><span class="step-title">全記号へ広げる</span><span class="step-body">問題なければ全小文字記号を対象に実行し、<span class="port" style="color:var(--accent)">Out_JSON</span> に <code>LowerSections</code> が揃うのを確認。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> RH8 の Python3 ノード専用（ghkit.py 依存）</div>
+        <p>AI照合部（<code>section_ai_member</code>）は <strong>Rhino 8 の Python3 コンポーネント専用</strong>で、<code>C:\Python1\gh_ai_nodegen\ghkit.py</code> に依存します。旧いRhino7（IronPython 2.7）では動きません。f-string など Python3 構文を使うため、クラシックPythonコンポーネントへ貼ると全停止します。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 符号文字の位置で矢視（CutAngle）が180°反転する</div>
+        <p>切断記号の「a」の文字をどこに置くかで、検出側の近端／遠端の判定が変わり、<strong>矢視角が180°ひっくり返る</strong>ことがあります。矢視が逆さのときは記号文字の置き位置を疑ってください（内部係数は調整済みですが、極端な配置は要確認）。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> AI照合は万能ではない — 必ずデバッグ出力を見る</div>
+        <p>記号↔部材の紐付けは意味照合の<strong>補助</strong>です。似た梁が並ぶと取り違えることがあります。<span class="port" style="color:var(--accent)">MemberDebug</span> で内訳を確認し、外した所は <span class="port" style="color:var(--accent)">Picks_In</span> や <span class="port" style="color:var(--accent)">MemberOverride</span> で人が直してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\図面整理\section_lower\<span class="fp-accent">section_lower_stageBCD.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

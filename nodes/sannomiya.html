@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>メール要約転送システム — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス snm- で衝突回避
+   ①対象ラベルの新着メール検知 → ②AI要約＋添付保存 → ③社内転送＋記録
+   ============================================================ */
+.snm-svg text { font-family: var(--font); }
+
+/* パネル・箱 */
+.snm-panel  { fill: #0f1a30; stroke: var(--accent); stroke-width: 1.8; }
+.snm-head   { fill: #1b2338; }
+.snm-row    { fill: #101a30; stroke: #2a3352; stroke-width: 1; }
+.snm-rowhot { fill: #14233d; stroke: var(--accent); stroke-width: 1.8; }
+.snm-line   { stroke: #46527d; stroke-width: 3; stroke-linecap: round; }
+.snm-line.hot { stroke: var(--accent); }
+
+/* ラベルタグ「対象」 */
+.snm-tag    { fill: var(--accent); }
+.snm-tagtxt { fill: #0b1020; font-size: 12px; font-weight: 800; }
+
+/* 時計チップ */
+.snm-clock-box { fill: #0b1428; stroke: color-mix(in srgb, var(--accent) 45%, var(--line)); stroke-width: 1.4; }
+
+/* 封筒アイコン */
+.snm-env    { fill: #101a30; stroke: var(--accent); stroke-width: 2; }
+.snm-envf   { fill: none; stroke: var(--accent); stroke-width: 2; }
+
+/* AIエンジン */
+.snm-gear   { fill: none; stroke: var(--accent); stroke-width: 3; }
+.snm-gearc  { fill: #0f1a30; stroke: var(--accent); stroke-width: 2.4; }
+.snm-badge  { fill: #0b1428; stroke: color-mix(in srgb, var(--accent) 55%, var(--line)); stroke-width: 1.4; }
+.snm-badge-dim { fill: #0b1428; stroke: #34406a; stroke-width: 1.2; }
+.snm-sum    { fill: #0c1830; stroke: var(--accent); stroke-width: 1.6; }
+
+/* 結果チップ */
+.snm-res    { fill: #0f1a30; stroke: color-mix(in srgb, var(--accent) 45%, var(--line)); stroke-width: 1.5; }
+.snm-person { fill: var(--accent); }
+.snm-sheetcell { fill: none; stroke: #34406a; stroke-width: 1; }
+.snm-sheetfill { fill: var(--accent); opacity: .8; transform-box: fill-box; transform-origin: left center; }
+
+/* 矢印＋データドット */
+.snm-arw-shaft { fill: none; stroke: var(--accent); stroke-width: 2.6; opacity: .85; }
+.snm-arw-head  { fill: var(--accent); }
+.snm-dot       { fill: #ffffff; }
+
+/* テキスト */
+.snm-cap    { fill: #e6ecff; font-size: 16.5px; font-weight: 700; }
+.snm-lbl    { fill: #cdd6f4; font-size: 13px; font-weight: 700; }
+.snm-small  { fill: #9aa7cc; font-size: 11.5px; font-weight: 600; }
+.snm-tiny   { fill: #7f8cb5; font-size: 10.5px; font-weight: 600; }
+
+/* 進捗バー */
+.snm-prog-tr { fill: #223052; }
+.snm-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.snm-b1   { animation: snmB1 10s infinite; }
+.snm-b2   { animation: snmB2 10s infinite; }
+.snm-b3   { animation: snmB3 10s infinite; }
+.snm-arw1 { animation: snmArw1 10s infinite; }
+.snm-arw2 { animation: snmArw2 10s infinite; }
+.snm-flow1{ animation: snmFlow1 10s infinite; }
+.snm-flow2{ animation: snmFlow2 10s infinite; }
+.snm-gearspin { animation: snmGear 4.2s linear infinite; transform-box: fill-box; transform-origin: center; }
+.snm-drop { animation: snmDrop 10s infinite; }
+.snm-fill { animation: snmFill 10s infinite; }
+.snm-l1   { animation: snmL1 10s infinite; }
+.snm-l2   { animation: snmL2 10s infinite; }
+.snm-l3   { animation: snmL3 10s infinite; }
+.snm-prog { animation: snmProg 10s linear infinite; }
+
+@keyframes snmB1 { 0%{opacity:0} 5%{opacity:1} 33%{opacity:1} 41%{opacity:.35} 100%{opacity:.35} }
+@keyframes snmB2 { 0%,33%{opacity:0} 39%{opacity:1} 63%{opacity:1} 71%{opacity:.35} 100%{opacity:.35} }
+@keyframes snmB3 { 0%,63%{opacity:0} 69%{opacity:1} 97%{opacity:1} 100%{opacity:1} }
+@keyframes snmArw1{ 0%,29%{opacity:0} 34%{opacity:1} 66%{opacity:1} 74%{opacity:.3} 100%{opacity:.3} }
+@keyframes snmArw2{ 0%,59%{opacity:0} 64%{opacity:1} 100%{opacity:1} }
+@keyframes snmFlow1{ 0%,29%{opacity:0; transform:translateX(0)} 33%{opacity:1; transform:translateX(0)} 39%{opacity:1; transform:translateX(52px)} 43%,100%{opacity:0; transform:translateX(52px)} }
+@keyframes snmFlow2{ 0%,59%{opacity:0; transform:translateX(0)} 63%{opacity:1; transform:translateX(0)} 69%{opacity:1; transform:translateX(52px)} 73%,100%{opacity:0; transform:translateX(52px)} }
+@keyframes snmGear{ from{transform:rotate(0)} to{transform:rotate(360deg)} }
+@keyframes snmDrop{ 0%,4%{opacity:0; transform:translateY(-18px)} 12%{opacity:1; transform:translateY(0)} 100%{opacity:1; transform:translateY(0)} }
+@keyframes snmFill{ 0%,69%{transform:scaleX(0)} 84%{transform:scaleX(1)} 100%{transform:scaleX(1)} }
+@keyframes snmL1{ 0%{opacity:0} 4%{opacity:1} 30%{opacity:1} 35%{opacity:0} 100%{opacity:0} }
+@keyframes snmL2{ 0%,35%{opacity:0} 39%{opacity:1} 60%{opacity:1} 65%{opacity:0} 100%{opacity:0} }
+@keyframes snmL3{ 0%,65%{opacity:0} 69%{opacity:1} 97%{opacity:1} 100%{opacity:0} }
+@keyframes snmProg{ 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ops">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">運用・監視・事務</span>
+    <h1 class="node-title">メール要約転送システム <span style="opacity:.7;font-weight:700;font-size:.5em">sannomiya</span></h1>
+    <p class="catch">特定案件のメールを<span class="em">AIが自動で要約</span>して、添付ごと<span class="em">社内へ転送・記録</span>してくれる常駐アシスタント。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中（20分ごとに監視）</span>
+      <span class="badge st-ver">スタンドアロン / Python</span>
+      <span class="badge st-ver">Gmail × ローカルAI（Ollama）</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg snm-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="特定案件のメールをAIが要約して社内へ転送・記録するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="snm-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="snm-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① 受信トレイを監視 ＋ 対象ラベルの新着メール ===== -->
+        <g class="snm-b1">
+          <!-- 時計チップ -->
+          <rect class="snm-clock-box" x="44" y="52" width="176" height="26" rx="13"></rect>
+          <circle cx="60" cy="65" r="7" fill="none" stroke="var(--accent)" stroke-width="1.6"></circle>
+          <line x1="60" y1="65" x2="60" y2="60" stroke="var(--accent)" stroke-width="1.6"></line>
+          <line x1="60" y1="65" x2="64" y2="67" stroke="var(--accent)" stroke-width="1.6"></line>
+          <text class="snm-small" x="74" y="69">20分ごとに Gmail を監視</text>
+
+          <!-- 受信トレイパネル -->
+          <rect class="snm-panel" x="52" y="92" width="212" height="232" rx="8"></rect>
+          <rect class="snm-head"  x="52" y="92" width="212" height="30" rx="8"></rect>
+          <rect class="snm-head"  x="52" y="110" width="212" height="12"></rect>
+          <text class="snm-lbl" x="66" y="112">受信トレイ</text>
+
+          <!-- 既存メール（薄い行） -->
+          <rect class="snm-row" x="64" y="132" width="188" height="30" rx="4"></rect>
+          <line class="snm-line" x1="76" y1="143" x2="196" y2="143"></line>
+          <line class="snm-line" x1="76" y1="152" x2="150" y2="152"></line>
+          <rect class="snm-row" x="64" y="222" width="188" height="30" rx="4"></rect>
+          <line class="snm-line" x1="76" y1="233" x2="196" y2="233"></line>
+          <line class="snm-line" x1="76" y1="242" x2="150" y2="242"></line>
+          <rect class="snm-row" x="64" y="262" width="188" height="30" rx="4"></rect>
+          <line class="snm-line" x1="76" y1="273" x2="196" y2="273"></line>
+          <line class="snm-line" x1="76" y1="282" x2="150" y2="282"></line>
+
+          <!-- 新着（対象ラベル・ハイライト） -->
+          <g class="snm-drop">
+            <rect class="snm-rowhot" x="64" y="170" width="188" height="44" rx="5"></rect>
+            <!-- 封筒アイコン -->
+            <rect class="snm-env"  x="74" y="182" width="26" height="19" rx="2"></rect>
+            <polyline class="snm-envf" points="74,183 87,193 100,183"></polyline>
+            <!-- ラベルタグ -->
+            <rect class="snm-tag" x="110" y="180" width="52" height="18" rx="4"></rect>
+            <text class="snm-tagtxt" x="136" y="193" text-anchor="middle">対象</text>
+            <line class="snm-line hot" x1="110" y1="206" x2="238" y2="206"></line>
+            <text class="snm-tiny" x="170" y="182">📎 添付あり</text>
+          </g>
+        </g>
+
+        <!-- 矢印1（トレイ → AI） -->
+        <g class="snm-arw1">
+          <line class="snm-arw-shaft" x1="272" y1="192" x2="316" y2="192"></line>
+          <polygon class="snm-arw-head" points="316,192 302,184 302,200"></polygon>
+        </g>
+        <circle class="snm-flow1 snm-dot" cx="272" cy="192" r="5"></circle>
+
+        <!-- ===== ② AIエンジンで要約＋添付解析 ===== -->
+        <g class="snm-b2">
+          <rect class="snm-panel" x="322" y="96" width="172" height="228" rx="10"></rect>
+          <!-- 歯車（回転） -->
+          <g transform="translate(408,140)">
+            <g class="snm-gearspin">
+              <circle class="snm-gearc" cx="0" cy="0" r="15"></circle>
+              <g class="snm-gear">
+                <line x1="0" y1="-22" x2="0" y2="-15"></line>
+                <line x1="0" y1="22" x2="0" y2="15"></line>
+                <line x1="-22" y1="0" x2="-15" y2="0"></line>
+                <line x1="22" y1="0" x2="15" y2="0"></line>
+                <line x1="-15" y1="-15" x2="-10" y2="-10"></line>
+                <line x1="15" y1="15" x2="10" y2="10"></line>
+                <line x1="15" y1="-15" x2="10" y2="-10"></line>
+                <line x1="-15" y1="15" x2="-10" y2="10"></line>
+              </g>
+            </g>
+          </g>
+          <text class="snm-lbl" x="408" y="184" text-anchor="middle">AI要約エンジン</text>
+
+          <!-- AIバックエンドのバッジ -->
+          <rect class="snm-badge" x="332" y="196" width="72" height="22" rx="11"></rect>
+          <text class="snm-small" x="368" y="211" text-anchor="middle">Ollama</text>
+          <rect class="snm-badge-dim" x="410" y="196" width="76" height="22" rx="11"></rect>
+          <text class="snm-tiny" x="448" y="211" text-anchor="middle">Gemini予備</text>
+
+          <!-- 要約カード -->
+          <rect class="snm-sum" x="332" y="228" width="152" height="60" rx="5"></rect>
+          <text class="snm-tiny" x="342" y="244">要約：</text>
+          <line class="snm-line hot" x1="342" y1="256" x2="474" y2="256"></line>
+          <line class="snm-line hot" x1="342" y1="268" x2="474" y2="268"></line>
+          <line class="snm-line hot" x1="342" y1="280" x2="430" y2="280"></line>
+          <text class="snm-tiny" x="408" y="308" text-anchor="middle">📎 添付を解析して保存</text>
+        </g>
+
+        <!-- 矢印2（AI → 出力） -->
+        <g class="snm-arw2">
+          <line class="snm-arw-shaft" x1="500" y1="192" x2="544" y2="192"></line>
+          <polygon class="snm-arw-head" points="544,192 530,184 530,200"></polygon>
+        </g>
+        <circle class="snm-flow2 snm-dot" cx="500" cy="192" r="5"></circle>
+
+        <!-- ===== ③ 社内へ転送 ＋ シート/Drive/Obsidianへ記録 ===== -->
+        <g class="snm-b3">
+          <!-- 転送先チップ -->
+          <rect class="snm-res" x="552" y="100" width="222" height="52" rx="8"></rect>
+          <rect class="snm-env" x="566" y="116" width="26" height="19" rx="2"></rect>
+          <polyline class="snm-envf" points="566,117 579,127 592,117"></polyline>
+          <text class="snm-lbl" x="606" y="122">社内メンバーへ転送</text>
+          <text class="snm-small" x="606" y="140">要約＋添付リンク付き</text>
+          <circle class="snm-person" cx="700" cy="118" r="6"></circle>
+          <path class="snm-person" d="M690,138 a10,10 0 0 1 20,0 z"></path>
+          <circle class="snm-person" cx="722" cy="118" r="6"></circle>
+          <path class="snm-person" d="M712,138 a10,10 0 0 1 20,0 z"></path>
+          <circle class="snm-person" cx="744" cy="118" r="6"></circle>
+          <path class="snm-person" d="M734,138 a10,10 0 0 1 20,0 z"></path>
+
+          <!-- スプレッドシート記録 -->
+          <rect class="snm-res" x="552" y="164" width="222" height="70" rx="8"></rect>
+          <text class="snm-small" x="566" y="182">📊 スプレッドシートに記録</text>
+          <g transform="translate(566,192)">
+            <rect class="snm-sheetcell" x="0" y="0" width="192" height="15"></rect>
+            <rect class="snm-sheetcell" x="0" y="15" width="192" height="15"></rect>
+            <line x1="64" y1="0" x2="64" y2="30" stroke="#34406a" stroke-width="1"></line>
+            <line x1="128" y1="0" x2="128" y2="30" stroke="#34406a" stroke-width="1"></line>
+            <rect class="snm-sheetfill snm-fill" x="1" y="16" width="190" height="13"></rect>
+          </g>
+
+          <!-- Drive / Obsidian / Trimble -->
+          <rect class="snm-res" x="552" y="246" width="222" height="46" rx="8"></rect>
+          <text class="snm-small" x="566" y="266">🗂 Drive / Obsidian / Trimble へ保存</text>
+          <text class="snm-tiny" x="566" y="283">添付は同期フォルダ経由でクラウドへ</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="snm-cap snm-l1" x="400" y="430" text-anchor="middle">① 対象ラベルの新着メールを 20分ごとに検知</text>
+        <text class="snm-cap snm-l2" x="400" y="430" text-anchor="middle">② AIがスレッドを要約・添付を解析（Ollama／失敗時 Gemini）</text>
+        <text class="snm-cap snm-l3" x="400" y="430" text-anchor="middle">③ 要約付きで社内へ転送 ＋ シート・Drive・Obsidian へ記録</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">受信トレイの監視 → AIによる要約と添付解析 → 社内転送とログ記録、という一連の自動処理を10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>特定案件の<strong>メール対応を丸ごと自動化する常駐システム</strong>です。Gmailの受信トレイを<strong>20分ごとに監視</strong>し、対象ラベルの付いたメールが届くと、そのスレッドと添付ファイルを<strong>AIが要約・解析</strong>します。</p>
+    <p>要約ができたら、添付ファイルを Google Drive／Box Drive 経由で<strong>Trimble Connect の同期フォルダへ保存</strong>し、<strong>社内メンバーへ整形したメールを転送</strong>。あわせて<strong>スプレッドシートと Obsidian にログ</strong>を残します。つまり「案件メールを見て・要約して・関係者に共有して・記録する」までを、人が張り付かなくても回してくれる仕組みです。</p>
+    <p class="lead">※ 要約AIは既定で<strong>ローカルのOllama</strong>（qwen3-vl:8b-instruct）を使い、うまくいかないときだけ<strong>Gemini API</strong>へ自動フォールバックします。／ Obsidian＝メモをMarkdownで貯めるノートアプリ。ここでは案件ログの保管先として使っています。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（データの流れ）</h2>
+    <p class="lead" style="margin-top:-6px">GHノードではなく単体で走る常駐プログラムです。端子ではなく「受け取るもの」と「出すもの」で整理します。</p>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>受け取るもの（入力）</caption>
+        <thead><tr><th>入力</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Gmail 受信メール</td><td>対象ラベルの付いた特定案件のメール（スレッド単位で取得）。監視の起点。</td></tr>
+          <tr><td class="port">credentials.json /<br>token.json</td><td>Google API（Gmail/Drive/Sheets）にアクセスするための認証情報。<strong>C:\Python1 直下</strong>から読み込む。</td></tr>
+          <tr><td class="port">添付ファイル /<br>Box 共有URL</td><td>メールに付いた図面・書類や、本文中のBox共有リンク。ダウンロードして解析・保存する。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出すもの（出力）</caption>
+        <thead><tr><th>出力</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">転送メール</td><td>AI要約と添付リンクを添えて、社内メンバーへ整形して転送する。</td></tr>
+          <tr><td class="port">Drive / シート /<br>Obsidian ログ</td><td>Google Driveへの保存、スプレッドシートへの行追記、Obsidian Vaultへのログ書き出し。</td></tr>
+          <tr><td class="port">Trimble Connect<br>同期フォルダ</td><td>添付ファイルを Box/Google Drive 経由で Trimble Connect の同期フォルダへコピー。</td></tr>
+          <tr><td class="port">「要約済み」ラベル</td><td>処理し終えたメールにラベルを付け、次の巡回で二重処理しないようにする。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">認証情報を置く</span><span class="step-body">Google API の <kbd>credentials.json</kbd> と <kbd>token.json</kbd> を <span class="port" style="color:var(--accent)">C:\Python1 直下</span> に置く（初回はブラウザ認証で token を発行）。</span></li>
+      <li><span class="step-title">設定を確認する</span><span class="step-body"><kbd>sannomiya\config.py</kbd> で監視ラベル・転送先・AIバックエンド（既定 <span class="port" style="color:var(--accent)">ollama</span>）などを確認。ローカルAIを使うなら Ollama を起動しておく。</span></li>
+      <li><span class="step-title">起動する</span><span class="step-body">ランチャー <kbd>sannomiya_pro_sync.py</kbd> を実行（<kbd>py sannomiya_pro_sync.py</kbd>）。以降は<strong>20分ごとに自動巡回</strong>し続ける常駐モードに入る。</span></li>
+      <li><span class="step-title">まず空振りで試す</span><span class="step-body">いきなり本番転送が不安なときは <kbd>sannomiya\dry_run.py</kbd> を使う。副作用なしで取得・要約だけを確認できる。</span></li>
+      <li><span class="step-title">結果を見る</span><span class="step-body">社内への転送メール・スプレッドシートの追記行・Obsidianのログで処理結果を確認。エラーは <kbd>sannomiya\error.log</kbd> に残る。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="chip chip-self">メール要約転送システム（このツール）</span>
+      </div>
+      <p class="flow-solo" style="margin-top:12px">このツールは<b>単独で完結して動きます</b>。他のGHノードとファイル入出力で連携するのではなく、Gmail・Google Drive・Sheets・Obsidian・Trimble Connect といった<b>外部サービスと直接やりとり</b>する自己完結型の常駐システムです。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 7. 実際に動かすには -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実際に動かすには</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">📧</span> 専用サンプルモデルはありません（実データ＝Gmailで動きます）</span>
+      <p class="sample-desc">3Dモデルを使うツールではないため .3dm のサンプルはありません。動作確認は本物のGmailに対して、まず副作用のないドライランで行うのが安全です。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">テスト用ラベルで試す</span><span class="step-body">本番の転送先を触らずに済むよう、config で監視ラベルをテスト用に切り替えるか、自分宛のメールで確認する。</span></li>
+        <li><span class="step-title">ドライラン</span><span class="step-body"><kbd>sannomiya\dry_run.py</kbd> を実行。取得・要約までを副作用なしで確認できる。</span></li>
+        <li><span class="step-title">AIバックエンドを切り替えて比較</span><span class="step-body">要約品質を見たいときは config の <span class="port" style="color:var(--accent)">AI_BACKEND</span> を ollama / gemini で切り替えて出力を比べる。</span></li>
+        <li><span class="step-title">本番監視へ</span><span class="step-body">問題なければ <kbd>sannomiya_pro_sync.py</kbd> を常駐起動し、20分ごとの自動巡回に任せる。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 認証情報は C:\Python1 直下から読む</div>
+        <p><kbd>credentials.json</kbd> と <kbd>token.json</kbd> は <strong>sannomiya フォルダの1つ上（C:\Python1 直下）</strong>から読み込まれます。フォルダ内に置いても認識されないので配置場所に注意してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 本番転送は不可逆。まずドライランで確認</div>
+        <p>いちど社内へ転送したメールは取り消せません。ラベルや転送先の設定を変えた直後は、必ず <kbd>dry_run.py</kbd> か自分宛メールで動作を確かめてから常駐させてください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Ollama が動いていないと Gemini に切り替わる</div>
+        <p>既定はローカルの Ollama ですが、モデル未起動などで失敗すると自動で <strong>Gemini API（クラウド）へフォールバック</strong>します。社外にデータを出したくない場合は Ollama が確実に起動しているか確認を。GPU で速く動かすには CUDA 設定（4090環境の罠）も参照してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> error.log は自動で消えず溜まり続ける</div>
+        <p>実行エラーは <kbd>sannomiya\error.log</kbd> に追記され続けます（ローテーションなし）。長期常駐で肥大化することがあるので、ときどき中身を確認・整理してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 起動用の .bat はリポジトリ外にある可能性</div>
+        <p>起動用の .bat（例：メール転送.bat）が C:\Python1 配下に見当たらないため、実運用の起動元は別の場所（タスクスケジューラ等）の可能性があります。常駐が動いていないときは起動元の在り処を確認してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル（ランチャー）</span>
+      C:\Python1\<span class="fp-accent">sannomiya_pro_sync.py</span>　→　C:\Python1\sannomiya\<span class="fp-accent">main.py / config.py / ai_analyzer.py / storage.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ops">運用・監視・事務の一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

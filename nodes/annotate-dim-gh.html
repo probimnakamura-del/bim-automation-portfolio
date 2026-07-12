@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>寸法注記GH版 GH_AnnotateDim — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス adg- で衝突回避
+   ①断面線に範囲を2点指定 → ②AIが寸法チェーンを点線で提案 → ③Enterで実線に確定
+   ============================================================ */
+.adg-svg text { font-family: var(--font); }
+
+/* 図面シート */
+.adg-sheet-bg    { fill: #0c1428; }
+.adg-sheet-frame { fill: none; stroke: #34406a; stroke-width: 1.6; }
+
+/* 部材（H形断面）＝簡略図形 */
+.adg-mem   { fill: #0f1a30; stroke: var(--accent); stroke-width: 2.4; }
+
+/* ① 範囲指定のピック点＋ラバーバンド */
+.adg-pick  { fill: var(--accent); }
+.adg-band  { fill: color-mix(in srgb, var(--accent) 10%, transparent);
+             stroke: var(--accent); stroke-width: 1.6; stroke-dasharray: 6 5;
+             transform-box: fill-box; transform-origin: left top; }
+
+/* ② 点線プレビュー寸法 */
+.adg-prev  { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 5; opacity: .95; }
+.adg-prevtick { stroke: var(--accent); stroke-width: 2; }
+/* ③ 確定した実線寸法 */
+.adg-final { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; }
+.adg-tick  { stroke: var(--accent); stroke-width: 2.4; }
+.adg-dimtxt{ fill: #eafcff; font-size: 13px; font-weight: 700; }
+
+/* AIバッジ */
+.adg-badge-box { fill: #0b1730; stroke: var(--accent); stroke-width: 1.4; }
+.adg-badge-txt { fill: #e6ecff; font-size: 13px; font-weight: 700; }
+.adg-badge-dot { fill: var(--accent); }
+
+/* テキスト */
+.adg-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.adg-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.adg-prog-tr { fill: #223052; }
+.adg-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.adg-mem-g   { animation: adgMem 10s infinite; }
+.adg-band-a  { animation: adgBand 10s infinite; }
+.adg-pick-a  { animation: adgPick 10s infinite; }
+.adg-prev-a  { animation: adgPrev 10s infinite; }
+.adg-final-a { animation: adgFinal 10s infinite; }
+.adg-txt-a   { animation: adgTxt 10s infinite; }
+.adg-badge1  { animation: adgBadge1 10s infinite; }
+.adg-badge2  { animation: adgBadge2 10s infinite; }
+.adg-dots    { animation: adgDots 1.1s infinite; }
+.adg-l1      { animation: adgL1 10s infinite; }
+.adg-l2      { animation: adgL2 10s infinite; }
+.adg-l3      { animation: adgL3 10s infinite; }
+.adg-prog-a  { animation: adgProg 10s linear infinite; }
+
+@keyframes adgMem { 0%,2%{opacity:0} 7%{opacity:1} 100%{opacity:1} }
+@keyframes adgPick { 0%,8%{opacity:0} 12%{opacity:1} 30%{opacity:1} 34%{opacity:0} 100%{opacity:0} }
+@keyframes adgBand {
+  0%,10%  { opacity:0; transform: scale(0.02, 0.02); }
+  14%     { opacity:1; transform: scale(0.02, 0.02); }
+  27%     { opacity:1; transform: scale(1,1); }
+  33%     { opacity:.9; transform: scale(1,1); }
+  38%,100%{ opacity:0; transform: scale(1,1); }
+}
+@keyframes adgPrev { 0%,33%{opacity:0} 40%{opacity:1} 56%{opacity:1} 60%,100%{opacity:0} }
+@keyframes adgFinal {
+  0%,58%  { opacity:0; stroke-dashoffset: 120; }
+  60%     { opacity:1; }
+  74%     { opacity:1; stroke-dashoffset: 0; }
+  100%    { opacity:1; stroke-dashoffset: 0; }
+}
+@keyframes adgTxt { 0%,70%{opacity:0} 78%{opacity:1} 100%{opacity:1} }
+@keyframes adgBadge1 { 0%,33%{opacity:0} 38%{opacity:1} 56%{opacity:1} 59%,100%{opacity:0} }
+@keyframes adgBadge2 { 0%,61%{opacity:0} 66%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes adgDots { 0%{opacity:.25} 50%{opacity:1} 100%{opacity:.25} }
+@keyframes adgL1 { 0%{opacity:0} 4%{opacity:1} 30%{opacity:1} 35%{opacity:0} 100%{opacity:0} }
+@keyframes adgL2 { 0%,35%{opacity:0} 39%{opacity:1} 57%{opacity:1} 61%{opacity:0} 100%{opacity:0} }
+@keyframes adgL3 { 0%,61%{opacity:0} 66%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes adgProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">寸法注記GH版 <span style="opacity:.75;font-weight:700">GH_AnnotateDim</span></h1>
+    <p class="catch">範囲を2点で囲むだけ。<span class="em">AIが寸法の入れ方を提案</span>し、あなたの<span class="em">クセを覚えていく</span>注記ツール。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">v1.0</span>
+      <span class="badge st-ver">GH Python3 ノード</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg adg-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="断面線を範囲指定するとAIが寸法チェーンを点線で提案し、確定すると実線の寸法になるアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="adg-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="adg-prog adg-prog-a" x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- 図面シート -->
+        <rect class="adg-sheet-bg"    x="150" y="66" width="500" height="300" rx="6"></rect>
+        <rect class="adg-sheet-frame" x="150" y="66" width="500" height="300" rx="6"></rect>
+        <rect class="adg-sheet-frame" x="162" y="78" width="476" height="276"></rect>
+
+        <!-- 部材（H形断面 = 簡略図形） -->
+        <g class="adg-mem-g">
+          <rect class="adg-mem" x="360" y="150" width="130" height="22" rx="1"></rect>
+          <rect class="adg-mem" x="360" y="268" width="130" height="22" rx="1"></rect>
+          <rect class="adg-mem" x="412" y="172" width="26" height="96" rx="1"></rect>
+        </g>
+
+        <!-- ① 範囲を2点指定（ラバーバンド） -->
+        <rect class="adg-band adg-band-a" x="330" y="120" width="200" height="205" rx="2"></rect>
+        <g class="adg-pick-a">
+          <circle class="adg-pick" cx="330" cy="120" r="6"></circle>
+          <circle class="adg-pick" cx="530" cy="325" r="6"></circle>
+        </g>
+
+        <!-- ② 点線プレビュー寸法（AI提案） -->
+        <g class="adg-prev-a">
+          <!-- 左：全せい -->
+          <line class="adg-prev" x1="325" y1="150" x2="325" y2="290"></line>
+          <line class="adg-prevtick" x1="319" y1="150" x2="331" y2="150"></line>
+          <line class="adg-prevtick" x1="319" y1="290" x2="331" y2="290"></line>
+          <!-- 上：全幅 -->
+          <line class="adg-prev" x1="360" y1="128" x2="490" y2="128"></line>
+          <line class="adg-prevtick" x1="360" y1="122" x2="360" y2="134"></line>
+          <line class="adg-prevtick" x1="490" y1="122" x2="490" y2="134"></line>
+          <!-- 右：フランジ厚 -->
+          <line class="adg-prev" x1="515" y1="150" x2="515" y2="172"></line>
+          <line class="adg-prevtick" x1="509" y1="150" x2="521" y2="150"></line>
+          <line class="adg-prevtick" x1="509" y1="172" x2="521" y2="172"></line>
+        </g>
+
+        <!-- ③ 確定した実線寸法＋寸法値 -->
+        <g>
+          <path class="adg-final adg-final-a" pathLength="120" d="M325,150 L325,290"></path>
+          <line class="adg-tick adg-txt-a" x1="319" y1="150" x2="331" y2="150"></line>
+          <line class="adg-tick adg-txt-a" x1="319" y1="290" x2="331" y2="290"></line>
+          <path class="adg-final adg-final-a" pathLength="120" d="M360,128 L490,128"></path>
+          <line class="adg-tick adg-txt-a" x1="360" y1="122" x2="360" y2="134"></line>
+          <line class="adg-tick adg-txt-a" x1="490" y1="122" x2="490" y2="134"></line>
+          <path class="adg-final adg-final-a" pathLength="120" d="M515,150 L515,172"></path>
+          <line class="adg-tick adg-txt-a" x1="509" y1="150" x2="521" y2="150"></line>
+          <line class="adg-tick adg-txt-a" x1="509" y1="172" x2="521" y2="172"></line>
+          <text class="adg-dimtxt adg-txt-a" x="300" y="224" text-anchor="middle">400</text>
+          <text class="adg-dimtxt adg-txt-a" x="425" y="114" text-anchor="middle">200</text>
+          <text class="adg-dimtxt adg-txt-a" x="528" y="165">13</text>
+        </g>
+
+        <!-- AIバッジ（② 提案中 → ③ 確定） -->
+        <g class="adg-badge1">
+          <rect class="adg-badge-box" x="250" y="86" width="222" height="30" rx="15"></rect>
+          <circle class="adg-badge-dot adg-dots" cx="270" cy="101" r="4"></circle>
+          <circle class="adg-badge-dot adg-dots" cx="282" cy="101" r="4" style="animation-delay:.2s"></circle>
+          <circle class="adg-badge-dot adg-dots" cx="294" cy="101" r="4" style="animation-delay:.4s"></circle>
+          <text class="adg-badge-txt" x="306" y="105">AIが寸法チェーンを提案中…</text>
+        </g>
+        <g class="adg-badge2">
+          <rect class="adg-badge-box" x="286" y="86" width="228" height="30" rx="15"></rect>
+          <text class="adg-badge-txt" x="300" y="105">✓ Enter で実線の寸法に確定 → 学習に蓄積</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="adg-cap adg-l1" x="400" y="428" text-anchor="middle">① 寸法を入れたい範囲を2点で囲む</text>
+        <text class="adg-cap adg-l2" x="400" y="428" text-anchor="middle">② AIが寸法チェーンを点線でプレビュー提案</text>
+        <text class="adg-cap adg-l3" x="400" y="428" text-anchor="middle">③ Enterで実線に確定 → 入れ方のクセを学習</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">範囲を2点で囲む → AIが点線で寸法を提案 → Enterで実線に確定して学習、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>図面に<strong>寸法線と文字（注記）を素早く入れる</strong>ためのGrasshopperノードです。Rhinoコマンド版の <a href="annotate-dim-text.html">annotate_dim_text</a> の作図機能をGHに移植したもので、連続寸法・<strong>向きの自動判定</strong>・注記どうしの<strong>被り回避</strong>を備えています。</p>
+    <p>いちばんの特徴は<strong>AI寸法提案（AIDim）</strong>。寸法を入れたい範囲を2点で囲むと、その中の注記テキストや形状の特徴をAIへ渡し、「ここにこう寸法を並べる」という<strong>寸法チェーンを提案</strong>してくれます。提案はまず点線のプレビューで出るので、良ければEnterで実線に確定。確定した内容は <span class="port" style="color:var(--accent)">annodim_examples.jsonl</span> に学習データとして蓄積され、次からの提案（few-shot）に活かされるので、<strong>使うほどあなたの寸法の入れ方のクセに近づいて</strong>いきます。</p>
+    <p class="lead">※ AIは既定でパソコン内のローカルAI（Ollama）を使います。環境変数を切り替えるとClaude APIも使えます。／ Make2Dの断面（<span class="port" style="color:var(--accent)">SecNames/SecXf/SecBox</span>）を受け取れるので、<a href="make2d-executor.html">GH_Make2DExecutor</a> が出した図面にそのまま寸法を入れる、という連携が想定されています。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>おもな入力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">PickDim /<br>PickTxt / PickAng</td><td>寸法・文字・角度寸法を画面ピックで<strong>連続作図</strong>するボタン。</td></tr>
+          <tr><td class="port">AIDim</td><td><strong>AIに寸法チェーンを提案させる</strong>ボタン。範囲2点を渡すと点線プレビューで提案。</td></tr>
+          <tr><td class="port">EditDim /<br>ClearDim / CopyFmt</td><td>作った注記の編集／全消去／書式コピー。</td></tr>
+          <tr><td class="port">Bake / WriteBack</td><td>Rhinoへベイク／元図面.3dmへ書き戻し。</td></tr>
+          <tr><td class="port">Settings</td><td>文字高さ・矢印・オフセットなどの設定ポップアップ。</td></tr>
+          <tr><td class="port">Pts / Crvs</td><td>寸法・注記の対象になる点・曲線。</td></tr>
+          <tr><td class="port">SecNames /<br>SecXf / SecBox /<br>Target3dm</td><td><a href="make2d-executor.html">GH_Make2DExecutor</a> から受け取る断面名・配置行列・外接ボックス・書戻し先パス。断面ごとに正しい場所へ寸法が入る。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Report</td><td>実行ログ。作図した寸法・注記の数や、AI提案の結果を返す。</td></tr>
+          <tr><td class="port">PrevCrvs</td><td>AI提案の<strong>点線プレビュー曲線</strong>。確定前の見え方。</td></tr>
+          <tr><td class="port">Texts / TextPts</td><td>寸法値・注記テキストと、その配置位置。</td></tr>
+          <tr><td class="port">Groups</td><td>生成した注記のまとまり（グループ）。後からの編集単位。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">図面に対して置く</span><span class="step-body">Make2Dで断面を起こした図面のGHに本ノードを置く。<a href="make2d-executor.html">GH_Make2DExecutor</a> の <span class="port" style="color:var(--accent)">SecNames/SecXf/SecBox/Target3dm</span> をつなぐと、断面ごとに正しい位置へ寸法が入る。</span></li>
+      <li><span class="step-title">手で入れるか、AIに任せるか選ぶ</span><span class="step-body">1本ずつなら <span class="port" style="color:var(--accent)">PickDim / PickTxt</span> で連続作図。まとめて欲しいときは <span class="port" style="color:var(--accent)">AIDim</span> を押す。</span></li>
+      <li><span class="step-title">範囲を2点で囲む</span><span class="step-body">AIDimでは、寸法を入れたい範囲を2点でクリック。中の注記や形状の特徴をAIが読み取る。</span></li>
+      <li><span class="step-title">点線プレビューを確認</span><span class="step-body">提案された寸法チェーンが <span class="port" style="color:var(--accent)">PrevCrvs</span> に点線で表示される。位置・本数をチェック。</span></li>
+      <li><span class="step-title">Enterで確定</span><span class="step-body">良ければ確定して実線の寸法に。内容は <span class="port" style="color:var(--accent)">annodim_examples.jsonl</span> に学習として蓄積され、次回以降の提案が賢くなる。</span></li>
+      <li><span class="step-title">整えて書き戻す</span><span class="step-body">被りやズレは <span class="port" style="color:var(--accent)">EditDim</span> で調整。仕上がったら <span class="port" style="color:var(--accent)">Bake</span> または <span class="port" style="color:var(--accent)">WriteBack</span> で図面へ反映。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <a class="chip chip-up" href="make2d-executor.html">Make2D実行 GH_Make2DExecutor</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">GH_AnnotateDim（このノード）</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <span class="flow-solo">この先は無し。<b>図面仕上げの最終段（寸法入れ）</b>です。<a href="partmark.html">部材記号 GH_PartMark</a> と並んで図面を完成させます。</span>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">全体像は <a href="../pipeline.html">Make2Dパイプライン詳細図</a> で確認できます。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実データでためす</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">📐</span> 専用サンプルはなし — Make2D出力の図面上で使います</span>
+      <p class="sample-desc">本ノードは「Make2Dで起こした断面図に寸法を入れる」ためのものなので、まず断面を出してから試すのが分かりやすいです。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">断面を出す</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> を <a href="make2d-executor.html">GH_Make2DExecutor</a> で1〜2面Make2Dし、図面座標に2D断面線を出す。</span></li>
+        <li><span class="step-title">本ノードをつなぐ</span><span class="step-body">Executorの <span class="port" style="color:var(--accent)">SecNames/SecXf/SecBox</span> を本ノードへ配線。</span></li>
+        <li><span class="step-title">AIDimで提案させる</span><span class="step-body"><span class="port" style="color:var(--accent)">AIDim</span> を押し、断面を2点で囲む。点線の寸法提案が出る（ローカルOllamaが起動している必要あり）。</span></li>
+        <li><span class="step-title">確定して学習</span><span class="step-body">良い提案をEnterで確定。数回繰り返すと、あなたの寸法の入れ方に近い提案が返るようになる。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> AI提案にはローカルAI（Ollama）が要る</div>
+        <p>AIDimは既定でパソコン内のローカルAI（Ollama）を呼びます。Ollamaが起動していないと提案が返りません。ネット越しのClaude APIを使いたい場合は環境変数で切り替えます（APIキー設定が必要）。<strong>AIを使わない手動の寸法・文字入れは、AIなしでもそのまま使えます。</strong></p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 提案は必ず点線プレビューで確認してから確定</div>
+        <p>AIの提案が常に完璧とは限りません。<span class="port" style="color:var(--accent)">PrevCrvs</span> の点線を見て、本数・位置がおかしくないか確認してからEnterで確定してください。確定した内容がそのまま学習データになるため、変な提案をそのまま通すと学習も濁ります。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> RH8のPython3ノード（IronPythonでは動きません）</div>
+        <p>本ノードはRhino8の新しいPython3コンポーネント前提です。Rhino7の旧Python（IronPython 2.7）では動きません。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 回帰テストは緑だが実機での作図は要確認</div>
+        <p>回帰テスト（test_annodim.py・24項目）は通っていますが、実際の図面での作図結果は目で確かめてから採用してください。特に注記の被り回避は形状によって調整が要ることがあります。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\図面整理\<span class="fp-accent">GH_AnnotateDim.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

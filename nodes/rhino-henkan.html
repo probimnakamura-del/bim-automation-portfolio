@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>IFC自動変換パイプライン（ライノセラスに変換） — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス rhk- で衝突回避
+   ①IFCをフォルダに置いて.bat → ②コンソールがクラスごとに仕分けJSON → ③ヘッドレスRhinoが色分けメッシュを組み上げ.3dm
+   ※このノードの肝＝IFCクラス別の色分けなので、部材色はクラス色（シアン/緑/橙/赤）を用いる
+   ============================================================ */
+.rhk-svg text { font-family: var(--font); }
+.rhk-mono { font-family: "Cascadia Code", Consolas, monospace; }
+
+/* フォルダ */
+.rhk-folder { fill: #1a1533; stroke: var(--accent); stroke-width: 1.8; }
+.rhk-tab    { fill: #241a45; stroke: var(--accent); stroke-width: 1.6; }
+.rhk-file   { fill: #14102a; stroke: var(--accent); stroke-width: 1.5; }
+.rhk-filetxt{ fill: var(--accent); font-size: 10px; font-weight: 800; }
+.rhk-bat    { fill: #0f1a30; stroke: var(--accent); stroke-width: 1.4; }
+.rhk-battxt { fill: #e6ecff; font-size: 11px; font-weight: 700; }
+.rhk-cursor { fill: #ffffff; stroke: #0b1020; stroke-width: 1; }
+
+/* コンソール */
+.rhk-win    { fill: #090d1a; stroke: var(--accent); stroke-width: 1.6; }
+.rhk-bar    { fill: #1b2338; }
+.rhk-contxt { fill: #cdd7f5; font-size: 11px; }
+.rhk-scan   { fill: var(--accent); font-size: 11.5px; font-weight: 700; }
+.rhk-cls    { font-size: 10.5px; font-weight: 800; }
+.rhk-clsbox { stroke-width: 1.4; }
+
+/* Rhinoビューポート */
+.rhk-vp     { fill: #0c1428; stroke: var(--accent); stroke-width: 1.6; }
+.rhk-col    { fill: #133a2c; stroke: #34d399; stroke-width: 1.8; }   /* 柱=緑 */
+.rhk-beam   { fill: #0e3040; stroke: #22d3ee; stroke-width: 1.8; }   /* 梁=シアン */
+.rhk-plate  { fill: #3a2e08; stroke: #fbbf24; stroke-width: 1.8; }   /* プレート=橙 */
+.rhk-done   { fill: color-mix(in srgb, var(--ok) 18%, #0b1428); stroke: var(--ok); stroke-width: 1.3; }
+.rhk-donetxt{ fill: var(--ok); font-size: 11px; font-weight: 800; }
+
+/* ダッシュボード進捗 */
+.rhk-dash-tr { fill: #223052; }
+.rhk-dash    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+.rhk-dashtxt { fill: #9aa7cc; font-size: 10px; font-weight: 700; }
+
+/* 矢印＋ドット */
+.rhk-shaft { fill: none; stroke: var(--accent); stroke-width: 2.4; opacity: .82; }
+.rhk-head  { fill: var(--accent); }
+.rhk-dot   { fill: #ffffff; }
+
+/* テキスト */
+.rhk-cap   { fill: #e6ecff; font-size: 15.5px; font-weight: 700; }
+.rhk-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.rhk-prog-tr { fill: #223052; }
+.rhk-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.rhk-fold-g  { animation: rhkFold 10s infinite; }
+.rhk-drop    { animation: rhkDrop 10s infinite; }
+.rhk-click   { animation: rhkClick 10s infinite; }
+.rhk-arr1    { animation: rhkArr1 10s infinite; }
+.rhk-flow1   { animation: rhkFlow1 10s infinite; }
+.rhk-con-g   { animation: rhkCon 10s infinite; }
+.rhk-scan    { animation: rhkScan 10s infinite; }
+.rhk-cls1    { animation: rhkCls1 10s infinite; }
+.rhk-cls2    { animation: rhkCls2 10s infinite; }
+.rhk-cls3    { animation: rhkCls3 10s infinite; }
+.rhk-cls4    { animation: rhkCls4 10s infinite; }
+.rhk-arr2    { animation: rhkArr2 10s infinite; }
+.rhk-flow2   { animation: rhkFlow2 10s infinite; }
+.rhk-vp-g    { animation: rhkVp 10s infinite; }
+.rhk-b1      { animation: rhkB1 10s infinite; }
+.rhk-b2      { animation: rhkB2 10s infinite; }
+.rhk-b3      { animation: rhkB3 10s infinite; }
+.rhk-b4      { animation: rhkB4 10s infinite; }
+.rhk-plate-a { animation: rhkPlate 10s infinite; }
+.rhk-done-g  { animation: rhkDone 10s infinite; }
+.rhk-dash    { animation: rhkDash 10s infinite; }
+.rhk-l1      { animation: rhkL1 10s infinite; }
+.rhk-l2      { animation: rhkL2 10s infinite; }
+.rhk-l3      { animation: rhkL3 10s infinite; }
+.rhk-prog    { animation: rhkProg 10s linear infinite; }
+
+@keyframes rhkFold { 0%,2%{opacity:0} 8%{opacity:1} 100%{opacity:1} }
+@keyframes rhkDrop {
+  0%,3%   { opacity: 0; transform: translateY(-34px); }
+  10%     { opacity: 1; transform: translateY(-34px); }
+  20%     { opacity: 1; transform: translateY(0); }
+  100%    { opacity: 1; transform: translateY(0); }
+}
+@keyframes rhkClick {
+  0%,20%  { transform: translate(0,0); }
+  23%     { transform: translate(-3px,-3px); }
+  26%     { transform: translate(0,0); }
+  29%     { transform: translate(-3px,-3px); }
+  32%,100%{ transform: translate(0,0); }
+}
+@keyframes rhkArr1 { 0%,26%{opacity:0} 32%{opacity:1} 100%{opacity:1} }
+@keyframes rhkFlow1 {
+  0%,27%   { opacity: 0; transform: translateX(0); }
+  31%      { opacity: 1; transform: translateX(0); }
+  40%      { opacity: 1; transform: translateX(58px); }
+  43%,100% { opacity: 0; transform: translateX(58px); }
+}
+@keyframes rhkCon { 0%,30%{opacity:0} 38%{opacity:1} 100%{opacity:1} }
+@keyframes rhkScan { 0%,36%{opacity:0} 42%{opacity:1} 60%{opacity:1} 66%{opacity:.35} 100%{opacity:.35} }
+@keyframes rhkCls1 { 0%,44%{opacity:0} 49%{opacity:1} 100%{opacity:1} }
+@keyframes rhkCls2 { 0%,48%{opacity:0} 53%{opacity:1} 100%{opacity:1} }
+@keyframes rhkCls3 { 0%,52%{opacity:0} 57%{opacity:1} 100%{opacity:1} }
+@keyframes rhkCls4 { 0%,56%{opacity:0} 61%{opacity:1} 100%{opacity:1} }
+@keyframes rhkArr2 { 0%,60%{opacity:0} 66%{opacity:1} 100%{opacity:1} }
+@keyframes rhkFlow2 {
+  0%,61%   { opacity: 0; transform: translateX(0); }
+  65%      { opacity: 1; transform: translateX(0); }
+  74%      { opacity: 1; transform: translateX(58px); }
+  77%,100% { opacity: 0; transform: translateX(58px); }
+}
+@keyframes rhkVp { 0%,62%{opacity:0} 70%{opacity:1} 100%{opacity:1} }
+/* 部材がニョキニョキ組み上がる（下から立ち上がる／伸びる） */
+@keyframes rhkB1 { 0%,68%{opacity:0;transform:scaleY(0)} 76%{opacity:1;transform:scaleY(1)} 100%{opacity:1;transform:scaleY(1)} }
+@keyframes rhkB2 { 0%,72%{opacity:0;transform:scaleY(0)} 80%{opacity:1;transform:scaleY(1)} 100%{opacity:1;transform:scaleY(1)} }
+@keyframes rhkB3 { 0%,76%{opacity:0;transform:scaleX(0)} 84%{opacity:1;transform:scaleX(1)} 100%{opacity:1;transform:scaleX(1)} }
+@keyframes rhkB4 { 0%,80%{opacity:0;transform:scaleX(0)} 87%{opacity:1;transform:scaleX(1)} 100%{opacity:1;transform:scaleX(1)} }
+@keyframes rhkPlate { 0%,84%{opacity:0} 90%{opacity:1} 100%{opacity:1} }
+@keyframes rhkDone { 0%,88%{opacity:0} 93%{opacity:1} 100%{opacity:1} }
+@keyframes rhkDash { 0%,66%{transform:scaleX(0)} 92%{transform:scaleX(1)} 100%{transform:scaleX(1)} }
+@keyframes rhkL1 { 0%{opacity:0} 4%{opacity:1} 27%{opacity:1} 32%{opacity:0} 100%{opacity:0} }
+@keyframes rhkL2 { 0%,32%{opacity:0} 36%{opacity:1} 60%{opacity:1} 64%{opacity:0} 100%{opacity:0} }
+@keyframes rhkL3 { 0%,64%{opacity:0} 68%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes rhkProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ifc">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">IFC・データ連携</span>
+    <h1 class="node-title">IFC自動変換パイプライン <span style="opacity:.75;font-weight:700">ライノセラスに変換</span></h1>
+    <p class="catch">IFCを<span class="em">フォルダに置くだけ</span>。あとは全自動で<span class="em">色分けRhinoモデル</span>が出来上がる量産ライン。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">v2.3</span>
+      <span class="badge st-ver">無人パイプライン</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg rhk-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="IFCをフォルダに置いて自動でヘッドレスRhinoが色分けモデルを組み上げるアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="rhk-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="rhk-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① フォルダに.ifcを置いて .bat ===== -->
+        <g class="rhk-fold-g">
+          <!-- 落ちてくる.ifc -->
+          <g class="rhk-drop">
+            <rect class="rhk-file" x="98" y="196" width="44" height="30" rx="4"></rect>
+            <text class="rhk-mono rhk-filetxt" x="120" y="215" text-anchor="middle">.ifc</text>
+          </g>
+          <!-- フォルダ -->
+          <polygon class="rhk-tab" points="60,206 96,206 108,220 60,220"></polygon>
+          <rect class="rhk-folder" x="60" y="218" width="130" height="70" rx="8"></rect>
+          <text class="rhk-small" x="125" y="306" text-anchor="middle">00_入力IFC</text>
+          <!-- .bat ボタン＋クリック -->
+          <g class="rhk-click">
+            <rect class="rhk-bat" x="80" y="320" width="90" height="24" rx="6"></rect>
+            <text class="rhk-mono rhk-battxt" x="125" y="336" text-anchor="middle">変換.bat ▷</text>
+            <polygon class="rhk-cursor" points="150,332 150,352 156,346 161,356 165,354 160,344 168,344"></polygon>
+          </g>
+        </g>
+
+        <!-- 矢印①→② -->
+        <g class="rhk-arr1">
+          <line class="rhk-shaft" x1="196" y1="252" x2="262" y2="252"></line>
+          <polygon class="rhk-head" points="264,252 252,245 252,259"></polygon>
+        </g>
+        <circle class="rhk-flow1 rhk-dot" cx="196" cy="252" r="5"></circle>
+
+        <!-- ===== ② コンソールがクラス別に仕分け → JSON ===== -->
+        <g class="rhk-con-g">
+          <rect class="rhk-win" x="278" y="150" width="228" height="196" rx="6"></rect>
+          <rect class="rhk-bar" x="278" y="150" width="228" height="22" rx="6"></rect>
+          <circle cx="292" cy="161" r="3.5" fill="#f87171"></circle>
+          <circle cx="304" cy="161" r="3.5" fill="#fbbf24"></circle>
+          <circle cx="316" cy="161" r="3.5" fill="#34d399"></circle>
+          <text class="rhk-mono rhk-contxt" x="330" y="165">IFC自動変換 v2.3</text>
+          <text class="rhk-mono rhk-scan" x="292" y="196">🔍 プロジェクトスキャン中…</text>
+          <!-- クラス別チップ（色分け） -->
+          <g class="rhk-cls1">
+            <rect class="rhk-clsbox" x="292" y="212" width="92" height="22" rx="5" fill="#0e3040" stroke="#22d3ee"></rect>
+            <text class="rhk-mono rhk-cls" x="338" y="227" text-anchor="middle" fill="#22d3ee">IfcBeam</text>
+          </g>
+          <g class="rhk-cls2">
+            <rect class="rhk-clsbox" x="392" y="212" width="100" height="22" rx="5" fill="#133a2c" stroke="#34d399"></rect>
+            <text class="rhk-mono rhk-cls" x="442" y="227" text-anchor="middle" fill="#34d399">IfcColumn</text>
+          </g>
+          <g class="rhk-cls3">
+            <rect class="rhk-clsbox" x="292" y="242" width="92" height="22" rx="5" fill="#3a2e08" stroke="#fbbf24"></rect>
+            <text class="rhk-mono rhk-cls" x="338" y="257" text-anchor="middle" fill="#fbbf24">IfcPlate</text>
+          </g>
+          <g class="rhk-cls4">
+            <rect class="rhk-clsbox" x="392" y="242" width="100" height="22" rx="5" fill="#3a1414" stroke="#f87171"></rect>
+            <text class="rhk-mono rhk-cls" x="442" y="257" text-anchor="middle" fill="#f87171">IfcFastener</text>
+          </g>
+          <text class="rhk-mono rhk-contxt" x="292" y="290" fill="#34d399">→ 中間JSON 生成 ✓</text>
+        </g>
+
+        <!-- 矢印②→③ -->
+        <g class="rhk-arr2">
+          <line class="rhk-shaft" x1="510" y1="252" x2="556" y2="252"></line>
+          <polygon class="rhk-head" points="558,252 546,245 546,259"></polygon>
+        </g>
+        <circle class="rhk-flow2 rhk-dot" cx="510" cy="252" r="5"></circle>
+
+        <!-- ===== ③ ヘッドレスRhinoが色分けモデルを組み上げ ===== -->
+        <g class="rhk-vp-g">
+          <rect class="rhk-vp" x="566" y="150" width="184" height="196" rx="6"></rect>
+          <rect class="rhk-bar" x="566" y="150" width="184" height="22" rx="6"></rect>
+          <text class="rhk-mono rhk-contxt" x="576" y="165">Rhino 8（ヘッドレス）</text>
+          <!-- 柱2本（緑・下から立ち上がる） -->
+          <rect class="rhk-col rhk-b1" x="598" y="200" width="16" height="96" rx="1" style="transform-box:fill-box;transform-origin:bottom"></rect>
+          <rect class="rhk-col rhk-b2" x="700" y="200" width="16" height="96" rx="1" style="transform-box:fill-box;transform-origin:bottom"></rect>
+          <!-- 梁2本（シアン・横に伸びる） -->
+          <rect class="rhk-beam rhk-b3" x="598" y="200" width="118" height="14" rx="1" style="transform-box:fill-box;transform-origin:left"></rect>
+          <rect class="rhk-beam rhk-b4" x="598" y="262" width="118" height="12" rx="1" style="transform-box:fill-box;transform-origin:left"></rect>
+          <!-- プレート（橙） -->
+          <rect class="rhk-plate rhk-plate-a" x="648" y="214" width="18" height="14" rx="1"></rect>
+          <!-- .3dm 完了バッジ -->
+          <g class="rhk-done-g">
+            <rect class="rhk-done" x="600" y="304" width="116" height="22" rx="11"></rect>
+            <text class="rhk-mono rhk-donetxt" x="658" y="319" text-anchor="middle">色分け .3dm ✓</text>
+          </g>
+        </g>
+
+        <!-- ダッシュボード進捗バー -->
+        <text class="rhk-dashtxt" x="300" y="372">ダッシュボード</text>
+        <rect class="rhk-dash-tr" x="300" y="378" width="200" height="8" rx="4"></rect>
+        <rect class="rhk-dash"    x="300" y="378" width="200" height="8" rx="4"></rect>
+        <text class="rhk-dashtxt" x="510" y="386">100%</text>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="rhk-cap rhk-l1" x="400" y="428" text-anchor="middle">① IFCを 00_入力IFC に置いて 変換.bat をダブルクリック</text>
+        <text class="rhk-cap rhk-l2" x="400" y="428" text-anchor="middle">② IFCクラスごとに仕分けして中間JSONへ</text>
+        <text class="rhk-cap rhk-l3" x="400" y="428" text-anchor="middle">③ ヘッドレスRhinoが色分けメッシュを組み上げ .3dm 出力</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">IFCをフォルダに置いて.batを叩く → コンソールがクラス別に仕分けてJSON → ヘッドレスRhinoが色分けモデルを組み上げて.3dm出力、という無人フローを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>IFCファイルを「<strong>00_入力IFC</strong>」フォルダに置いて .bat をダブルクリックするだけで、あとは全自動。裏で<strong>ヘッドレスRhinoが自動起動</strong>し、梁・柱・金物などを<strong>IFCクラスごとに仕分け・色分け・レイヤー分けした .3dm</strong> を吐き出す無人変換パイプライン（v2.3）です。</p>
+    <p>誰かが同じモデルを編集中なら<strong>競合を検知</strong>し、Teams通知やWebダッシュボード（<span class="rhk-mono">localhost:8765</span>）で進捗を監視できます。IFCクラスごとにサブプロセスでパースして中間JSONを作り、ヘッドレスRhinoがそのJSONからメッシュを再構築してベイクする、という<strong>2段構え</strong>で動きます。</p>
+    <p class="lead">※ <a href="ifc2rhino.html">ifc2rhino</a> が「1本を丁寧に往復変換する精密ツール」なら、こちらは「案件フォルダをまとめて回す<strong>量産・自動化ライン</strong>」。仕分けルールは <span class="rhk-mono">設定.py</span>（SORTING_RULES）で決めます。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>操作と入出力</h2>
+    <div class="io-scroll"><table class="io-table" style="margin-bottom:20px">
+      <caption>操作と構成</caption>
+      <thead><tr><th>操作・ファイル</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td class="port">変換.bat（ダブルクリック）</td><td>00_入力IFC のIFCを<strong>一括変換</strong>。ヘッドレスRhinoを自動起動。</td></tr>
+        <tr><td class="port">start_system.py</td><td>変換＋<strong>ダッシュボードをまとめて起動</strong>（進捗・競合の監視付き）。</td></tr>
+        <tr><td class="port">設定.py</td><td>仕分けルール <span class="port" style="color:var(--accent)">SORTING_RULES</span>／案件ルート <span class="port" style="color:var(--accent)">PROJECTS_ROOT</span>／Rhino実行パス <span class="port" style="color:var(--accent)">RHINO_EXE_PATH</span>。</td></tr>
+      </tbody>
+    </table></div>
+    <div class="io-scroll"><table class="io-table">
+      <caption>入出力</caption>
+      <thead><tr><th>入力</th><th>出力</th></tr></thead>
+      <tbody>
+        <tr><td class="port">.ifc（00_入力IFCに配置）</td><td>クラス別に<strong>色分け・レイヤー分けした .3dm</strong></td></tr>
+        <tr><td class="port">設定.py の仕分けルール</td><td>ダッシュボードの<strong>進捗・競合通知</strong>（Teams連携）</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">仕分けルールを設定</span><span class="step-body"><span class="rhk-mono">設定.py</span> で <span class="port" style="color:var(--accent)">SORTING_RULES</span>（クラス→色/レイヤー）、<span class="port" style="color:var(--accent)">PROJECTS_ROOT</span>（案件フォルダの場所）、<span class="port" style="color:var(--accent)">RHINO_EXE_PATH</span>（Rhino8のパス）を確認。</span></li>
+      <li><span class="step-title">IFCを置く</span><span class="step-body">変換したい .ifc を案件の <span class="rhk-mono">00_入力IFC</span> フォルダへ入れます。</span></li>
+      <li><span class="step-title">起動する</span><span class="step-body"><span class="rhk-mono">変換.bat</span> をダブルクリック（または <span class="rhk-mono">start_system.py</span> でダッシュボードごと起動）。</span></li>
+      <li><span class="step-title">自動スキャン&パース</span><span class="step-body">コンソールがプロジェクトをスキャンし、IFCクラスごとにサブプロセス（<span class="rhk-mono">ifc_external_parser.py</span>）でパース → 中間JSON。</span></li>
+      <li><span class="step-title">ヘッドレスRhinoでベイク</span><span class="step-body">Rhinoが自動起動し、JSONからメッシュを再構築・色分けしてベイク（<span class="rhk-mono">gh_python_logic.py</span>）→ .3dm 保存。</span></li>
+      <li><span class="step-title">進捗を監視</span><span class="step-body">ダッシュボード（<span class="rhk-mono">localhost:8765</span>）で進捗・競合を確認します（<a href="bim-dashboard.html">BIM Dashboard</a> へ）。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="chip chip-self">ライノセラスに変換（このツール）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="bim-dashboard.html">BIM Dashboard（進捗・競合監視）</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">前段にIFCの結合・スキーマ変換（<a href="join-ifc-model.html">Join_IFC_model</a> / <a href="ifc-converter.html">IFC_Converter</a> 等）を置くこともできます。実処理本体（<span class="rhk-mono">gh_python_logic.py</span>）と通知先（BIM_Dashboard）は C:\Python1 直下にあり、フォルダ単体では完結しません。</p>
+  </div>
+</section>
+
+<!-- 7. 実データでの使いどころ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実データでの使いどころ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🏭</span> 案件フォルダをまとめて回す量産変換</span>
+      <p class="sample-desc">実案件のIFCを差し替えるたびに、最新の色分けRhinoモデルを自動生成してチームで共有・監視する、という実運用の流れです。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">最新IFCを置く</span><span class="step-body">案件フォルダの <span class="rhk-mono">00_入力IFC</span> に最新のIFCを入れます。</span></li>
+        <li><span class="step-title">一括変換</span><span class="step-body"><span class="rhk-mono">変換.bat</span> で一括変換 → クラス別に色分けされた .3dm が出力されます。</span></li>
+        <li><span class="step-title">監視・通知</span><span class="step-body">ダッシュボードで進捗・競合を確認し、必要ならTeamsへ通知します。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> フォルダ単体で完結しない</div>
+        <p>実処理本体 <span class="rhk-mono">gh_python_logic.py</span>（C:\Python1直下）、通知先 <span class="rhk-mono">BIM_Dashboard</span>、<span class="rhk-mono">.venv</span>（ifcopenshell入り）、Rhino.exeのパスに依存します。<strong>フォルダごと移動すると動かなくなる</strong>ので注意。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> パスが固定されている</div>
+        <p><span class="rhk-mono">設定.py</span> の <span class="rhk-mono">RHINO_EXE_PATH</span> は <span class="rhk-mono">C:\Program Files\Rhino 8</span> 固定、<span class="rhk-mono">.venv</span> も固定パス参照です。<strong>環境が違うと起動しません</strong>。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 中間JSONの残骸が出ることがある</div>
+        <p>途中終了すると <span class="rhk-mono">temp_json_dumps</span> に中間JSONが残ります（正常終了時は自動削除）。溜まっていたら消して問題ありません。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Teams通知は未設定だと飛ばない</div>
+        <p>Teams WebhookのURLがプレースホルダのままです。通知が要る場合は設定してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 監視ダッシュボードは休止気味</div>
+        <p>3月以降のログが無く、監視側の <a href="bim-dashboard.html">BIM Dashboard</a> は休止気味です。変換パイプライン本体は動きますが、監視が要るときは<strong>ダッシュボードを起動して状態を確認</strong>してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\ライノセラスに変換\r\<span class="fp-accent">実行_メイン.py</span>（起動=変換.bat／start_system.py・ベイク本体=C:\Python1\gh_python_logic.py）
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ifc">IFC・データ連携の一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

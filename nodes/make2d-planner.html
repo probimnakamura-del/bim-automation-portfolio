@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Make2Dプランナー GH_Make2DPlanner — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス m2dp- で衝突回避
+   ①図面JSONの交点名 と 3Dモデルの交点 を並べる
+   → ②同じ名前どうしを線で照合
+   → ③各断面の切断平面＋矢視が立ち上がる（Plan_JSON）
+   ============================================================ */
+.m2dp-svg text { font-family: var(--font); }
+
+/* パネル枠 */
+.m2dp-panel { fill: #0c1428; stroke: #34406a; stroke-width: 1.4; }
+.m2dp-panel-lbl { fill: #9aa7cc; font-size: 12px; font-weight: 700; }
+
+/* 図面側の一点鎖線グリッド */
+.m2dp-grid { fill: none; stroke: var(--accent); stroke-width: 1.3; opacity: .6;
+             stroke-dasharray: 10 4 2 4; }
+.m2dp-gridcap { fill: none; stroke: var(--accent); stroke-width: 1.3; opacity: .8; }
+.m2dp-gtxt { fill: #9aa7cc; font-size: 11px; font-weight: 700; }
+
+/* 交点ドット */
+.m2dp-dot  { fill: var(--accent); }
+.m2dp-dotw { fill: #0c1428; stroke: var(--accent); stroke-width: 2; }
+.m2dp-dtxt { fill: #e6ecff; font-size: 11px; font-weight: 700; }
+
+/* 3Dモデル側の柱（簡略） */
+.m2dp-col  { fill: #0f1a30; stroke: var(--accent); stroke-width: 2; }
+.m2dp-colback { fill: none; stroke: var(--accent); stroke-width: 1.3; opacity: .3; }
+.m2dp-depth { fill: none; stroke: var(--accent); stroke-width: 1.2; opacity: .35; }
+
+/* 照合線 */
+.m2dp-match { fill: none; stroke: var(--accent); stroke-width: 2.4;
+              stroke-linecap: round; stroke-dasharray: 100; }
+
+/* 切断平面＋矢視 */
+.m2dp-planeface { fill: var(--accent); opacity: .18; }
+.m2dp-planeedge { fill: none; stroke: var(--accent); stroke-width: 2.4; }
+.m2dp-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.4; }
+.m2dp-arrow-head  { fill: var(--accent); }
+
+/* タグ */
+.m2dp-tag-box { fill: #0b1428; stroke: var(--accent); stroke-width: 1.4; }
+.m2dp-tagtxt  { fill: #e6ecff; font-size: 12.5px; font-weight: 700; }
+.m2dp-json    { fill: var(--accent); }
+
+/* 中央の「名前で照合」バッジ */
+.m2dp-midbadge { fill: #0b1428; stroke: var(--accent); stroke-width: 1.3; }
+.m2dp-midtxt   { fill: var(--accent); font-size: 12.5px; font-weight: 800; }
+
+/* テキスト */
+.m2dp-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+
+/* 進捗バー */
+.m2dp-prog-tr { fill: #223052; }
+.m2dp-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.m2dp-left  { animation: m2dpLeft  10s infinite; }
+.m2dp-right { animation: m2dpRight 10s infinite; }
+.m2dp-match { animation: m2dpMatch 10s infinite; }
+.m2dp-mid   { animation: m2dpMid   10s infinite; }
+.m2dp-plane { animation: m2dpPlane 10s infinite; }
+.m2dp-tag   { animation: m2dpTag   10s infinite; }
+.m2dp-l1    { animation: m2dpL1 10s infinite; }
+.m2dp-l2    { animation: m2dpL2 10s infinite; }
+.m2dp-l3    { animation: m2dpL3 10s infinite; }
+.m2dp-prog  { animation: m2dpProg 10s linear infinite; }
+
+@keyframes m2dpLeft {
+  0%,3%    { opacity: 0; transform: translateX(-10px); }
+  9%       { opacity: 1; transform: translateX(0); }
+  70%      { opacity: 1; }
+  80%,92%  { opacity: .4; }
+  98%,100% { opacity: 0; }
+}
+@keyframes m2dpRight {
+  0%,5%    { opacity: 0; transform: translateX(10px); }
+  12%      { opacity: 1; transform: translateX(0); }
+  96%      { opacity: 1; }
+  100%     { opacity: 0; }
+}
+@keyframes m2dpMatch {
+  0%,26%   { opacity: 0; stroke-dashoffset: 100; }
+  30%      { opacity: 1; stroke-dashoffset: 100; }
+  46%      { opacity: 1; stroke-dashoffset: 0; }
+  86%      { opacity: 1; stroke-dashoffset: 0; }
+  96%,100% { opacity: 0; stroke-dashoffset: 0; }
+}
+@keyframes m2dpMid {
+  0%,29%   { opacity: 0; transform: scale(.7); }
+  34%      { opacity: 1; transform: scale(1); }
+  50%      { opacity: 1; transform: scale(1); }
+  58%,100% { opacity: 0; }
+}
+@keyframes m2dpPlane {
+  0%,52%   { opacity: 0; transform: translateY(18px); }
+  60%      { opacity: 1; transform: translateY(0); }
+  92%      { opacity: 1; }
+  100%     { opacity: 0; }
+}
+@keyframes m2dpTag {
+  0%,60%   { opacity: 0; transform: translateY(-8px); }
+  66%      { opacity: 1; transform: translateY(0); }
+  95%      { opacity: 1; }
+  100%     { opacity: 0; }
+}
+@keyframes m2dpL1 { 0%{opacity:0} 5%{opacity:1} 25%{opacity:1} 30%{opacity:0} 100%{opacity:0} }
+@keyframes m2dpL2 { 0%,30%{opacity:0} 35%{opacity:1} 52%{opacity:1} 57%{opacity:0} 100%{opacity:0} }
+@keyframes m2dpL3 { 0%,57%{opacity:0} 62%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes m2dpProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">Make2Dプランナー <span style="opacity:.75;font-weight:700">GH_Make2DPlanner</span></h1>
+    <p class="catch">図面から読んだ断面と、<span class="em">3Dモデルの通り芯を名前で照合</span>して、<span class="em">どこをどの向きで切るか</span>の計画を組み立てる司令塔。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">GH Python ノード</span>
+      <span class="badge st-ver">make2d_system 構築対象</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg m2dp-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="図面JSONの交点名と3Dモデルの交点を名前で照合し、断面ごとの切断計画を立てるアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="m2dp-prog-tr" x="300" y="20" width="200" height="6" rx="3"></rect>
+        <rect class="m2dp-prog"    x="300" y="20" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== 左：図面JSON（交点名リスト） ===== -->
+        <g class="m2dp-left">
+          <rect class="m2dp-panel" x="56" y="70" width="250" height="300" rx="8"></rect>
+          <text class="m2dp-panel-lbl" x="72" y="92">図面JSON（統合JSON）</text>
+          <!-- 一点鎖線グリッド -->
+          <line class="m2dp-grid" x1="130" y1="110" x2="130" y2="352"></line>
+          <line class="m2dp-grid" x1="232" y1="110" x2="232" y2="352"></line>
+          <line class="m2dp-grid" x1="90"  y1="170" x2="290" y2="170"></line>
+          <line class="m2dp-grid" x1="90"  y1="300" x2="290" y2="300"></line>
+          <!-- 通り芯符号 -->
+          <circle class="m2dp-gridcap" cx="130" cy="118" r="10"></circle>
+          <text class="m2dp-gtxt" x="130" y="122" text-anchor="middle">X1</text>
+          <circle class="m2dp-gridcap" cx="232" cy="118" r="10"></circle>
+          <text class="m2dp-gtxt" x="232" y="122" text-anchor="middle">X2</text>
+          <circle class="m2dp-gridcap" cx="98" cy="170" r="10"></circle>
+          <text class="m2dp-gtxt" x="98" y="174" text-anchor="middle">Y1</text>
+          <circle class="m2dp-gridcap" cx="98" cy="300" r="10"></circle>
+          <text class="m2dp-gtxt" x="98" y="304" text-anchor="middle">Y2</text>
+          <!-- 交点ドット＋名前 -->
+          <circle class="m2dp-dot" cx="130" cy="170" r="5.5"></circle>
+          <circle class="m2dp-dot" cx="232" cy="170" r="5.5"></circle>
+          <circle class="m2dp-dot" cx="130" cy="300" r="5.5"></circle>
+          <circle class="m2dp-dot" cx="232" cy="300" r="5.5"></circle>
+        </g>
+
+        <!-- ===== 右：3Dモデル（通り芯交点＝柱） ===== -->
+        <g class="m2dp-right">
+          <rect class="m2dp-panel" x="494" y="70" width="250" height="300" rx="8"></rect>
+          <text class="m2dp-panel-lbl" x="510" y="92">3Dモデルの通り芯交点</text>
+          <!-- 奥行きグリッド線 -->
+          <line class="m2dp-depth" x1="560" y1="170" x2="592" y2="146"></line>
+          <line class="m2dp-depth" x1="668" y1="170" x2="700" y2="146"></line>
+          <line class="m2dp-depth" x1="560" y1="300" x2="592" y2="276"></line>
+          <!-- 4本の柱（交点位置に立つ） -->
+          <rect class="m2dp-colback" x="592" y="120" width="14" height="26"></rect>
+          <rect class="m2dp-col" x="553" y="146" width="14" height="30"></rect>
+          <rect class="m2dp-col" x="661" y="146" width="14" height="30"></rect>
+          <rect class="m2dp-col" x="553" y="276" width="14" height="30"></rect>
+          <rect class="m2dp-col" x="661" y="276" width="14" height="30"></rect>
+          <!-- 交点ドット＋名前 -->
+          <circle class="m2dp-dotw" cx="560" cy="170" r="6"></circle>
+          <circle class="m2dp-dotw" cx="668" cy="170" r="6"></circle>
+          <circle class="m2dp-dotw" cx="560" cy="300" r="6"></circle>
+          <circle class="m2dp-dotw" cx="668" cy="300" r="6"></circle>
+          <text class="m2dp-dtxt" x="560" y="200" text-anchor="middle">X1·Y1</text>
+          <text class="m2dp-dtxt" x="668" y="200" text-anchor="middle">X2·Y1</text>
+          <text class="m2dp-dtxt" x="560" y="330" text-anchor="middle">X1·Y2</text>
+          <text class="m2dp-dtxt" x="668" y="330" text-anchor="middle">X2·Y2</text>
+        </g>
+
+        <!-- ===== 中央：名前で照合する線 ===== -->
+        <path class="m2dp-match" pathLength="100" d="M232,170 L560,170"></path>
+        <path class="m2dp-match" pathLength="100" d="M232,170 L668,170"></path>
+        <path class="m2dp-match" pathLength="100" d="M232,300 L560,300"></path>
+        <path class="m2dp-match" pathLength="100" d="M232,300 L668,300"></path>
+
+        <!-- 中央バッジ「名前で照合」 -->
+        <g class="m2dp-mid" style="transform-box:fill-box;transform-origin:center">
+          <rect class="m2dp-midbadge" x="338" y="212" width="124" height="30" rx="15"></rect>
+          <text class="m2dp-midtxt" x="400" y="232" text-anchor="middle">名前で照合</text>
+        </g>
+
+        <!-- ===== 切断平面＋矢視（3Dモデル側にニョキッ） ===== -->
+        <g class="m2dp-plane">
+          <!-- 断面A-A：X1通りを鉛直に切る -->
+          <polygon class="m2dp-planeface" points="548,110 576,92 576,318 548,336"></polygon>
+          <line class="m2dp-planeedge" x1="548" y1="110" x2="548" y2="336"></line>
+          <line class="m2dp-planeedge" x1="576" y1="92"  x2="576" y2="318"></line>
+          <!-- 矢視方向 -->
+          <line class="m2dp-arrow-shaft" x1="586" y1="210" x2="628" y2="210"></line>
+          <polygon class="m2dp-arrow-head" points="628,210 616,203 616,217"></polygon>
+          <text class="m2dp-dtxt" x="596" y="356">断面 A-A</text>
+        </g>
+
+        <!-- Plan_JSON タグ -->
+        <g class="m2dp-tag">
+          <rect class="m2dp-tag-box" x="270" y="32" width="260" height="26" rx="13"></rect>
+          <path class="m2dp-json" d="M288,39 h10 v12 h-10 z M300,39 h8 v12 h-8 z" opacity=".9"></path>
+          <text class="m2dp-tagtxt" x="316" y="49">Plan_JSON ＝ 切断計画ができた</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="m2dp-cap m2dp-l1" x="400" y="430" text-anchor="middle">① 図面JSONの交点名 と 3Dモデルの交点を並べる</text>
+        <text class="m2dp-cap m2dp-l2" x="400" y="430" text-anchor="middle">② 同じ名前どうしを照合して位置を確定</text>
+        <text class="m2dp-cap m2dp-l3" x="400" y="430" text-anchor="middle">③ 断面ごとに切断平面＋矢視を立て Plan_JSON へ</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">図面から読んだ交点名と3Dモデルの通り芯を名前で突き合わせ、各断面の「切る位置・向き・範囲」を計画（Plan_JSON）に落とす流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>Make2D図面化パイプラインの<strong>頭脳</strong>です。2D図面から抽出した断面データ（統合JSON）を読み込み、<strong>3Dモデル側の通り芯交点と「名前」で照合</strong>します。たとえば図面に「X1通りで A-A断面」と書いてあれば、モデルの X1 通りの位置を探し当てて、そこに切断面を組み立てます。</p>
+    <p>断面は<strong>鉛直切断（断面図）・水平切断（床伏図・天井伏図）・立面ビュー</strong>の3種を自動で判別し、それぞれについて「切る面・見る向き（矢視）・切り取る範囲（クリップ）」をモデル空間に用意します。結果は <strong>Plan_JSON</strong> という計画データにまとめ、そのまま <a href="make2d-executor.html">GH_Make2DExecutor</a> へ渡します。3Dモデルの交点を渡さなくても、図面座標モードでJSONの内容だけから計画を出せるのも便利なところです。</p>
+    <p class="lead">※ 統合JSON＝2D図面から通り芯・断面符号・レベル線などを読み取って1本にまとめたデータ（<a href="section-data-json.html">GH_SectionDataJSON</a> が作る）。／ 矢視＝断面をどちら側から見るかの向き。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート（3系統）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Browse /<br>JsonPath / In_JSON</td><td>統合JSONの読み込み。ファイルパス指定でも、上流ノードから直接JSONを受けてもよい。</td></tr>
+          <tr><td class="port">ModelGridPts /<br>ModelGridLbls</td><td>3Dモデル側の通り芯交点の座標と名前ラベル（<a href="grid-intersect.html">GH_GridIntersect</a> 由来）。<strong>未接続でも図面座標モードで動く。</strong></td></tr>
+          <tr><td class="port">ClipDepth / SecWidth /<br>SecHeight / RotateDeg /<br>ElevDepth</td><td>クリップの奥行き・断面の幅／高さ・回転角・立面の奥行きなど、切り取り範囲の調整値。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート（3系統）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Plan_JSON</td><td>本命の出力。各断面の切断面・矢視方向・クリップ範囲をまとめた<strong>切断計画</strong>。Executorへ直結。</td></tr>
+          <tr><td class="port">ProductKey</td><td>断面に紐づく製品記号。<a href="ifc-attr-search-v2.html">IFC属性検索</a> の <span class="port" style="color:var(--accent)">SearchValue</span> へ直結して本体／附帯を絞り込める。</td></tr>
+          <tr><td class="port">CutPlanes / ViewDirs /<br>ClipBoxes / CutZs / Report</td><td>切断面・矢視方向・クリップボックス・切断高さのプレビュー用ジオメトリと、照合結果のログ。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">統合JSONを渡す</span><span class="step-body"><a href="section-data-json.html">GH_SectionDataJSON</a> が作った統合JSONを <span class="port" style="color:var(--accent)">In_JSON</span>（またはパスを <span class="port" style="color:var(--accent)">JsonPath</span>）へ入力する。</span></li>
+      <li><span class="step-title">モデルの通り芯交点をつなぐ</span><span class="step-body"><a href="grid-intersect.html">GH_GridIntersect</a> の交点座標・ラベルを <span class="port" style="color:var(--accent)">ModelGridPts / ModelGridLbls</span> へ。図面座標だけで済ませたい場合はここを未接続でもよい。</span></li>
+      <li><span class="step-title">範囲を調整する</span><span class="step-body"><span class="port" style="color:var(--accent)">ClipDepth / SecWidth / SecHeight</span> などで、断面の切り取り範囲・奥行きを整える。</span></li>
+      <li><span class="step-title">照合結果を確認する</span><span class="step-body"><span class="port" style="color:var(--accent)">Report</span> と <span class="port" style="color:var(--accent)">CutPlanes / ViewDirs</span> のプレビューで、各断面が正しい位置・向きに立っているか目で確かめる。</span></li>
+      <li><span class="step-title">Executorへ渡す</span><span class="step-body"><span class="port" style="color:var(--accent)">Plan_JSON</span> を <a href="make2d-executor.html">GH_Make2DExecutor</a> の <span class="port" style="color:var(--accent)">PlanJSON</span> へ。<span class="port" style="color:var(--accent)">ProductKey</span> は <a href="ifc-attr-search-v2.html">IFC属性検索</a> へつなぐと部材の絞り込みまで自動化できる。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <a class="chip chip-up" href="section-data-json.html">統合JSON生成 GH_SectionDataJSON</a>
+        <a class="chip chip-up" href="grid-intersect.html">通り芯交点抽出 GH_GridIntersect</a>
+        <a class="chip chip-up" href="section-lower.html">小文字断面 section_lower</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">GH_Make2DPlanner（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="make2d-executor.html">Make2D実行 GH_Make2DExecutor</a>
+        <a class="chip chip-down" href="ifc-attr-search-v2.html">IFC属性検索 v2</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">全体像は <a href="../pipeline.html">Make2Dパイプライン詳細図</a> で確認できます。</p>
+  </div>
+</section>
+
+<!-- 7. 実データでの流れ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実データでの流れ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧭</span> 専用サンプルは準備中 ― 実案件の統合JSON＋モデルで動かします</span>
+      <p class="sample-desc">プランナーは「2D図面から起こした統合JSON」と「3Dモデルの通り芯」が揃ってはじめて働くため、単体サンプルではなくパイプラインの中で試すのが分かりやすいです。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">2D図面を用意</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\02_2D図面.3dm</span> のように通り芯記号(X1,X2,Y1…)・断面符号(A-A)入りの図面から、上流ノードで統合JSONを作る。</span></li>
+        <li><span class="step-title">3Dモデルの交点を抽出</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> で <a href="grid-intersect.html">GH_GridIntersect</a> を走らせ、通り芯交点の座標・名前を得る。</span></li>
+        <li><span class="step-title">プランナーで照合</span><span class="step-body">統合JSONと交点を本ノードへ渡してsolve。<span class="port" style="color:var(--accent)">CutPlanes</span> のプレビューで、図面の断面がモデルの正しい通りに立ったか確認する。</span></li>
+        <li><span class="step-title">計画をExecutorへ</span><span class="step-body"><span class="port" style="color:var(--accent)">Plan_JSON</span> を <a href="make2d-executor.html">GH_Make2DExecutor</a> へ流し、実際の断面線を起こす。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 交点名が図面とモデルで一致していないと照合できない</div>
+        <p>プランナーは<strong>「名前」で図面とモデルを突き合わせます</strong>。図面側の通り芯符号（X1, Y2 など）と、モデル側の通り芯ラベルの表記が食い違っていると、その断面は位置が確定できません。上流で名前の付け方を揃えておくのが最重要ポイントです。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 水平切断のZ基準は 1FL＝Z0 が前提</div>
+        <p>水平切断（床伏図など）は切断高さ <span class="port" style="color:var(--accent)">CutZ</span> を計画に書き込みます。ここが1FL基準からずれると、下流の <a href="make2d-executor.html">Executor</a> で水平断面だけ線がゼロになる典型トラブルにつながります。Executor側のZオートフィットである程度は吸収されますが、まず計画のZ基準を確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> モデル交点なしの図面座標モードは配置基準が変わる</div>
+        <p><span class="port" style="color:var(--accent)">ModelGridPts</span> を未接続にすると、JSONの図面座標だけで計画を出せますが、<strong>断面の置かれる基準がモデル実座標ではなく図面座標になります</strong>。モデルと図面をぴったり重ねたいときは通り芯交点を接続してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\図面整理\<span class="fp-accent">GH_Make2DPlanner.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

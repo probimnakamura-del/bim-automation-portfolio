@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>BIM Dashboard 変換パイプライン監視 — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス bimd- で衝突回避
+   ①変換パイプラインが走る（別プロセス）
+   →②結果をWebhookで受信（POST → :8765）
+   →③ダッシュボードに状態表示（緑/黄/赤）＋死活監視
+   ============================================================ */
+.bimd-svg text { font-family: var(--font); }
+
+/* 左：別プロセス（ライノセラスに変換） */
+.bimd-proc    { fill: #0f1a30; stroke: var(--accent); stroke-width: 2; }
+.bimd-proctxt { fill: #e6ecff; font-size: 13px; font-weight: 800; }
+.bimd-gear    { fill: none; stroke: #8b96c4; stroke-width: 3.2; }
+.bimd-gear-c  { fill: #0f1a30; stroke: #8b96c4; stroke-width: 2.2; }
+.bimd-gear1   { transform-origin: 92px 256px; animation: bimdSpin 5.5s linear infinite; }
+.bimd-gear2   { transform-origin: 120px 268px; animation: bimdSpinR 5.5s linear infinite; }
+
+/* 矢印＋POSTデータドット */
+.bimd-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.4; opacity: .8; stroke-dasharray: 6 6; }
+.bimd-arrow-head  { fill: var(--accent); }
+.bimd-post        { fill: #ffffff; }
+.bimd-posttxt     { fill: var(--accent); font-size: 12px; font-weight: 800; }
+
+/* ブラウザ（ダッシュボード） */
+.bimd-browser   { fill: #0c1428; stroke: #34406a; stroke-width: 1.8; }
+.bimd-chrome    { fill: #141c33; }
+.bimd-dot       { fill: #46527d; }
+.bimd-urlpill   { fill: #0a1122; stroke: #34406a; stroke-width: 1; }
+.bimd-urltxt    { fill: #9aa7cc; font-size: 11px; font-weight: 600; }
+
+/* 状態円（緑/黄/赤にサイクル：監視の要なので信号色を許容） */
+.bimd-status-ring { fill: none; stroke: #223052; stroke-width: 5; }
+.bimd-status      { animation: bimdStatus 10s infinite; }
+.bimd-statustxt   { fill: #e6ecff; font-size: 13px; font-weight: 800; }
+.bimd-statussub   { fill: #9aa7cc; font-size: 11px; font-weight: 600; }
+
+/* イベント行 */
+.bimd-row     { fill: #101a30; stroke: #2a3352; stroke-width: 1; }
+.bimd-rowtxt  { fill: #cdd6f4; font-size: 11.5px; font-weight: 600; }
+.bimd-rowdot-ok { fill: #34d399; }
+.bimd-rowdot-run{ fill: #fbbf24; }
+.bimd-r1 { animation: bimdR1 10s infinite; }
+.bimd-r2 { animation: bimdR2 10s infinite; }
+.bimd-r3 { animation: bimdR3 10s infinite; }
+
+/* Teams通知（未設定＝グレー） */
+.bimd-bell    { fill: none; stroke: #5a6690; stroke-width: 2; }
+.bimd-belltxt { fill: #64748b; font-size: 10px; font-weight: 700; }
+
+/* テキスト */
+.bimd-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.bimd-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.bimd-prog-tr { fill: #223052; }
+.bimd-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.bimd-anim-proc  { animation: bimdProc 10s infinite; }
+.bimd-anim-arrow { animation: bimdArrow 10s infinite; }
+.bimd-anim-post  { animation: bimdPost 10s infinite; }
+.bimd-anim-brws  { animation: bimdBrws 10s infinite; }
+.bimd-l1 { animation: bimdL1 10s infinite; }
+.bimd-l2 { animation: bimdL2 10s infinite; }
+.bimd-l3 { animation: bimdL3 10s infinite; }
+.bimd-prog { animation: bimdProg 10s linear infinite; }
+
+@keyframes bimdSpin  { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+@keyframes bimdSpinR { from{transform:rotate(0)} to{transform:rotate(-360deg)} }
+
+@keyframes bimdProc {
+  0%,3%   { opacity:0; transform:translateX(-8px); }
+  8%      { opacity:1; transform:translateX(0); }
+  90%     { opacity:1; }
+  100%    { opacity:.7; }
+}
+@keyframes bimdArrow {
+  0%,30%  { opacity:0; }
+  38%     { opacity:.9; }
+  90%     { opacity:.9; }
+  100%    { opacity:.3; }
+}
+/* POSTドットが左プロセス→ブラウザへ飛ぶ */
+@keyframes bimdPost {
+  0%,32%   { opacity:0; transform:translate(0,0); }
+  37%      { opacity:1; transform:translate(0,0); }
+  52%      { opacity:1; transform:translate(150px,-54px); }
+  57%,100% { opacity:0; transform:translate(150px,-54px); }
+}
+@keyframes bimdBrws {
+  0%,10%  { opacity:.25; }
+  20%     { opacity:1; }
+  100%    { opacity:1; }
+}
+/* 状態円：受信前=グレー→受信で緑→黄（実行中）→緑（完了） */
+@keyframes bimdStatus {
+  0%,54%   { fill:#33406a; }
+  60%      { fill:#34d399; }
+  72%      { fill:#fbbf24; }
+  86%,100% { fill:#34d399; }
+}
+@keyframes bimdR1 { 0%,58%{opacity:0;transform:translateX(-6px)} 64%{opacity:1;transform:translateX(0)} 100%{opacity:1} }
+@keyframes bimdR2 { 0%,68%{opacity:0;transform:translateX(-6px)} 74%{opacity:1;transform:translateX(0)} 100%{opacity:1} }
+@keyframes bimdR3 { 0%,80%{opacity:0;transform:translateX(-6px)} 86%{opacity:1;transform:translateX(0)} 100%{opacity:1} }
+
+@keyframes bimdL1 { 0%{opacity:0} 4%{opacity:1} 29%{opacity:1} 34%{opacity:0} 100%{opacity:0} }
+@keyframes bimdL2 { 0%,34%{opacity:0} 39%{opacity:1} 56%{opacity:1} 61%{opacity:0} 100%{opacity:0} }
+@keyframes bimdL3 { 0%,61%{opacity:0} 66%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes bimdProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ops">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">運用・監視・事務</span>
+    <h1 class="node-title">BIM Dashboard <span style="opacity:.75;font-weight:700">変換パイプライン監視</span></h1>
+    <p class="catch">「あの<span class="em">IFC自動仕分けは今どうなってる？</span>」を<span class="em">一目で確認</span>——パイプラインの生存確認とTeams通知の司令盤。</p>
+    <div class="badges">
+      <span class="badge st-frozen">休止気味（3月以降ログなし）</span>
+      <span class="badge st-ver">ローカルWebサーバ localhost:8765</span>
+      <span class="badge st-ver">監視系ツール</span>
+    </div>
+  </div>
+</section>
+
+<!-- 休止ノードの注意帯（ヘッダ直下） -->
+<section class="section" style="padding-top:20px;padding-bottom:20px">
+  <div class="wrap">
+    <div class="trap-box" style="border-color:color-mix(in srgb,var(--muted) 55%,var(--line));border-left-color:var(--muted);background:color-mix(in srgb,var(--muted) 10%,var(--card))">
+      <div class="trap-title" style="color:#b6c0e0"><span class="ico">💤</span> このツールは現在ほぼ休止中です</div>
+      <p>死活監視ログ（<code>watchdog.log</code>）が <strong>2026-03 で途切れており</strong>、約3.5ヶ月更新がありません。Teams通知の宛先も未設定のままです。ただし<strong>コードは壊れておらず、サーバを起動すればいつでも再稼働できる</strong>状態です。「昔こういう監視画面を作っていた」という記録として読んでください。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg bimd-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="変換パイプラインの実行結果をWebhookで受信しダッシュボードに状態表示するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="bimd-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="bimd-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① 別プロセス：ライノセラスに変換 ===== -->
+        <g class="bimd-anim-proc">
+          <rect class="bimd-proc" x="34" y="176" width="188" height="132" rx="12"></rect>
+          <text class="bimd-proctxt" x="128" y="200" text-anchor="middle">ライノセラスに変換</text>
+          <text class="bimd-small" x="128" y="218" text-anchor="middle" style="font-size:11px">実行_メイン.py（別プロセス）</text>
+          <!-- 歯車：IFC仕分け -->
+          <g class="bimd-gear1">
+            <circle class="bimd-gear"   cx="92" cy="256" r="18"></circle>
+            <circle class="bimd-gear-c" cx="92" cy="256" r="7"></circle>
+            <line class="bimd-gear" x1="92" y1="235" x2="92" y2="277"></line>
+            <line class="bimd-gear" x1="71" y1="256" x2="113" y2="256"></line>
+            <line class="bimd-gear" x1="77" y1="241" x2="107" y2="271"></line>
+            <line class="bimd-gear" x1="77" y1="271" x2="107" y2="241"></line>
+          </g>
+          <g class="bimd-gear2">
+            <circle class="bimd-gear"   cx="120" cy="268" r="12"></circle>
+            <circle class="bimd-gear-c" cx="120" cy="268" r="5"></circle>
+            <line class="bimd-gear" x1="120" y1="254" x2="120" y2="282"></line>
+            <line class="bimd-gear" x1="106" y1="268" x2="134" y2="268"></line>
+          </g>
+          <text class="bimd-small" x="128" y="298" text-anchor="middle" style="font-size:11px">ifc_split / ifc_update</text>
+        </g>
+
+        <!-- 矢印＋POSTラベル -->
+        <g class="bimd-anim-arrow">
+          <line class="bimd-arrow-shaft" x1="224" y1="234" x2="372" y2="182"></line>
+          <polygon class="bimd-arrow-head" points="374,181 359,181 366,193"></polygon>
+          <text class="bimd-posttxt" x="288" y="196" text-anchor="middle">POST /webhook</text>
+          <text class="bimd-small" x="288" y="212" text-anchor="middle" style="font-size:11px">→ :8765</text>
+        </g>
+        <circle class="bimd-anim-post bimd-post" cx="224" cy="234" r="5"></circle>
+
+        <!-- ===== ②③ ブラウザ ダッシュボード ===== -->
+        <g class="bimd-anim-brws">
+          <rect class="bimd-browser" x="380" y="96" width="374" height="286" rx="10"></rect>
+          <!-- クロムバー -->
+          <path class="bimd-chrome" d="M380,106 a10,10 0 0 1 10,-10 h354 a10,10 0 0 1 10,10 v20 h-374 z"></path>
+          <circle class="bimd-dot" cx="396" cy="112" r="4"></circle>
+          <circle class="bimd-dot" cx="410" cy="112" r="4"></circle>
+          <circle class="bimd-dot" cx="424" cy="112" r="4"></circle>
+          <rect class="bimd-urlpill" x="440" y="104" width="230" height="16" rx="8"></rect>
+          <text class="bimd-urltxt" x="450" y="116">http://localhost:8765/</text>
+
+          <!-- 状態円 -->
+          <circle class="bimd-status-ring" cx="440" cy="184" r="26"></circle>
+          <circle class="bimd-status" cx="440" cy="184" r="20"></circle>
+          <text class="bimd-statustxt" x="478" y="178">パイプライン状態</text>
+          <text class="bimd-statussub" x="478" y="196">watchdog 死活監視 中</text>
+
+          <!-- イベント行（順に積み上がる） -->
+          <g class="bimd-r1">
+            <rect class="bimd-row" x="400" y="232" width="334" height="30" rx="6"></rect>
+            <circle class="bimd-rowdot-ok" cx="416" cy="247" r="5"></circle>
+            <text class="bimd-rowtxt" x="430" y="251">ifc_split … IFC仕分け 完了（412部材）</text>
+          </g>
+          <g class="bimd-r2">
+            <rect class="bimd-row" x="400" y="268" width="334" height="30" rx="6"></rect>
+            <circle class="bimd-rowdot-run" cx="416" cy="283" r="5"></circle>
+            <text class="bimd-rowtxt" x="430" y="287">ifc_update … マスター更新 実行中…</text>
+          </g>
+          <g class="bimd-r3">
+            <rect class="bimd-row" x="400" y="304" width="334" height="30" rx="6"></rect>
+            <circle class="bimd-rowdot-ok" cx="416" cy="319" r="5"></circle>
+            <text class="bimd-rowtxt" x="430" y="323">notify … ダッシュボードへ記録 完了</text>
+          </g>
+
+          <!-- Teams通知（未設定＝グレー） -->
+          <path class="bimd-bell" d="M712,150 a10,10 0 0 1 20,0 c0,10 4,13 4,16 h-28 c0,-3 4,-6 4,-16 z"></path>
+          <line class="bimd-bell" x1="718" y1="170" x2="726" y2="170"></line>
+          <text class="bimd-belltxt" x="722" y="188" text-anchor="middle">Teams 未設定</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="bimd-cap bimd-l1" x="400" y="430" text-anchor="middle">① 別プロセスが IFC仕分け／マスター更新 を実行</text>
+        <text class="bimd-cap bimd-l2" x="400" y="430" text-anchor="middle">② 結果を Webhook で受信（POST → localhost:8765）</text>
+        <text class="bimd-cap bimd-l3" x="400" y="430" text-anchor="middle">③ 状態を可視化（緑/黄/赤）＋ 死活監視・Teams通知</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">別プロセスの変換パイプラインが送ってくる実行結果を受信し、ブラウザのダッシュボードに状態（緑/黄/赤）とイベント履歴を映すまでを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>別のツール <a href="rhino-henkan.html">「ライノセラスに変換」</a>（Tekla の IFC を自動で仕分け・マスター更新するパイプライン）が、いま<strong>動いているのか・成功したのか・どこで止まったのか</strong>を、ブラウザ画面で見えるようにする<strong>監視ダッシュボード</strong>です。</p>
+    <p>仕組みはシンプル。変換パイプラインが処理を終えるたびに、裏で <strong>Webhook（8765番ポートへのお知らせ）</strong>を飛ばします。このツールがそれを受け取り、状態を<strong>信号のような色（緑＝完了／黄＝実行中／赤＝失敗）</strong>とイベント履歴で表示します。さらに<strong>死活監視（watchdog）</strong>で「サーバが落ちていないか」を見張り、異常時には<strong>Teams通知</strong>を送る仕掛けも入っています（通知の宛先設定は現状プレースホルダのまま）。</p>
+    <p class="lead">※ Webhook＝プログラム同士が「これが起きたよ」と自動でお知らせし合う仕組み。／ 死活監視（watchdog）＝サーバやプロセスが生きているかを定期チェックすること。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力（Webサーバの操作/結果） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入口と出口（ローカルWebサーバ）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>受け取るもの（入口）</caption>
+        <thead><tr><th>エンドポイント</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port"><span class="io-dir in">受信</span>POST /webhook</td><td>変換パイプライン側の <code>webhook_sender.notify_dashboard()</code> が送ってくる実行結果。これで状態が切り替わる。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>見られるもの（出口）</caption>
+        <thead><tr><th>エンドポイント / 出力</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port"><span class="io-dir out">画面</span>GET /</td><td>ブラウザで開くダッシュボード本体。状態円とイベント履歴を表示。</td></tr>
+          <tr><td class="port"><span class="io-dir out">API</span>/api/events</td><td>イベント履歴を機械可読（JSON）で取得。</td></tr>
+          <tr><td class="port"><span class="io-dir out">API</span>/api/status</td><td>現在の状態（緑/黄/赤など）を機械可読で取得。</td></tr>
+          <tr><td class="port"><span class="io-dir out">通知</span>Teams Webhook</td><td>異常時のTeams通知（宛先は未設定プレースホルダ）。</td></tr>
+          <tr><td class="port"><span class="io-dir out">ログ</span>watchdog.log</td><td>死活監視の記録ファイル。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">サーバを起動する</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">C:\Python1\BIM_Dashboard\webhook_server.py</span> を実行。ローカルの <kbd>localhost:8765</kbd> で待ち受け開始。</span></li>
+      <li><span class="step-title">ダッシュボードを開く</span><span class="step-body">ブラウザで <kbd>http://localhost:8765/</kbd> を開く。ここが状態表示の画面。</span></li>
+      <li><span class="step-title">変換パイプラインを回す</span><span class="step-body"><a href="rhino-henkan.html">「ライノセラスに変換」</a> 側を実行すると、処理のたびに <code>notify_dashboard()</code> が状態をPOSTしてくる。</span></li>
+      <li><span class="step-title">状態を見る</span><span class="step-body">状態円が<strong>緑（完了）／黄（実行中）／赤（失敗）</strong>に切り替わり、イベント履歴が積み上がる。<code>/api/status</code> で機械的に取得も可能。</span></li>
+      <li><span class="step-title">通知を有効化する（任意）</span><span class="step-body">Teams通知を使うなら <code>teams_config.py</code> の <code>ALERT_WEBHOOK_URL</code> / <code>MEMBER_WEBHOOK_URL</code> に実際の宛先を設定する（現状は空のプレースホルダ）。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">監視対象</span>
+        <a class="chip chip-up" href="rhino-henkan.html">IFC自動変換（ライノセラスに変換）</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">BIM Dashboard（このツール）</span>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px"><a href="rhino-henkan.html">「ライノセラスに変換」</a> が実行結果を送ってくる<strong>受け皿・見える化係</strong>です。送信元は <code>from BIM_Dashboard.webhook_sender import notify_dashboard</code> の形でこのフォルダをimportしているため、<strong>フォルダ名や場所を変えると送信側が壊れます</strong>（下の注意点を参照）。目的が近い <a href="bim-shield.html">BIM_Shield</a> とは今のところコード連携はありません。</p>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> フォルダ名・場所を変えると送信側が壊れる</div>
+        <p>別プロジェクト「ライノセラスに変換」が <code>from BIM_Dashboard.webhook_sender import notify_dashboard, notify_progress</code> と<strong>パッケージimport</strong>しています。<code>C:\Python1\BIM_Dashboard\</code> を移動・改名すると、そちらのimportが即エラーになります。<code>progress.json</code> / <code>events.json</code> / <code>pipeline_state.json</code> も相対パスで初期化される対象なので消さないこと。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Teams通知は未設定（そのままでは飛ばない）</div>
+        <p><code>teams_config.py</code> の <code>ALERT_WEBHOOK_URL</code> / <code>MEMBER_WEBHOOK_URL</code> は<strong>2件ともプレースホルダのまま</strong>で、実際にTeamsへ通知された形跡はありません。通知を使うなら本物のIncoming Webhook URLを設定してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> サーバが起動していないと記録されない</div>
+        <p>ダッシュボードのサーバが立っていないと、送信側は「サーバー未起動のため記録をスキップ」となり履歴に残りません。監視したいときは<strong>先に <code>webhook_server.py</code> を起動</strong>しておいてください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 現在ほぼ休止（3.5ヶ月ログなし）</div>
+        <p>直近の稼働記録が 2026-03 で途切れています。壊れてはいませんが、実運用として使うかは要判断です。目的の近い <a href="bim-shield.html">BIM_Shield</a> との将来的な統合候補という位置づけです。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\BIM_Dashboard\<span class="fp-accent">webhook_server.py</span>　＋　webhook_sender.py / watchdog.py / teams_config.py
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ops">運用・監視・事務の一覧</a>
+      <a href="rhino-henkan.html">監視対象：ライノセラスに変換</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

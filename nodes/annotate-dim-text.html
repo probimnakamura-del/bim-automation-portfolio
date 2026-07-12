@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>注記ツール annotate_dim_text — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス adt- で衝突回避
+   ①図面上の2点をクリック → ②寸法線が伸びて数値が出る → ③連続モードで次々連結＋文字注記
+   ============================================================ */
+.adt-svg text { font-family: var(--font); }
+
+/* 図面の部材（下敷き） */
+.adt-mem   { fill: #0f1a30; stroke: #6f7db0; stroke-width: 2; opacity: .85; }
+.adt-memln { stroke: #6f7db0; stroke-width: 1.6; opacity: .6; }
+
+/* カーソル（十字＋クリックリング） */
+.adt-cursor { stroke: #e6ecff; stroke-width: 1.6; }
+.adt-click  { fill: none; stroke: var(--accent); stroke-width: 2.4; }
+
+/* 寸法線（端部＝円マーク） */
+.adt-dimln   { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-dasharray: 100; }
+.adt-ext     { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: .75; }
+.adt-tick    { fill: none; stroke: var(--accent); stroke-width: 2; }
+.adt-dimtxt  { fill: #e6ecff; font-size: 13px; font-weight: 800; }
+.adt-dimtxt.sub { fill: var(--accent); }
+
+/* 文字注記＋下線 */
+.adt-note    { fill: #e6ecff; font-size: 14px; font-weight: 800; }
+.adt-underln { stroke: var(--accent); stroke-width: 2; }
+
+/* テキスト */
+.adt-cap   { fill: #e6ecff; font-size: 16px; font-weight: 700; }
+
+/* 進捗バー */
+.adt-prog-tr { fill: #223052; }
+.adt-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.adt-cur     { animation: adtCur 10s infinite; }
+.adt-clk1    { animation: adtClk1 10s infinite; }
+.adt-clk2    { animation: adtClk2 10s infinite; }
+.adt-d1      { animation: adtDraw1 10s infinite; }
+.adt-d1txt   { animation: adtTxt1 10s infinite; }
+.adt-d1grp   { animation: adtGrp1 10s infinite; }
+.adt-d2grp   { animation: adtGrp2 10s infinite; }
+.adt-d3grp   { animation: adtGrp3 10s infinite; }
+.adt-d2      { animation: adtDraw2 10s infinite; }
+.adt-d3      { animation: adtDraw3 10s infinite; }
+.adt-noteg   { animation: adtNote 10s infinite; }
+.adt-l1      { animation: adtL1 10s infinite; }
+.adt-l2      { animation: adtL2 10s infinite; }
+.adt-l3      { animation: adtL3 10s infinite; }
+.adt-prog    { animation: adtProg 10s linear infinite; }
+
+/* カーソルが点1→点2→次へと移動 */
+@keyframes adtCur {
+  0%,4%   { opacity: 0; transform: translate(0,0); }
+  8%      { opacity: 1; transform: translate(0,0); }        /* 点1に到着 */
+  22%     { opacity: 1; transform: translate(150px,0); }    /* 点2へ移動 */
+  40%     { opacity: 1; transform: translate(150px,0); }
+  52%     { opacity: 1; transform: translate(300px,0); }    /* 次の点へ */
+  66%     { opacity: 1; transform: translate(300px,0); }
+  72%     { opacity: 0; transform: translate(300px,0); }
+  100%    { opacity: 0; }
+}
+/* クリックリング（点1） */
+@keyframes adtClk1 {
+  0%,7%   { opacity: 0; transform: scale(.3); }
+  10%     { opacity: 1; transform: scale(1); }
+  16%     { opacity: 0; transform: scale(1.5); }
+  100%    { opacity: 0; }
+}
+/* クリックリング（点2） */
+@keyframes adtClk2 {
+  0%,22%  { opacity: 0; transform: scale(.3); }
+  26%     { opacity: 1; transform: scale(1); }
+  32%     { opacity: 0; transform: scale(1.5); }
+  100%    { opacity: 0; }
+}
+/* 1本目の寸法線が伸びる（点1→点2確定後） */
+@keyframes adtDraw1 { 0%,27%{stroke-dashoffset:100} 40%{stroke-dashoffset:0} 100%{stroke-dashoffset:0} }
+@keyframes adtTxt1  { 0%,38%{opacity:0} 44%{opacity:1} 100%{opacity:1} }
+@keyframes adtGrp1  { 0%,26%{opacity:0} 30%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+/* 連続モード: 2本目・3本目が次々連結 */
+@keyframes adtGrp2  { 0%,52%{opacity:0} 56%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes adtGrp3  { 0%,60%{opacity:0} 64%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes adtDraw2 { 0%,54%{stroke-dashoffset:100} 62%{stroke-dashoffset:0} 100%{stroke-dashoffset:0} }
+@keyframes adtDraw3 { 0%,62%{stroke-dashoffset:100} 70%{stroke-dashoffset:0} 100%{stroke-dashoffset:0} }
+/* 文字注記＋下線 */
+@keyframes adtNote  { 0%,72%{opacity:0;transform:translateY(6px)} 80%{opacity:1;transform:translateY(0)} 96%{opacity:1} 100%{opacity:0} }
+@keyframes adtL1 { 0%{opacity:0} 4%{opacity:1} 34%{opacity:1} 39%{opacity:0} 100%{opacity:0} }
+@keyframes adtL2 { 0%,39%{opacity:0} 44%{opacity:1} 66%{opacity:1} 71%{opacity:0} 100%{opacity:0} }
+@keyframes adtL3 { 0%,71%{opacity:0} 76%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes adtProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="rhino">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">Rhinoコマンド・配布ツール</span>
+    <h1 class="node-title">注記ツール <span style="opacity:.75;font-weight:700">annotate_dim_text</span></h1>
+    <p class="catch"><span class="em">クリックだけ</span>で、寸法と文字注記を<span class="em">次々と連続作図</span>——GH不要のRhinoコマンド。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中（チーム配布済）</span>
+      <span class="badge st-dist">配布zipあり / IFC方式</span>
+      <span class="badge st-ver">Rhino 8（IronPython2.7 / CPython3両対応）</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg adt-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="2点クリックで寸法線が伸び、連続モードで次々と寸法と文字注記を作図するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="adt-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="adt-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- 図面の下敷き（柱3本＝寸法を取る対象） -->
+        <rect class="adt-mem" x="150" y="150" width="26" height="150" rx="1"></rect>
+        <rect class="adt-mem" x="300" y="150" width="26" height="150" rx="1"></rect>
+        <rect class="adt-mem" x="450" y="150" width="26" height="150" rx="1"></rect>
+        <rect class="adt-mem" x="600" y="150" width="26" height="150" rx="1"></rect>
+        <line class="adt-memln" x1="130" y1="300" x2="650" y2="300"></line>
+
+        <!-- 補助線（点から寸法線へ） -->
+        <g class="adt-d1grp">
+          <line class="adt-ext" x1="163" y1="150" x2="163" y2="120"></line>
+          <line class="adt-ext" x1="313" y1="150" x2="313" y2="120"></line>
+        </g>
+        <g class="adt-d2grp">
+          <line class="adt-ext" x1="463" y1="150" x2="463" y2="120"></line>
+        </g>
+        <g class="adt-d3grp">
+          <line class="adt-ext" x1="613" y1="150" x2="613" y2="120"></line>
+        </g>
+
+        <!-- ===== ① 1本目の寸法（点1→点2クリック） ===== -->
+        <g class="adt-d1grp">
+          <line class="adt-dimln adt-d1" pathLength="100" x1="163" y1="128" x2="313" y2="128"></line>
+          <circle class="adt-tick" cx="163" cy="128" r="4"></circle>
+          <circle class="adt-tick" cx="313" cy="128" r="4"></circle>
+          <text class="adt-dimtxt adt-d1txt" x="238" y="120" text-anchor="middle">1,500</text>
+        </g>
+
+        <!-- ===== ② 連続モード: 2本目 ===== -->
+        <g class="adt-d2grp">
+          <line class="adt-dimln adt-d2" pathLength="100" x1="313" y1="128" x2="463" y2="128"></line>
+          <circle class="adt-tick" cx="463" cy="128" r="4"></circle>
+          <text class="adt-dimtxt" x="388" y="120" text-anchor="middle">1,500</text>
+        </g>
+        <!-- 3本目 -->
+        <g class="adt-d3grp">
+          <line class="adt-dimln adt-d3" pathLength="100" x1="463" y1="128" x2="613" y2="128"></line>
+          <circle class="adt-tick" cx="613" cy="128" r="4"></circle>
+          <text class="adt-dimtxt" x="538" y="120" text-anchor="middle">1,500</text>
+        </g>
+
+        <!-- ===== ③ 文字注記＋下線 ===== -->
+        <g class="adt-noteg">
+          <text class="adt-note" x="388" y="345" text-anchor="middle">H-400×200（大梁）</text>
+          <line class="adt-underln" x1="300" y1="352" x2="476" y2="352"></line>
+        </g>
+
+        <!-- カーソル（十字）＋クリックリング -->
+        <g class="adt-cur">
+          <line class="adt-cursor" x1="163" y1="118" x2="163" y2="138"></line>
+          <line class="adt-cursor" x1="153" y1="128" x2="173" y2="128"></line>
+        </g>
+        <circle class="adt-click adt-clk1" cx="163" cy="128" r="12"></circle>
+        <circle class="adt-click adt-clk2" cx="313" cy="128" r="12"></circle>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="adt-cap adt-l1" x="400" y="422" text-anchor="middle">① 図面上の2点をクリック</text>
+        <text class="adt-cap adt-l2" x="400" y="422" text-anchor="middle">② 寸法線がスッと伸びて数値が出る（連続モードで次々連結）</text>
+        <text class="adt-cap adt-l3" x="400" y="422" text-anchor="middle">③ 文言も同じ流れで配置（下線付きも可）</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">2点をクリックすると寸法線が伸びて数値ラベルが現れ、連続モードなら点を打つたびに寸法が次々連結。文字注記も同じ操作感で置ける様子を10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>Rhinoのコマンドラインから起動する<strong>GH不要の注記ツール</strong>です。<strong>2点をクリックするだけで寸法線を引き</strong>、連続モードなら点を打つたびに寸法が次々つながります。数値は <strong>Enterで実測値そのまま</strong>、数字を打てば<strong>表示だけ上書き</strong>も可能。文字（文言）の配置、既存寸法の位置調整・分割、他オブジェクトからの見た目コピーまで、図面の注記まわりを1本でこなします。</p>
+    <p>起動は Rhinoで <kbd>注記</kbd> または <kbd>ANNO</kbd> と打つだけ。<strong>AnnotateTools.rui の9個のアイコン</strong>を入れておけば、「寸法」「文字」「記号」「編集」「位置調整」「分割」「コピー適応」「設定」など、使いたい機能へワンクリックで直行できます。よく使う設定は<strong>プリセット</strong>に名前を付けて保存・呼び出しできます。</p>
+    <p class="lead">※ 寸法の向きは「自動／整列／水平／垂直／ライン」から選べ、「自動」は水平・垂直を即決し、斜め2点なら周辺の通り芯・部材から角度を検出して提案します。／ 端部マークは既定で円。専用の寸法スタイル <code>ADT_Annotate</code> を使うので、既存の寸法設定を壊しません。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>操作と結果</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>操作（入力）</caption>
+        <thead><tr><th>操作</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">2点ピック</td><td>寸法の始点・終点をクリック。連続モードなら3点目以降も打つたびに隣接間を寸法化。</td></tr>
+          <tr><td class="port">数値 / Enter</td><td>寸法値は <strong>Enter＝実測値</strong>、数字入力＝<strong>表示だけ上書き</strong>。</td></tr>
+          <tr><td class="port">向き / 連続 /<br>オフセット</td><td>始点ピック中にクリックで切替。向き＝自動/整列/水平/垂直/ライン。オフセット>0なら「側」を1点指すだけで一定距離に配置。</td></tr>
+          <tr><td class="port">起動モード<br>（sticky）</td><td>ツールバーボタンが <code>adt_start_mode</code> にトークンを入れて起動 → メニューを飛ばして機能へ直行。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>結果（出力）</caption>
+        <thead><tr><th>結果</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">寸法オブジェクト</td><td>Rhinoドキュメントへ寸法を直接作図（端部＝円マーク／専用スタイル ADT_Annotate）。</td></tr>
+          <tr><td class="port">文字オブジェクト</td><td>文言をフォント・色・高さの設定どおりに配置（下線オプションあり）。</td></tr>
+          <tr><td class="port">プリセット /<br>設定ファイル</td><td>よく使う設定を <code>%APPDATA%\AnnotateTools</code> に保存。ツールフォルダ直下の同名JSONは<strong>共有プリセット</strong>として合成読込（配布zipに同梱すればチーム標準を配れる）。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">起動する</span><span class="step-body">Rhinoのコマンド欄で <kbd>注記</kbd> か <kbd>ANNO</kbd> と入力（またはツールバーの <a href="#dist">AnnotateTools</a> アイコンをクリック）。</span></li>
+      <li><span class="step-title">機能を選ぶ</span><span class="step-body">メニューから「寸法」「文字」などを選択。ツールバーの各ボタンからならメニューを飛ばして直行できる。</span></li>
+      <li><span class="step-title">寸法を打つ</span><span class="step-body">始点→終点を<strong>2点クリック</strong>。値は <kbd>Enter</kbd> で実測、数字を打てば表示上書き。<strong>連続寸法ON</strong>なら点を打つほど寸法が連結。</span></li>
+      <li><span class="step-title">向き・オフセットを調整</span><span class="step-body">始点ピック中に <strong>向き / 連続 / オフセット</strong> をクリックで切替。斜め線は「自動」が周辺の通り芯・部材角度を提案。</span></li>
+      <li><span class="step-title">文字を置く</span><span class="step-body">「文字」で文言を入力し1点で配置。フォント・色・高さは設定に従う（下線も可）。</span></li>
+      <li><span class="step-title">整える</span><span class="step-body">ずれた寸法は「位置調整」で再オフセット、「コピー適応」で既存注記の見た目を取り込み、「プリセット」でよく使う設定を保存・呼出。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <p class="flow-solo"><b>単独で使えます。</b> GHパイプラインに依存しない独立コマンドで、どんな2D図面にも後から注記を足せます。Make2Dで起こした図面や既存の詳細図の仕上げ（寸法入れ・部材名記入）に手作業で使うのに向いています。GHノード版として <b>GH_AnnotateDim</b> が別に存在します（実行方式は本ツールの流儀を踏襲）。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">📐</span> サンプルモデル\02_2D図面.3dm</span>
+      <p class="sample-desc">通り芯記号（X1,X2,Y1…）・断面符号（A-A）・タイトル文字入りの2D図面。通り芯抽出・断面符号抽出・統合JSON・注記ツールのデモ用。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">図面を開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\02_2D図面.3dm</span> をRhinoで開く。</span></li>
+        <li><span class="step-title">ツールを起動</span><span class="step-body">コマンド欄で <kbd>注記</kbd> と入力し「寸法」を選ぶ。</span></li>
+        <li><span class="step-title">通り芯間を寸法化</span><span class="step-body">X1→X2の通り芯を2点クリック。連続モードで X2→Y1… と打てば芯々寸法が一気に並ぶ。「自動」向きが通り芯の角度を拾う。</span></li>
+        <li><span class="step-title">部材名を注記</span><span class="step-body">「文字」で「H-400×200」などの部材名を配置し、下線オプションで見出し風に仕上げる。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section" id="dist">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・配布のしくみ</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">📦</span> 配布zipは「解凍したフォルダが本体」（IFC方式）</div>
+        <p>チーム配布用zip（<code>注記ツール配布\</code> でビルド）は、<strong>解凍先フォルダが自分の場所を自動認識する</strong>ため、社内でパスを揃える必要がありません。どこに解凍しても動きます。付属の <code>AnnotateTools.rui</code> を組み込むと9個のアイコンが並び、専用寸法スタイル <code>ADT_Annotate</code> も用意されます。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 設定はAPPDATA、共有プリセットはフォルダ直下</div>
+        <p>個人の設定・プリセットは <code>%APPDATA%\AnnotateTools</code> に保存されます（ツールの置き場所に依存しない）。一方、ツールフォルダ直下の <code>annotate_dim_text_presets.json</code> は<strong>共有プリセット</strong>として合成読込されるので、ここに入れて配布すればチーム標準設定を配れます。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 既存の寸法スタイルは壊さない設計</div>
+        <p>本ツールは専用スタイル <code>ADT_Annotate</code> を使い、既定表示（小数第一位まで・端部＝円マーク）を起動時にそのスタイルへ適用します。他の寸法スタイルには触らないので安心して使えますが、見た目を揃えたいときは「寸法に反映」で現行スタイルへ設定を書き込めます。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> IronPython2.7 / CPython3 両対応を維持</div>
+        <p>Rhino 7（IronPython2.7）でも動くよう両対応で書かれています。改修する場合は <code>f-string</code> や <code>:=</code> などPy3専用構文を持ち込まないでください（IronPython側で全停止します）。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\<span class="fp-accent">annotate_dim_text.py</span>（配布ビルダー: 注記ツール配布\_make_dist_zip.py / ツールバー: AnnotateTools.rui）
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-rhino">Rhinoコマンド・配布ツールの一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>JIS鋼材断面パーサ steel_profile_parser — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス spp- で衝突回避
+   ①断面呼称の文字列 → ②H/BOX…の寸法へ分解 → ③断面ループを3Dメッシュ化
+   左→右のパイプライン。3ステージが順にフェードインし、そのまま残る。
+   ============================================================ */
+.spp-svg text { font-family: var(--font); }
+.spp-mono { font-family: "Cascadia Code", Consolas, monospace; }
+
+/* 文字列タグ */
+.spp-tag-box { fill: #0f1424; stroke: var(--accent); stroke-width: 1.6; }
+.spp-tag-txt { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+
+/* 断面プロファイル（H形） */
+.spp-sec  { fill: #1a1608; stroke: var(--accent); stroke-width: 2.6;
+            stroke-linejoin: round; stroke-dasharray: 100; }
+/* 寸法補助線・ラベル */
+.spp-dimline { stroke: var(--accent); stroke-width: 1.2; opacity: .85; }
+.spp-tick    { stroke: var(--accent); stroke-width: 1.2; }
+.spp-dimtxt  { fill: var(--accent); font-size: 12px; font-weight: 700; }
+.spp-param   { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 3Dメッシュ */
+.spp-3d-front { fill: #1a1608; stroke: var(--accent); stroke-width: 2.4; stroke-linejoin: round; }
+.spp-3d-back  { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: .38; stroke-linejoin: round; }
+.spp-3d-edge  { stroke: var(--accent); stroke-width: 1.3; opacity: .5; }
+.spp-3d-top   { fill: var(--accent); opacity: .14; }
+.spp-3d-mesh  { stroke: var(--accent); stroke-width: .9; opacity: .35; }
+
+/* 矢印＋流れるドット */
+.spp-shaft { fill: none; stroke: var(--accent); stroke-width: 2.4; opacity: .8; }
+.spp-head  { fill: var(--accent); }
+.spp-dot   { fill: #ffffff; }
+
+/* テキスト */
+.spp-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.spp-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.spp-prog-tr { fill: #223052; }
+.spp-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.spp-a       { animation: sppA 10s infinite; }
+.spp-arr1    { animation: sppArr1 10s infinite; }
+.spp-flow1   { animation: sppFlow1 10s infinite; }
+.spp-secg    { animation: sppSecG 10s infinite; }
+.spp-secp    { animation: sppSecP 10s infinite; }
+.spp-dim     { animation: sppDim 10s infinite; }
+.spp-arr2    { animation: sppArr2 10s infinite; }
+.spp-flow2   { animation: sppFlow2 10s infinite; }
+.spp-3d      { animation: spp3d 10s infinite; }
+.spp-l1      { animation: sppL1 10s infinite; }
+.spp-l2      { animation: sppL2 10s infinite; }
+.spp-l3      { animation: sppL3 10s infinite; }
+.spp-prog    { animation: sppProg 10s linear infinite; }
+
+@keyframes sppA {
+  0%,2%   { opacity: 0; transform: translateY(6px); }
+  7%      { opacity: 1; transform: translateY(0); }
+  100%    { opacity: 1; transform: translateY(0); }
+}
+@keyframes sppArr1 { 0%,24%{opacity:0} 30%{opacity:1} 100%{opacity:1} }
+@keyframes sppFlow1 {
+  0%,25%   { opacity: 0; transform: translateX(0); }
+  28%      { opacity: 1; transform: translateX(0); }
+  38%      { opacity: 1; transform: translateX(64px); }
+  41%,100% { opacity: 0; transform: translateX(64px); }
+}
+@keyframes sppSecG { 0%,30%{opacity:0} 40%{opacity:1} 100%{opacity:1} }
+@keyframes sppSecP { 0%,34%{stroke-dashoffset:100} 54%{stroke-dashoffset:0} 100%{stroke-dashoffset:0} }
+@keyframes sppDim  { 0%,46%{opacity:0} 58%{opacity:1} 100%{opacity:1} }
+@keyframes sppArr2 { 0%,54%{opacity:0} 60%{opacity:1} 100%{opacity:1} }
+@keyframes sppFlow2 {
+  0%,55%   { opacity: 0; transform: translateX(0); }
+  58%      { opacity: 1; transform: translateX(0); }
+  68%      { opacity: 1; transform: translateX(64px); }
+  71%,100% { opacity: 0; transform: translateX(64px); }
+}
+@keyframes spp3d {
+  0%,60%  { opacity: 0; transform: translateX(14px); }
+  74%     { opacity: 1; transform: translateX(0); }
+  100%    { opacity: 1; transform: translateX(0); }
+}
+@keyframes sppL1 { 0%{opacity:0} 4%{opacity:1} 28%{opacity:1} 33%{opacity:0} 100%{opacity:0} }
+@keyframes sppL2 { 0%,33%{opacity:0} 37%{opacity:1} 58%{opacity:1} 62%{opacity:0} 100%{opacity:0} }
+@keyframes sppL3 { 0%,62%{opacity:0} 66%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes sppProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="steel">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">鉄骨モデリング支援</span>
+    <h1 class="node-title">JIS鋼材断面パーサ <span style="opacity:.75;font-weight:700">steel_profile_parser</span></h1>
+    <p class="catch"><span class="em">断面名の文字列</span>を渡すだけで、<span class="em">正しい3D断面</span>が生まれる——鉄骨モデリングの土台となる部品。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">共有ライブラリ</span>
+      <span class="badge st-ver">Rhino8 Python3</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg spp-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="断面名の文字列を解析して寸法に分解し3Dメッシュを生成するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="spp-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="spp-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① 断面呼称の文字列 ===== -->
+        <g class="spp-a">
+          <text class="spp-small" x="132" y="188" text-anchor="middle">断面呼称</text>
+          <rect class="spp-tag-box" x="42" y="204" width="180" height="54" rx="10"></rect>
+          <text class="spp-mono spp-tag-txt" x="132" y="238" text-anchor="middle">H-400×200×8×13</text>
+        </g>
+
+        <!-- 矢印①→② -->
+        <g class="spp-arr1">
+          <line class="spp-shaft" x1="228" y1="231" x2="298" y2="231"></line>
+          <polygon class="spp-head" points="300,231 288,224 288,238"></polygon>
+        </g>
+        <circle class="spp-flow1 spp-dot" cx="228" cy="231" r="5"></circle>
+
+        <!-- ===== ② H形断面プロファイル ＋ 寸法 ===== -->
+        <g class="spp-secg">
+          <path class="spp-sec spp-secp" pathLength="100"
+                d="M354,158 L438,158 L438,176 L407,176 L407,284 L438,284 L438,302 L354,302 L354,284 L385,284 L385,176 L354,176 Z"></path>
+          <g class="spp-dim">
+            <!-- B（幅）寸法 -->
+            <line class="spp-dimline" x1="354" y1="146" x2="438" y2="146"></line>
+            <line class="spp-tick" x1="354" y1="141" x2="354" y2="151"></line>
+            <line class="spp-tick" x1="438" y1="141" x2="438" y2="151"></line>
+            <text class="spp-dimtxt" x="396" y="137" text-anchor="middle">B=200</text>
+            <!-- 分解された寸法 -->
+            <text class="spp-param" x="396" y="326" text-anchor="middle">H=400  tw=8  tf=13</text>
+          </g>
+        </g>
+
+        <!-- 矢印②→③ -->
+        <g class="spp-arr2">
+          <line class="spp-shaft" x1="478" y1="231" x2="548" y2="231"></line>
+          <polygon class="spp-head" points="550,231 538,224 538,238"></polygon>
+        </g>
+        <circle class="spp-flow2 spp-dot" cx="478" cy="231" r="5"></circle>
+
+        <!-- ===== ③ 3D H形鋼メッシュ ===== -->
+        <g class="spp-3d">
+          <!-- 上フランジ天面（3D感） -->
+          <polygon class="spp-3d-top" points="584,184 652,184 692,154 624,154"></polygon>
+          <line class="spp-3d-mesh" x1="600" y1="184" x2="640" y2="154"></line>
+          <line class="spp-3d-mesh" x1="632" y1="184" x2="672" y2="154"></line>
+          <!-- 奥のI断面 -->
+          <path class="spp-3d-back"
+                d="M624,154 L692,154 L692,169 L667,169 L667,259 L692,259 L692,274 L624,274 L624,259 L649,259 L649,169 L624,169 Z"></path>
+          <!-- 奥行きエッジ -->
+          <line class="spp-3d-edge" x1="584" y1="184" x2="624" y2="154"></line>
+          <line class="spp-3d-edge" x1="652" y1="184" x2="692" y2="154"></line>
+          <line class="spp-3d-edge" x1="584" y1="304" x2="624" y2="274"></line>
+          <line class="spp-3d-edge" x1="652" y1="304" x2="692" y2="274"></line>
+          <!-- 手前のI断面（実体） -->
+          <path class="spp-3d-front"
+                d="M584,184 L652,184 L652,199 L627,199 L627,289 L652,289 L652,304 L584,304 L584,289 L609,289 L609,199 L584,199 Z"></path>
+          <text class="spp-small" x="640" y="334" text-anchor="middle">3D H形鋼メッシュ</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="spp-cap spp-l1" x="400" y="428" text-anchor="middle">① 断面呼称の文字列を読み取る</text>
+        <text class="spp-cap spp-l2" x="400" y="428" text-anchor="middle">② H/BOX/PIPE… の寸法に分解する</text>
+        <text class="spp-cap spp-l3" x="400" y="428" text-anchor="middle">③ 断面ループを押し出して3Dメッシュ生成</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">「H-400×200×8×13」のような断面名 → 種別を判定して寸法へ分解 → その断面の3Dメッシュを生成、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>鉄骨の断面は「H-400×200×8×13」「BOX-500×500×19」「φ-267.4×8.0」のように、<strong>記号＋寸法の文字列</strong>で呼びます。このツールは、その断面呼称の文字列を読み取り、<strong>正しい断面形状の3Dメッシュ（立体）に変換する縁の下のパーサ（解析器）</strong>です。</p>
+    <p>JISや現場でよく使われる表記ゆらぎ（<span class="em">H / BH / HW / HM / HN、□ / ■、[ / C、φ / PIPE / STK</span> など）を吸収して、H形・角形鋼管・円形鋼管・みぞ形・山形・カットティー・鋼板の<strong>7種</strong>に振り分け、H・B・板厚などの寸法に分解します。断面積の概算も出せます。</p>
+    <p class="lead">※ 単体で図面を描くツールではなく、鉄骨モデリング系ツールや各種インポータが内部で呼び出す「部品」です。「断面名さえ渡せば形になる」土台を担います。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（渡すもの・返るもの）</h2>
+    <p class="lead" style="margin-bottom:16px">GHの端子ではなく、コードから呼び出す関数群です。断面名の文字列を渡すと、寸法・断面積・3Dメッシュが返ります。</p>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>渡すもの → 返るもの</caption>
+        <thead><tr><th>操作</th><th>結果</th></tr></thead>
+        <tbody>
+          <tr><td class="port">parse_profile("H-…")</td><td>断面種別と寸法の辞書。例 <span class="port" style="color:var(--accent)">{type:'H', H, B, tw, tf}</span>。未対応の書式なら <strong>None</strong>。</td></tr>
+          <tr><td class="port">section_area(dict)</td><td>その断面の<strong>断面積（mm²）</strong>の概算値。数量・重量計算に流用できる。</td></tr>
+          <tr><td class="port">断面ループ→押し出し</td><td>2D断面ポリゴンを生成し、部材長ぶん押し出した<strong>3Dメッシュ（rhino3dm）</strong>。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>対応する断面（7種）</caption>
+        <thead><tr><th>種別</th><th>例の文字列</th></tr></thead>
+        <tbody>
+          <tr><td class="port">H</td><td>H形鋼 — <span class="spp-mono">H-400×200×8×13</span>（BH/HW/HM/HN も可）</td></tr>
+          <tr><td class="port">BOX</td><td>角形鋼管 — <span class="spp-mono">BOX-500×500×19</span>（□/RHS/BCR 等）</td></tr>
+          <tr><td class="port">PIPE</td><td>円形鋼管 — <span class="spp-mono">φ-267.4×8.0</span>（PIPE/STK 等）</td></tr>
+          <tr><td class="port">C</td><td>みぞ形鋼 — <span class="spp-mono">[-200×90×9×14</span>（C/MC/PFC）</td></tr>
+          <tr><td class="port">L</td><td>山形鋼 — <span class="spp-mono">L-150×90×12</span></td></tr>
+          <tr><td class="port">T</td><td>カットティー — <span class="spp-mono">T-200×200×10×15</span>（CT）</td></tr>
+          <tr><td class="port">PL</td><td>鋼板・平鋼 — <span class="spp-mono">PL-400×16</span>（FB/FL）</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">断面呼称を用意する</span><span class="step-body">モデル化したい部材の断面名を文字列で用意（例 <span class="spp-mono">"H-400x200x8x13"</span>）。IFCやTeklaの断面名をそのまま渡せます。</span></li>
+      <li><span class="step-title">種別を自動判定</span><span class="step-body">接頭辞のゆらぎ（<span class="spp-mono">BH / HW / □ / [</span> など）を吸収して、H/BOX/PIPE/C/L/T/PLのどれかに振り分けます。</span></li>
+      <li><span class="step-title">寸法へ分解する</span><span class="step-body"><span class="port" style="color:var(--accent)">{type:'H', H, B, tw, tf}</span> のような寸法辞書に分解。想定外の書式なら <strong>None</strong> を返すので、呼び出し側でチェックします。</span></li>
+      <li><span class="step-title">断面ループ→押し出し</span><span class="step-body">2Dの断面ポリゴンを生成し、部材長ぶん押し出して3Dメッシュ（rhino3dm）にします。</span></li>
+      <li><span class="step-title">モデルへ配置</span><span class="step-body">生成したメッシュを他ツールがRhino/GHへ配置。断面積が要れば <span class="port" style="color:var(--accent)">section_area</span> で概算も取得できます。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="chip chip-self">steel_profile_parser（このツール）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="tekla-gh-import.html">Tekla/Solibri IFC→GHインポータ群</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">インポータ等が断面名を形にするために内部で呼び出しますが、<b>断面名を持つあらゆる場面で単体のライブラリとしても使えます</b>。</p>
+  </div>
+</section>
+
+<!-- 7. 実データでの使いどころ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実データでの使いどころ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🔩</span> 鉄骨モデルの断面文字列 → 3D形状</span>
+      <p class="sample-desc">IFCやTeklaから拾った断面名を、モデルや数量に落とし込む場面で使います（専用のサンプル.3dmは不要）。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">断面名を集める</span><span class="step-body">インポータが読み取った部材の断面名文字列（<span class="spp-mono">H-…/BOX-…/φ-…</span>）をそのまま本パーサへ渡します。</span></li>
+        <li><span class="step-title">形状に変換</span><span class="step-body">返った寸法・3DメッシュをそのままRhino/GHへ配置。表記ゆらぎは自動で吸収されます。</span></li>
+        <li><span class="step-title">数量にも流用</span><span class="step-body">断面積（mm²）を <span class="port" style="color:var(--accent)">section_area</span> で取り出し、重量・数量集計に回せます。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Python3専用ライブラリ。クラシックGHでは動かない</div>
+        <p>型ヒント（<span class="spp-mono">typing</span>）を使うPython3モジュールです。<strong>IronPython2.7のクラシックGHコンポーネントでは全停止</strong>します。Rhino8のPython3ノードやvenvから使ってください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 未対応の書式は None が返る</div>
+        <p>全角/半角の混在や想定外の表記は解析できず <strong>None</strong> になります。呼び出し側で必ずNoneチェックをして、未対応の断面名を弾いてください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 断面積はフィレット無視の近似</div>
+        <p>R部（フィレット）を無視した概算です。ざっくりした重量・数量には十分ですが、<strong>厳密な断面性能が要るときはカタログ値</strong>を使ってください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\<span class="fp-accent">steel_profile_parser.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-steel">鉄骨モデリング支援の一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>IFCスキーマ変換 IFC_Converter — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス ifcc- で衝突回避
+   ①IFC2X3（非対応エンティティ入り） → ②置換→Migrator→検証 → ③IFC4
+   ============================================================ */
+.ifcc-svg text { font-family: var(--font); }
+
+.ifcc-box    { fill: #0f1a30; stroke: var(--accent); stroke-width: 2.2; }
+.ifcc-ent    { fill: #1b2740; stroke: #3a4a72; stroke-width: 1.4; }
+.ifcc-entok  { fill: #12332a; stroke: #34d399; stroke-width: 1.6; }
+.ifcc-bad    { fill: #3a1720; stroke: #f87171; stroke-width: 1.8; }
+.ifcc-enttxt { fill: #9aa7cc; font-size: 10px; font-weight: 600; }
+.ifcc-badtxt { fill: #fca5a5; font-size: 10px; font-weight: 700; }
+.ifcc-oktxt  { fill: #86efac; font-size: 10px; font-weight: 700; }
+
+/* バージョンチップ */
+.ifcc-vchip-old { fill: #241a0d; stroke: #fbbf24; stroke-width: 1.6; }
+.ifcc-vtxt-old  { fill: #fbbf24; font-size: 12px; font-weight: 800; }
+.ifcc-vchip-new { fill: #17123a; stroke: var(--accent); stroke-width: 1.6; }
+.ifcc-vtxt-new  { fill: var(--accent); font-size: 12px; font-weight: 800; }
+
+/* 処理ステップ */
+.ifcc-arrow     { fill: none; stroke: var(--accent); stroke-width: 2.6; opacity: .9; }
+.ifcc-arrowhead { fill: var(--accent); }
+.ifcc-spin      { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round;
+                  stroke-dasharray: 62 34; transform-box: fill-box; transform-origin: center; }
+.ifcc-step-box  { fill: #12183a; stroke: var(--accent); stroke-width: 1.4; }
+.ifcc-step-txt  { fill: var(--accent); font-size: 11.5px; font-weight: 700; }
+
+/* 検証レポート */
+.ifcc-report { fill: #0c1428; stroke: #34406a; stroke-width: 1.4; }
+.ifcc-rep-ok { fill: #86efac; font-size: 11px; font-weight: 700; }
+.ifcc-rep-wn { fill: #fbbf24; font-size: 11px; font-weight: 700; }
+
+.ifcc-lbl { fill: #e6ecff; font-size: 14px; font-weight: 700; }
+.ifcc-cap { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+
+.ifcc-prog-tr { fill: #223052; }
+.ifcc-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション ---- */
+.ifcc-in    { animation: ifccIn    10s infinite; }
+.ifcc-fixed { animation: ifccFixed 10s infinite; }
+.ifcc-proc  { animation: ifccProc  10s infinite; }
+.ifcc-spin  { animation: ifccSpin 1.4s linear infinite; }
+.ifcc-s1    { animation: ifccS1 10s infinite; }
+.ifcc-s2    { animation: ifccS2 10s infinite; }
+.ifcc-s3    { animation: ifccS3 10s infinite; }
+.ifcc-arw   { animation: ifccArw 10s infinite; }
+.ifcc-out   { animation: ifccOut 10s infinite; }
+.ifcc-l1    { animation: ifccL1 10s infinite; }
+.ifcc-l2    { animation: ifccL2 10s infinite; }
+.ifcc-l3    { animation: ifccL3 10s infinite; }
+.ifcc-prog  { animation: ifccProg 10s linear infinite; }
+
+@keyframes ifccIn    { 0%,2%{opacity:0} 8%{opacity:1} 60%{opacity:1} 66%,100%{opacity:0} }
+@keyframes ifccFixed { 0%,38%{opacity:0} 44%{opacity:1} 62%{opacity:1} 66%,100%{opacity:0} }
+@keyframes ifccProc  { 0%,33%{opacity:0} 38%{opacity:1} 64%{opacity:1} 68%,100%{opacity:0} }
+@keyframes ifccSpin  { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
+@keyframes ifccS1 { 0%,37%{opacity:0} 42%{opacity:1} 64%{opacity:1} 68%,100%{opacity:0} }
+@keyframes ifccS2 { 0%,45%{opacity:0} 50%{opacity:1} 64%{opacity:1} 68%,100%{opacity:0} }
+@keyframes ifccS3 { 0%,53%{opacity:0} 58%{opacity:1} 64%{opacity:1} 68%,100%{opacity:0} }
+@keyframes ifccArw { 0%,55%{opacity:0} 61%{opacity:1} 66%{opacity:1} 70%,100%{opacity:0} }
+@keyframes ifccOut {
+  0%,66%  { opacity:0; transform: translateY(8px); }
+  72%     { opacity:1; transform: translateY(0); }
+  97%     { opacity:1; }
+  100%    { opacity:0; }
+}
+@keyframes ifccL1 { 0%{opacity:0} 3%{opacity:1} 30%{opacity:1} 34%{opacity:0} 100%{opacity:0} }
+@keyframes ifccL2 { 0%,34%{opacity:0} 38%{opacity:1} 62%{opacity:1} 66%{opacity:0} 100%{opacity:0} }
+@keyframes ifccL3 { 0%,66%{opacity:0} 70%{opacity:1} 97%{opacity:1} 100%{opacity:0} }
+@keyframes ifccProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ifc">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">IFC・データ連携</span>
+    <h1 class="node-title">IFCスキーマ変換 <span style="opacity:.75;font-weight:700">IFC_Converter</span></h1>
+    <p class="catch">古い規格の<span class="em">IFC2X3</span>を、いまの<span class="em">IFC4</span>へ。非対応の部品も自動でパッチして変換する。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">v1.0.0</span>
+      <span class="badge st-ver">CLI / GUI</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg ifcc-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="IFC2X3を非対応エンティティ置換とMigratorでIFC4へ変換するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="ifcc-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="ifcc-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== 入力：IFC2X3 ===== -->
+        <g class="ifcc-in">
+          <rect class="ifcc-vchip-old" x="70" y="98" width="86" height="26" rx="13"></rect>
+          <text class="ifcc-vtxt-old" x="113" y="115" text-anchor="middle">IFC 2X3</text>
+          <rect class="ifcc-box" x="60" y="132" width="190" height="180" rx="6"></rect>
+          <rect class="ifcc-ent" x="88" y="158" width="134" height="26" rx="3"></rect>
+          <text class="ifcc-enttxt" x="98" y="175">IfcWall / IfcBeam</text>
+          <rect class="ifcc-ent" x="88" y="192" width="134" height="26" rx="3"></rect>
+          <text class="ifcc-enttxt" x="98" y="209">IfcColumn</text>
+          <!-- 非対応エンティティ（赤） -->
+          <rect class="ifcc-bad" x="88" y="226" width="134" height="30" rx="3"></rect>
+          <text class="ifcc-badtxt" x="98" y="238">⚠ 非対応</text>
+          <text class="ifcc-badtxt" x="98" y="251">IfcEquipmentElement</text>
+          <text class="ifcc-lbl" x="155" y="336" text-anchor="middle">IFC2X3（古い規格）</text>
+        </g>
+        <!-- 置換後の緑オーバーレイ -->
+        <g class="ifcc-fixed">
+          <rect class="ifcc-entok" x="88" y="226" width="134" height="30" rx="3"></rect>
+          <text class="ifcc-oktxt" x="98" y="238">✓ 置換済</text>
+          <text class="ifcc-oktxt" x="98" y="251">互換エンティティへ</text>
+        </g>
+
+        <!-- ===== 変換プロセス（中央） ===== -->
+        <g class="ifcc-proc">
+          <circle class="ifcc-spin" cx="400" cy="128" r="17"></circle>
+        </g>
+        <g class="ifcc-s1">
+          <rect class="ifcc-step-box" x="322" y="158" width="156" height="26" rx="6"></rect>
+          <text class="ifcc-step-txt" x="400" y="175" text-anchor="middle">① entity_patches で置換</text>
+        </g>
+        <g class="ifcc-s2">
+          <rect class="ifcc-step-box" x="322" y="192" width="156" height="26" rx="6"></rect>
+          <text class="ifcc-step-txt" x="400" y="209" text-anchor="middle">② Migrator でスキーマ移行</text>
+        </g>
+        <g class="ifcc-s3">
+          <rect class="ifcc-step-box" x="322" y="226" width="156" height="26" rx="6"></rect>
+          <text class="ifcc-step-txt" x="400" y="243" text-anchor="middle">③ validate で検証</text>
+        </g>
+        <g class="ifcc-arw">
+          <line class="ifcc-arrow" x1="256" y1="278" x2="544" y2="278"></line>
+          <polygon class="ifcc-arrowhead" points="544,278 528,270 528,286"></polygon>
+        </g>
+
+        <!-- ===== 出力：IFC4 ===== -->
+        <g class="ifcc-out">
+          <rect class="ifcc-vchip-new" x="554" y="98" width="86" height="26" rx="13"></rect>
+          <text class="ifcc-vtxt-new" x="597" y="115" text-anchor="middle">IFC 4</text>
+          <rect class="ifcc-box" x="550" y="132" width="190" height="180" rx="6"></rect>
+          <rect class="ifcc-entok" x="578" y="158" width="134" height="26" rx="3"></rect>
+          <text class="ifcc-oktxt" x="588" y="175">IfcWall / IfcBeam</text>
+          <rect class="ifcc-entok" x="578" y="192" width="134" height="26" rx="3"></rect>
+          <text class="ifcc-oktxt" x="588" y="209">IfcColumn</text>
+          <rect class="ifcc-entok" x="578" y="226" width="134" height="26" rx="3"></rect>
+          <text class="ifcc-oktxt" x="588" y="243">互換エンティティ</text>
+          <!-- 検証レポート -->
+          <rect class="ifcc-report" x="550" y="322" width="190" height="26" rx="4"></rect>
+          <text class="ifcc-rep-ok" x="562" y="339">✓ 検証OK</text>
+          <text class="ifcc-rep-wn" x="648" y="339">⚠ 警告 n件</text>
+          <text class="ifcc-lbl" x="645" y="372" text-anchor="middle">IFC4（新しい規格）</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="ifcc-cap ifcc-l1" x="400" y="428" text-anchor="middle">① 古いIFC2X3（非対応の部品が混じる）</text>
+        <text class="ifcc-cap ifcc-l2" x="400" y="428" text-anchor="middle">② 非対応を置換 → Migratorで移行 → 検証</text>
+        <text class="ifcc-cap ifcc-l3" x="400" y="428" text-anchor="middle">③ IFC4ファイル＋検証レポートを出力</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">非対応エンティティを含むIFC2X3 → entity_patchesで事前置換し、Migratorでスキーマ移行、validateで検証 → IFC4と警告レポートを出力する流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p><strong>古い規格「IFC2X3」で書かれたファイルを、いまの「IFC4」へ変換する専用ツール</strong>です。古いTeklaや他ソフトから出てきたIFCが2X3のままだと、最近のビューアや変換ツールでうまく扱えないことがあります。そこで、このツールでIFC4へ揃えておくと後工程が安定します。</p>
+    <p>変換エンジンには ifcopenshell の Migrator を使いますが、<strong>Migratorが対応していないIFC2X3固有の部品</strong>（例：<code>IfcEquipmentElement</code> など）がそのままだと変換に失敗します。本ツールは <code>entity_patches.py</code> で<strong>非対応エンティティを事前に互換のものへ置き換えてから</strong>変換するため、素のMigratorより通りやすいのが特長です。最後に <code>ifcopenshell.validate</code> で検証し、警告・エラーをレポートします。<strong>結合機能はなく、あくまでスキーマ変換だけ</strong>を担います。</p>
+    <p class="lead">※ スキーマ＝IFCの「規格バージョン」。IFC2X3は2000年代の版、IFC4は現行版で使える部品や属性が増えている。／ Migrator＝ifcopenshellが持つ版間変換の仕組み。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（入れるファイル・出るファイル）</h2>
+    <p class="lead" style="margin:-6px 0 16px">GHノードではなく、1つのIFCを渡すとIFC4版を返すコマンド／GUIツールです。</p>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力（1ファイル）</caption>
+        <thead><tr><th>操作</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">input.ifc</td><td>変換したい<strong>IFC2X3</strong>のファイル。非対応エンティティが混ざっていても事前置換で吸収する。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力</caption>
+        <thead><tr><th>結果</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">output_IFC4.ifc</td><td>IFC4へ変換したファイル。</td></tr>
+          <tr><td class="port">検証レポート</td><td><code>validate</code>による警告・エラーの一覧。変換が妥当かをここで確認する。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">変換対象のIFC2X3を用意</span><span class="step-body">古い規格のIFC（バージョンが2X3のもの）を手元に置く。</span></li>
+      <li><span class="step-title">ツールを起動</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">IFC_Converter\start.bat</span> を実行（共有venv <code>C:\Python1\.venv</code> をアクティブ化して起動）。CLI版・GUI版どちらでも使える。</span></li>
+      <li><span class="step-title">入力ファイルを指定</span><span class="step-body">変換したい <span class="port" style="color:var(--accent)">input.ifc</span> を選ぶ。</span></li>
+      <li><span class="step-title">変換を実行</span><span class="step-body"><b>①</b> entity_patchesで非対応クラスを事前置換 → <b>②</b> Migratorでスキーマ移行 → <b>③</b> validateで検証、が自動で走る。</span></li>
+      <li><span class="step-title">レポートを確認</span><span class="step-body">出力 <span class="port" style="color:var(--accent)">output_IFC4.ifc</span> と一緒に出る<strong>警告・エラー</strong>に目を通す。警告が多い場合は元データを見直す。</span></li>
+      <li><span class="step-title">後工程へ渡す</span><span class="step-body">IFC4化したファイルは、結合（<a href="join-ifc-model.html">Join_IFC_model</a>／<a href="join-if-model.html">Join_IF_model</a>）や <a href="ifc2rhino.html">ifc2rhino</a> の.3dm変換に流すと安定しやすい。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <span class="flow-solo">特になし（IFC2X3ファイルを直接入力します）。前処理として <a href="ifc-clipper.html">IFC編集ツール</a> で軽量化してから変換する使い方も。</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">IFC_Converter（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="join-ifc-model.html">IFC原点キューブ結合 Join_IFC_model</a>
+        <a class="chip chip-down" href="join-if-model.html">Tekla色転写結合 Join_IF_model</a>
+        <a class="chip chip-down" href="ifc2rhino.html">IFC⇔Rhino変換 ifc2rhino</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">「規格をIFC4に揃える」下ごしらえ役。結合や3dm変換の<strong>前段</strong>に置くと後工程のトラブルが減ります。</p>
+  </div>
+</section>
+
+<!-- 7. 実データでためす -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実データでためす</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> 手元のIFC2X3ファイル</span>
+      <p class="sample-desc">専用のサンプル.3dmはありません。古い規格のIFC（2X3）を1つ用意して試すのがいちばん確実です。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">規格を確認</span><span class="step-body">IFCファイル先頭付近の <code>FILE_SCHEMA(('IFC2X3'))</code> の記述で古い規格かを確認。</span></li>
+        <li><span class="step-title">変換してみる</span><span class="step-body">start.batから起動し、その2X3ファイルを <span class="port" style="color:var(--accent)">input.ifc</span> に指定して実行。</span></li>
+        <li><span class="step-title">結果を見比べる</span><span class="step-body">出力の <code>FILE_SCHEMA(('IFC4'))</code> になっていること、レポートに致命的エラーが無いことを確認。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> やるのは「スキーマ変換」だけ。結合はしない</div>
+        <p>複数のIFCを1つにまとめる機能はありません。<strong>版を揃える</strong>のが役割なので、結合したいときは変換後に <a href="join-ifc-model.html">Join_IFC_model</a> や <a href="join-if-model.html">Join_IF_model</a> を使ってください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 事前置換は「既知の非対応クラス」だけ</div>
+        <p><code>entity_patches.py</code> が置き換えるのは、あらかじめ登録された非対応エンティティです。<strong>未知の非対応クラス</strong>が混ざっていると変換で警告・エラーが出ることがあります。必ず検証レポートを確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 共有venv（.venv）に依存</div>
+        <p>ifcopenshellなどを含む共有仮想環境 <code>C:\Python1\.venv</code> を使います。この環境が壊れる／消えると起動できません。start.batが失敗するときはvenvの状態を先に確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 変換後の検証は必ず目視</div>
+        <p>版間変換は形状や属性の解釈が微妙に変わることがあります。<code>validate</code>の警告・エラーに必ず目を通し、重要なモデルは変換前後をビューアで見比べてください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\IFC_Converter\<span class="fp-accent">ifc_converter.py</span>（core / cli / gui / entity_patches に分離・起動は start.bat）
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ifc">IFC・データ連携の一覧</a>
+      <a href="ifc2rhino.html">ifc2rhino へ</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

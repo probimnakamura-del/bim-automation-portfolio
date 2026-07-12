@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Tekla/Solibri IFC→GHインポータ群 — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス tgi- で衝突回避
+   ①IFCをマルチスレッドで一気に形状変換 → ②メッシュをDataTree(枝分かれ)に整列
+   → ③各パーツに属性(keys/values)を添付
+   ============================================================ */
+.tgi-svg text { font-family: var(--font); }
+
+/* IFC ドキュメント */
+.tgi-doc-body { fill: #0e1830; stroke: var(--accent); stroke-width: 2.2; }
+.tgi-doc-corner { fill: #1b2a4c; stroke: var(--accent); stroke-width: 1.6; }
+.tgi-doc-line { stroke: var(--accent); stroke-width: 1.6; opacity: .5; }
+
+/* スレッドレーン */
+.tgi-lane      { fill: none; stroke: #34406a; stroke-width: 8; stroke-linecap: round; }
+.tgi-lane-hot  { fill: none; stroke: var(--accent); stroke-width: 2; opacity:.45; stroke-dasharray: 4 6; }
+.tgi-thread    { fill: #ffffff; }
+.tgi-cpu-box   { fill: #12203c; stroke: var(--accent); stroke-width: 1.8; }
+.tgi-cpu-txt   { fill: var(--accent); font-size: 11px; font-weight: 800; }
+
+/* DataTree */
+.tgi-trunk   { fill: none; stroke: var(--accent); stroke-width: 2.6; }
+.tgi-branch  { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 120; }
+.tgi-node    { fill: #12203c; stroke: var(--accent); stroke-width: 2; }
+.tgi-mesh    { fill: #0f1a30; stroke: var(--accent); stroke-width: 1.8; }
+.tgi-mesh-wire { fill: none; stroke: var(--accent); stroke-width: 1; opacity: .55; }
+.tgi-path-lb { fill: #9aa7cc; font-size: 11px; font-weight: 700; }
+
+/* 属性タグ */
+.tgi-tag     { fill: #21182f; stroke: var(--accent); stroke-width: 1.3; }
+.tgi-tag-txt { fill: #e6ecff; font-size: 10.5px; font-weight: 700; }
+
+/* GHキャンバス枠 */
+.tgi-canvas  { fill: none; stroke: var(--ok); stroke-width: 2.4; stroke-dasharray: 8 6; }
+.tgi-canvas-lb { fill: var(--ok); font-size: 12px; font-weight: 800; }
+
+/* テキスト */
+.tgi-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.tgi-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.tgi-prog-tr { fill: #223052; }
+.tgi-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.tgi-b1     { animation: tgiB1 10s infinite; }
+.tgi-th1    { animation: tgiTh1 10s infinite; }
+.tgi-th2    { animation: tgiTh2 10s infinite; }
+.tgi-th3    { animation: tgiTh3 10s infinite; }
+.tgi-b2     { animation: tgiB2 10s infinite; }
+.tgi-brA    { animation: tgiBranch 10s infinite; }
+.tgi-meshA  { animation: tgiMesh 10s infinite; }
+.tgi-b3     { animation: tgiB3 10s infinite; }
+.tgi-tagA   { animation: tgiTag 10s infinite; }
+.tgi-canvasA{ animation: tgiCanvas 10s infinite; }
+.tgi-l1     { animation: tgiL1 10s infinite; }
+.tgi-l2     { animation: tgiL2 10s infinite; }
+.tgi-l3     { animation: tgiL3 10s infinite; }
+.tgi-prog   { animation: tgiProg 10s linear infinite; }
+
+@keyframes tgiB1 { 0%{opacity:0} 4%{opacity:1} 34%{opacity:1} 40%,100%{opacity:0} }
+/* スレッドのドットが並列レーンを流れる */
+@keyframes tgiTh1 {
+  0%,6%   { opacity:0; transform: translateX(0); }
+  10%     { opacity:1; transform: translateX(0); }
+  30%     { opacity:1; transform: translateX(150px); }
+  34%,100%{ opacity:0; transform: translateX(150px); }
+}
+@keyframes tgiTh2 {
+  0%,10%  { opacity:0; transform: translateX(0); }
+  14%     { opacity:1; transform: translateX(0); }
+  32%     { opacity:1; transform: translateX(150px); }
+  36%,100%{ opacity:0; transform: translateX(150px); }
+}
+@keyframes tgiTh3 {
+  0%,8%   { opacity:0; transform: translateX(0); }
+  12%     { opacity:1; transform: translateX(0); }
+  31%     { opacity:1; transform: translateX(150px); }
+  35%,100%{ opacity:0; transform: translateX(150px); }
+}
+@keyframes tgiB2 { 0%,36%{opacity:0} 42%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+/* 枝が伸びる */
+@keyframes tgiBranch {
+  0%,40%  { stroke-dashoffset: 120; }
+  56%     { stroke-dashoffset: 0; }
+  100%    { stroke-dashoffset: 0; }
+}
+/* メッシュがフェードイン */
+@keyframes tgiMesh {
+  0%,50%  { opacity:0; transform: scale(.7); }
+  60%     { opacity:1; transform: scale(1); }
+  100%    { opacity:1; }
+}
+@keyframes tgiB3 { 0%,64%{opacity:0} 70%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+/* 属性タグが枝に付く */
+@keyframes tgiTag {
+  0%,66%  { opacity:0; transform: translateX(14px); }
+  74%     { opacity:1; transform: translateX(0); }
+  96%     { opacity:1; }
+  100%    { opacity:0; }
+}
+/* GHキャンバス枠フラッシュ */
+@keyframes tgiCanvas { 0%,68%{opacity:0} 74%{opacity:.9} 80%{opacity:.4} 86%{opacity:.9} 96%{opacity:.6} 100%{opacity:0} }
+@keyframes tgiL1 { 0%{opacity:0} 4%{opacity:1} 33%{opacity:1} 39%{opacity:0} 100%{opacity:0} }
+@keyframes tgiL2 { 0%,39%{opacity:0} 44%{opacity:1} 62%{opacity:1} 67%{opacity:0} 100%{opacity:0} }
+@keyframes tgiL3 { 0%,67%{opacity:0} 72%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes tgiProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ifc">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">IFC・データ連携</span>
+    <h1 class="node-title">Tekla／Solibri IFC → GH インポータ群</h1>
+    <p class="catch">IFC を <span class="em">Grasshopper の中へドサッと取り込む</span>——メッシュ＋属性つきの DataTree で、<span class="em">マルチスレッドだから速い</span>。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">GH Python3 ノード ＋ Hops サーバー</span>
+      <span class="badge st-ver">要 ifcopenshell</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg tgi-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="IFCをマルチスレッドで変換しDataTreeへ整列、属性を添付するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="tgi-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="tgi-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① IFCをマルチスレッドで一気に形状変換 ===== -->
+        <g class="tgi-b1">
+          <!-- IFC ドキュメント -->
+          <rect class="tgi-doc-body" x="70" y="176" width="66" height="86" rx="4"></rect>
+          <polygon class="tgi-doc-corner" points="122,176 136,190 122,190"></polygon>
+          <line class="tgi-doc-line" x1="80" y1="206" x2="126" y2="206"></line>
+          <line class="tgi-doc-line" x1="80" y1="218" x2="126" y2="218"></line>
+          <line class="tgi-doc-line" x1="80" y1="230" x2="112" y2="230"></line>
+          <text class="tgi-small" x="103" y="196" text-anchor="middle" style="fill:var(--accent);font-weight:800">IFC</text>
+          <!-- 並列レーン ×3 -->
+          <line class="tgi-lane" x1="150" y1="192" x2="300" y2="192"></line>
+          <line class="tgi-lane" x1="150" y1="219" x2="300" y2="219"></line>
+          <line class="tgi-lane" x1="150" y1="246" x2="300" y2="246"></line>
+          <line class="tgi-lane-hot" x1="150" y1="192" x2="300" y2="192"></line>
+          <line class="tgi-lane-hot" x1="150" y1="219" x2="300" y2="219"></line>
+          <line class="tgi-lane-hot" x1="150" y1="246" x2="300" y2="246"></line>
+          <!-- 流れるスレッドドット -->
+          <circle class="tgi-thread tgi-th1" cx="150" cy="192" r="5"></circle>
+          <circle class="tgi-thread tgi-th2" cx="150" cy="219" r="5"></circle>
+          <circle class="tgi-thread tgi-th3" cx="150" cy="246" r="5"></circle>
+          <!-- CPUコア表現 -->
+          <rect class="tgi-cpu-box" x="150" y="272" width="150" height="22" rx="5"></rect>
+          <text class="tgi-cpu-txt" x="225" y="287" text-anchor="middle">全コア並列（ifcopenshell）</text>
+        </g>
+
+        <!-- ===== ② DataTreeに整列 ＋ ③ 属性添付 ===== -->
+        <g class="tgi-b2">
+          <!-- 幹 -->
+          <path class="tgi-trunk" d="M360,225 h34"></path>
+          <circle class="tgi-node" cx="356" cy="225" r="7"></circle>
+          <!-- 枝（アセンブリ0/1） -->
+          <path class="tgi-branch tgi-brA" pathLength="120" d="M394,225 C420,225 430,150 460,150"></path>
+          <path class="tgi-branch tgi-brA" pathLength="120" d="M394,225 C420,225 430,300 460,300"></path>
+          <!-- 枝先ノード＋メッシュ -->
+          <g class="tgi-meshA" style="transform-box:fill-box;transform-origin:center">
+            <rect class="tgi-mesh" x="466" y="126" width="52" height="48" rx="4"></rect>
+            <path class="tgi-mesh-wire" d="M466,150 h52 M492,126 v48 M466,126 l52,48 M518,126 l-52,48"></path>
+            <rect class="tgi-mesh" x="466" y="276" width="52" height="48" rx="4"></rect>
+            <path class="tgi-mesh-wire" d="M466,300 h52 M492,276 v48 M466,276 l52,48 M518,276 l-52,48"></path>
+          </g>
+          <text class="tgi-path-lb" x="492" y="118" text-anchor="middle">{0} アセンブリ</text>
+          <text class="tgi-path-lb" x="492" y="340" text-anchor="middle">{1} アセンブリ</text>
+
+          <!-- 属性タグ（keys/values） -->
+          <g class="tgi-tagA">
+            <rect class="tgi-tag" x="536" y="126" width="118" height="20" rx="10"></rect>
+            <text class="tgi-tag-txt" x="545" y="140">GlobalId / Name</text>
+            <rect class="tgi-tag" x="536" y="150" width="118" height="20" rx="10"></rect>
+            <text class="tgi-tag-txt" x="545" y="164">Pset・数量（keys/values）</text>
+            <rect class="tgi-tag" x="536" y="280" width="118" height="20" rx="10"></rect>
+            <text class="tgi-tag-txt" x="545" y="294">IfcClass / Tag</text>
+            <rect class="tgi-tag" x="536" y="304" width="118" height="20" rx="10"></rect>
+            <text class="tgi-tag-txt" x="545" y="318">Assembly / Storey</text>
+          </g>
+
+          <!-- GHキャンバス枠 -->
+          <rect class="tgi-canvas tgi-canvasA" x="340" y="96" width="330" height="258" rx="10"></rect>
+          <text class="tgi-canvas-lb tgi-canvasA" x="660" y="112" text-anchor="end">Grasshopper</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="tgi-cap tgi-l1" x="400" y="418" text-anchor="middle">① IFC をマルチスレッドで一気に形状変換</text>
+        <text class="tgi-cap tgi-l2" x="400" y="418" text-anchor="middle">② メッシュを DataTree（枝分かれ）に整列</text>
+        <text class="tgi-cap tgi-l3" x="400" y="418" text-anchor="middle">③ 各パーツに属性（keys / values）を添付</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">IFC を全コアで並列に形状変換 → メッシュを DataTree に整列 → 各パーツへ属性を添付して Grasshopper へ、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>Tekla や Solibri が書き出した <strong>IFC ファイルを、Grasshopper の中へメッシュとして取り込む</strong>インポータの集まりです。取り込むのは形状（メッシュ）だけでなく、<strong>各部材の属性（GlobalId・Name・IfcClass・Pset・数量など）も keys / values の DataTree として一緒に</strong>持ち込みます。</p>
+    <p>ポイントは <strong>マルチスレッドで速いこと</strong>。IFC の形状生成は重い処理ですが、<code>ifcopenshell</code> で全コアを使って一気に変換します。さらに、GH キャンバスをフリーズさせずに<strong>フル CPython（GH の外）で処理する Hops サーバー版</strong>も用意されていて、巨大な IFC でも Grasshopper が固まりません。</p>
+    <p>Tekla の IFC は「アセンブリ（部材のまとまり）→ パーツ」という階層を持つので、<strong>{アセンブリ; パーツ} の入れ子 DataTree</strong> に整えます。階層を持たない標準的な IFC 用には、<strong>IfcClass（IfcBeam / IfcColumn…）単位でまとめる Solibri 版</strong>もあります。</p>
+    <p class="lead">※ DataTree＝Grasshopper のデータを枝分かれで管理する構造。／ Hops＝GH の計算を外部の Python サーバーに肩代わりさせる仕組み。／ Elefront＝メッシュに UserText（属性）を焼き付けてベイクする定番プラグイン。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力とツール構成</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>GHコンポーネントの端子（インポータ本体）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port"><span class="io-dir in">入</span>ifc_file_path</td><td>取り込む IFC の絶対パス。</td></tr>
+          <tr><td class="port"><span class="io-dir in">入</span>include_types</td><td>（Solibri 版）取り込む IfcClass のリスト。空なら全要素。例: IfcBeam, IfcColumn。</td></tr>
+          <tr><td class="port"><span class="io-dir out">出</span>geo_tree</td><td>メッシュの DataTree。Tekla 版は {アセンブリ; パーツ}、Solibri 版は IfcClass 単位。</td></tr>
+          <tr><td class="port"><span class="io-dir out">出</span>keys_tree / values_tree</td><td>各パーツの属性キー群／値群（geo_tree と同じ枝構造）。Elefront の SetUserText へ直結できる。</td></tr>
+          <tr><td class="port"><span class="io-dir out">出</span>class_names</td><td>（Solibri 版）各枝に対応する IfcClass 名。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>ツール構成（4本）</caption>
+        <thead><tr><th>スクリプト</th><th>役割</th></tr></thead>
+        <tbody>
+          <tr><td class="port">tekla_ifc_importer.py</td><td><strong>Tekla IFC 直取込</strong>。IfcElementAssembly 階層を展開し {アセンブリ; パーツ} の DataTree に。</td></tr>
+          <tr><td class="port">solibri_ifc_importer.py</td><td><strong>標準 IFC 直取込</strong>。階層を持たない IFC を IfcClass 単位でグループ化。</td></tr>
+          <tr><td class="port">tekla_ifc_hops_server.py</td><td><strong>Hops サーバー（flask）</strong>。GH の外・フル CPython で多コア処理。<code>localhost:5000/tekla_ifc</code>。GH をフリーズさせない。</td></tr>
+          <tr><td class="port">tekla_ifc_attr_parser.py</td><td>Hops が返す AttributesJSON を、Elefront 用の keys / values DataTree に分解する GH コンポーネント。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">IFC を用意する</span><span class="step-body"><a href="solibri-smc.html">Solibri／SMC 抽出ツール</a> で取り出した IFC など、取り込みたいファイルのパスを用意する。</span></li>
+      <li><span class="step-title">直取込ルート（手軽）</span><span class="step-body">GH に <span class="port" style="color:var(--accent)">tekla_ifc_importer</span>（標準 IFC なら solibri 版）を置き、<span class="port" style="color:var(--accent)">ifc_file_path</span> を渡して solve。メッシュと属性の DataTree が出る。</span></li>
+      <li><span class="step-title">重い IFC は Hops ルート</span><span class="step-body">キャンバスを固めたくない・多コアで回したいときは <kbd>py tekla_ifc_hops_server.py</kbd> を起動し、GH の Hops コンポーネントの Path に <span class="port" style="color:var(--accent)">http://localhost:5000/tekla_ifc</span> を入力。</span></li>
+      <li><span class="step-title">属性を分解する</span><span class="step-body">Hops 経由なら返ってきた AttributesJSON を <span class="port" style="color:var(--accent)">tekla_ifc_attr_parser</span> に通して keys / values に分解する。</span></li>
+      <li><span class="step-title">属性つきでベイク</span><span class="step-body"><span class="port" style="color:var(--accent)">geo_tree</span> と <span class="port" style="color:var(--accent)">keys/values</span> を Elefront の SetUserText → Bake に渡し、UserText つきのメッシュとして Rhino へ焼く。</span></li>
+      <li><span class="step-title">後工程へ</span><span class="step-body">できたメッシュ＋属性を、部材検索やモデリング支援の各ツールへ流す。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <a class="chip chip-up" href="solibri-smc.html">Solibri／SMC 抽出ツール群</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">Tekla／Solibri IFC→GH インポータ群（このツール）</span>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">SMC から取り出した IFC を Grasshopper に持ち込む<strong>橋渡し</strong>です。ここで属性つきメッシュにしておくと、部材検索や図面化の各ツールがそのまま属性を使えます。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルでの手順 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実データでの手順</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧵</span> 手元の Tekla IFC で試す</span>
+      <p class="sample-desc">専用サンプルはありません。実案件の Tekla IFC（アセンブリ階層つき）で試すと、DataTree の枝分かれと属性の乗り方が一番わかりやすいです。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">小さめの IFC を用意</span><span class="step-body">まずは部材数の少ない Tekla IFC で。<a href="solibri-smc.html">軽量化ツール</a>で形状だけにすると読み込みが速い（※ただし属性は消える点に注意）。</span></li>
+        <li><span class="step-title">直取込で構造を見る</span><span class="step-body">tekla_ifc_importer を置いて solve。Panel で geo_tree の枝を開き、{アセンブリ; パーツ} になっているか確認する。</span></li>
+        <li><span class="step-title">Hops で速さを体感</span><span class="step-body">サーバーを起動して Hops 経由に切替。GH が固まらないまま多コアで変換される様子を比べる。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> マルチスレッド × OpenCASCADE のクラッシュに注意</div>
+        <p>並列で形状生成すると OpenCASCADE がクラッシュしやすいため、<strong>settings オブジェクトはスレッド内で毎回独立生成</strong>する設計になっています（コード内で対策済み）。改造するときはこの前提を崩さないでください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 巨大 IFC は Hops サーバー版で。GHPython 直は重い</div>
+        <p>GHPython の直取込は、非常に大きい IFC だと GH ごと固まることがあります。要素数が多いモデルは <strong>フル CPython の Hops サーバー版</strong>を使うと、多コアで速く・キャンバスをフリーズさせずに処理できます。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Hops は初回に pip インストールが必要</div>
+        <p>Hops サーバーは <code>pip install ghhops-server flask rhino3dm ifcopenshell</code> が前提です。GH ノード側は先頭の <code>#! python 3</code> と <code># r: ifcopenshell</code> 宣言（RH8 Python3 ノード）が必要です。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Tekla 版と標準 IFC 版を取り違えない</div>
+        <p>Tekla 版は <strong>IfcElementAssembly 階層がある前提</strong>です。階層を持たない標準 IFC（意匠モデル等）に使うと枝が組めないので、その場合は <strong>solibri_ifc_importer（IfcClass 単位）</strong>を選んでください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル（主）</span>
+      C:\Python1\<span class="fp-accent">tekla_ifc_importer.py</span>
+    </div>
+    <div class="file-path" style="margin-top:10px">
+      <span class="fp-label">関連スクリプト</span>
+      C:\Python1\<span class="fp-accent">tekla_ifc_hops_server.py</span> ・ <span class="fp-accent">tekla_ifc_attr_parser.py</span> ・ <span class="fp-accent">solibri_ifc_importer.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ifc">IFC・データ連携の一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>BIM-Shield（IFC⇔Rhino品質保証） — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス bmsh- で衝突回避
+   ①TeklaのIFCをドロップ → ②3層レイヤーをツリー状に自動分類 → ③.3dm＋検証Excelを出力
+   ============================================================ */
+.bmsh-svg text { font-family: var(--font); }
+
+/* IFCファイル＆bat投入口 */
+.bmsh-file   { fill: #10193a; stroke: var(--accent); stroke-width: 1.8; }
+.bmsh-filetx { fill: #e6ecff; font-size: 12px; font-weight: 700; }
+.bmsh-corner { fill: #1a2450; stroke: var(--accent); stroke-width: 1.4; }
+.bmsh-bat    { fill: color-mix(in srgb, var(--accent) 20%, #10193a); stroke: var(--accent); stroke-width: 2; }
+.bmsh-battx  { fill: var(--accent); font-size: 12px; font-weight: 800; }
+
+/* 関所（BIM-Shield 本体） */
+.bmsh-gate   { fill: none; stroke: var(--accent); stroke-width: 2.4; opacity: .9; }
+.bmsh-gatefl { fill: var(--accent); opacity: .07; }
+
+/* 3層レイヤーツリー */
+.bmsh-node   { fill: #141d38; stroke: var(--accent); stroke-width: 1.6; }
+.bmsh-nodeL1 { fill: color-mix(in srgb, var(--accent) 24%, #141d38); stroke: var(--accent); stroke-width: 2; }
+.bmsh-nodetx { fill: #e6ecff; font-size: 11.5px; font-weight: 700; }
+.bmsh-nodetx.dim { fill: #9aa7cc; font-size: 10.5px; }
+.bmsh-branch { fill: none; stroke: var(--accent); stroke-width: 1.6; opacity: .6; }
+
+/* 出力アイコン */
+.bmsh-out3dm { fill: #10193a; stroke: #34d399; stroke-width: 1.8; }
+.bmsh-outxls { fill: #10193a; stroke: #22c55e; stroke-width: 1.8; }
+.bmsh-outtx  { fill: #e6ecff; font-size: 11px; font-weight: 700; }
+.bmsh-xlscell{ fill: none; stroke: #22c55e; stroke-width: 1; opacity: .7; }
+
+/* 双方向矢印 */
+.bmsh-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.4; opacity: .85; }
+.bmsh-arrow-head  { fill: var(--accent); }
+.bmsh-flowdot     { fill: #ffffff; }
+
+/* テキスト */
+.bmsh-cap   { fill: #e6ecff; font-size: 16px; font-weight: 700; }
+
+/* 進捗バー */
+.bmsh-prog-tr { fill: #223052; }
+.bmsh-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.bmsh-file   { animation: bmshFile 10s infinite; }
+.bmsh-gate   { animation: bmshGate 10s infinite; }
+.bmsh-t1     { animation: bmshT1 10s infinite; }
+.bmsh-t2     { animation: bmshT2 10s infinite; }
+.bmsh-t3     { animation: bmshT3 10s infinite; }
+.bmsh-t4     { animation: bmshT4 10s infinite; }
+.bmsh-out    { animation: bmshOut 10s infinite; }
+.bmsh-flow   { animation: bmshFlow 10s infinite; }
+.bmsh-l1     { animation: bmshL1 10s infinite; }
+.bmsh-l2     { animation: bmshL2 10s infinite; }
+.bmsh-l3     { animation: bmshL3 10s infinite; }
+.bmsh-prog   { animation: bmshProg 10s linear infinite; }
+
+@keyframes bmshFile {
+  0%,2%   { opacity: 0; transform: translate(-60px,0); }
+  9%      { opacity: 1; transform: translate(0,0); }
+  22%     { opacity: 1; transform: translate(0,0); }
+  30%     { opacity: 0; transform: translate(70px,0); }
+  100%    { opacity: 0; transform: translate(70px,0); }
+}
+@keyframes bmshGate {
+  0%,26%  { opacity: 0; }
+  32%     { opacity: 1; }
+  92%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+/* ツリーが段階的に構築される */
+@keyframes bmshT1 { 0%,30%{opacity:0;transform:translateX(-10px)} 38%{opacity:1;transform:translateX(0)} 92%{opacity:1} 100%{opacity:0} }
+@keyframes bmshT2 { 0%,38%{opacity:0;transform:translateX(-10px)} 46%{opacity:1;transform:translateX(0)} 92%{opacity:1} 100%{opacity:0} }
+@keyframes bmshT3 { 0%,46%{opacity:0;transform:translateX(-10px)} 54%{opacity:1;transform:translateX(0)} 92%{opacity:1} 100%{opacity:0} }
+@keyframes bmshT4 { 0%,54%{opacity:0;transform:translateX(-10px)} 62%{opacity:1;transform:translateX(0)} 92%{opacity:1} 100%{opacity:0} }
+@keyframes bmshOut {
+  0%,66%  { opacity: 0; transform: translateY(8px); }
+  74%     { opacity: 1; transform: translateY(0); }
+  94%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes bmshFlow {
+  0%,64%   { opacity: 0; transform: translateX(0); }
+  68%      { opacity: 1; transform: translateX(0); }
+  76%      { opacity: 1; transform: translateX(96px); }
+  80%,100% { opacity: 0; transform: translateX(96px); }
+}
+@keyframes bmshL1 { 0%{opacity:0} 4%{opacity:1} 26%{opacity:1} 31%{opacity:0} 100%{opacity:0} }
+@keyframes bmshL2 { 0%,31%{opacity:0} 36%{opacity:1} 62%{opacity:1} 67%{opacity:0} 100%{opacity:0} }
+@keyframes bmshL3 { 0%,66%{opacity:0} 72%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes bmshProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ifc">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">IFC・データ連携</span>
+    <h1 class="node-title">BIM-Shield <span style="opacity:.75;font-weight:700">IFC⇔Rhino 品質保証パイプライン</span></h1>
+    <p class="catch">TeklaのIFCとRhinoモデルを<span class="em">行き来</span>させ、<span class="em">部材を自動仕分け</span>して検証レポートまで出す、変換の関所。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中（現行v2.7 / v3.2）</span>
+      <span class="badge st-ver">run_bim_shield_v27.bat 起動</span>
+      <span class="badge st-ver">Rhino.Compute 必須</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg bmsh-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="TeklaのIFCを取り込み3層レイヤーに自動分類して3dmと検証レポートを出すアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="bmsh-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="bmsh-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① Tekla出力IFC を bat へ投入 ===== -->
+        <g class="bmsh-file">
+          <rect class="bmsh-file" x="70" y="196" width="96" height="66" rx="6"></rect>
+          <polygon class="bmsh-corner" points="146,196 166,216 146,216"></polygon>
+          <text class="bmsh-filetx" x="118" y="234" text-anchor="middle">Tekla</text>
+          <text class="bmsh-filetx" x="118" y="250" text-anchor="middle" style="font-size:10.5px">.ifc</text>
+        </g>
+
+        <!-- 関所（BIM-Shield 本体） -->
+        <g class="bmsh-gate">
+          <rect class="bmsh-gatefl" x="196" y="120" width="360" height="220" rx="10"></rect>
+          <rect class="bmsh-gate" x="196" y="120" width="360" height="220" rx="10"></rect>
+          <text class="bmsh-battx" x="376" y="140" text-anchor="middle" style="font-size:12.5px">BIM-Shield（3層レイヤー自動分類）</text>
+        </g>
+
+        <!-- ===== ② 3層レイヤーツリーが段階的に構築 ===== -->
+        <!-- L1: IfcBeam -->
+        <g class="bmsh-t1">
+          <rect class="bmsh-nodeL1" x="216" y="160" width="120" height="30" rx="5"></rect>
+          <text class="bmsh-nodetx" x="228" y="180">IfcBeam</text>
+        </g>
+        <!-- branch to L2 -->
+        <path class="bmsh-branch bmsh-t2" d="M276,190 L276,214 L356,214"></path>
+        <!-- L2: 大梁 -->
+        <g class="bmsh-t2">
+          <rect class="bmsh-node" x="356" y="200" width="120" height="28" rx="5"></rect>
+          <text class="bmsh-nodetx" x="368" y="219">大梁（Girder）</text>
+        </g>
+        <!-- branch to L3 -->
+        <path class="bmsh-branch bmsh-t3" d="M416,228 L416,252 L356,252"></path>
+        <!-- L3: H-400x200 -->
+        <g class="bmsh-t3">
+          <rect class="bmsh-node" x="356" y="238" width="140" height="28" rx="5"></rect>
+          <text class="bmsh-nodetx dim" x="368" y="256">H-400x200 / SN400</text>
+        </g>
+        <!-- もう一枝: 柱 -->
+        <path class="bmsh-branch bmsh-t4" d="M276,190 L276,296 L356,296"></path>
+        <g class="bmsh-t4">
+          <rect class="bmsh-node" x="356" y="282" width="140" height="28" rx="5"></rect>
+          <text class="bmsh-nodetx dim" x="368" y="300">IfcColumn / 柱 / □-350</text>
+        </g>
+
+        <!-- 双方向矢印＋データドット（IFC⇔Rhino） -->
+        <g class="bmsh-out">
+          <line class="bmsh-arrow-shaft" x1="560" y1="230" x2="626" y2="230"></line>
+          <polygon class="bmsh-arrow-head" points="626,230 612,222 612,238"></polygon>
+          <polygon class="bmsh-arrow-head" points="560,230 574,222 574,238"></polygon>
+        </g>
+        <circle class="bmsh-flow bmsh-flowdot" cx="560" cy="230" r="4.5"></circle>
+
+        <!-- ===== ③ .3dm ＋ 検証Excelレポート を出力 ===== -->
+        <g class="bmsh-out">
+          <!-- .3dm -->
+          <rect class="bmsh-out3dm" x="640" y="150" width="104" height="72" rx="6"></rect>
+          <text class="bmsh-outtx" x="692" y="180" text-anchor="middle" style="fill:#34d399">Rhino</text>
+          <text class="bmsh-outtx" x="692" y="198" text-anchor="middle" style="font-size:10px">.3dm</text>
+          <!-- 検証Excel -->
+          <rect class="bmsh-outxls" x="640" y="242" width="104" height="72" rx="6"></rect>
+          <line class="bmsh-xlscell" x1="640" y1="266" x2="744" y2="266"></line>
+          <line class="bmsh-xlscell" x1="640" y1="290" x2="744" y2="290"></line>
+          <line class="bmsh-xlscell" x1="674" y1="242" x2="674" y2="314"></line>
+          <line class="bmsh-xlscell" x1="710" y1="242" x2="710" y2="314"></line>
+          <text class="bmsh-outtx" x="692" y="335" text-anchor="middle" style="fill:#22c55e;font-size:10.5px">検証レポート.xlsx</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="bmsh-cap bmsh-l1" x="400" y="422" text-anchor="middle">① Teklaが出力した .ifc を bat へドラッグ</text>
+        <text class="bmsh-cap bmsh-l2" x="400" y="422" text-anchor="middle">② 3層レイヤー階層に部材を自動分類（IfcBeam → 大梁 → H-400x200）</text>
+        <text class="bmsh-cap bmsh-l3" x="400" y="422" text-anchor="middle">③ Rhino .3dm ＋ 検証Excelレポートを出力</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">Teklaが出力したIFCを取り込み、部材を3段階のレイヤー階層にツリー状へ自動分類して、Rhinoの.3dmと検証Excelレポートを吐き出す流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>Tekla（鉄骨のBIMソフト）が出力した<strong>IFC</strong>と、Rhinoの<strong>.3dm</strong>を<strong>双方向に変換</strong>し、その途中で<strong>部材を自動仕分け・幾何検証・レポート化</strong>までやってくれる「変換の関所」です。IFCを取り込むときは、部材を <strong>IfcType（種別）→ ProductName（呼び名）→ Profile_Material_Class（断面・材質）</strong> の3段階レイヤー階層に自動分類し、Rhinoで扱いやすい形に整えます。</p>
+    <p>逆に、Rhinoで作った.3dm（レイヤーや<strong>UserText</strong>で属性を持たせたモデル）からIFCを書き出す方向にも対応。Tekla由来の属性（Pset_Tekla_Attributes など）を補完し、<strong>Solibri（IFCの検証・納品ツール）</strong>向けにデータを整えます。変換結果は<strong>Excel/PDFの検証レポート</strong>として出るので、「モデルがちゃんと変換・分類できたか」を目で確認できます。</p>
+    <p class="lead">※ 現行は「IFC→3dm」が v2.7、「3dm→IFC」が v3.2。<code>run_bim_shield_v27.bat</code> が最新エントリを呼びます。旧世代（v2.0/2.1/2.5、旧Eto UIパネル）はコードとして残っていますが現行からは呼ばれず、事実上凍結です（v2.0のエンジンだけは3dm→IFC変換で継続利用）。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力（3）</caption>
+        <thead><tr><th>入力</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">.ifc</td><td>Tekla出力のIFCファイル（IFC2X3 / IFC4 の両対応）。IFC→3dm方向の入口。</td></tr>
+          <tr><td class="port">.3dm</td><td>Rhinoのモデルファイル。3dm→IFC方向の入口。</td></tr>
+          <tr><td class="port">選択オブジェクト<br>/ UserText</td><td>Rhino上で選んだオブジェクトと、そこに付いた <strong>UDA（UserText属性）</strong>。IFCへ書き戻す属性の素材。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力（4）</caption>
+        <thead><tr><th>出力</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">変換済み .3dm</td><td>3層レイヤーに分類済みのRhinoモデル。</td></tr>
+          <tr><td class="port">変換済み .ifc</td><td>属性を補完してSolibri/Tekla向けに整えたIFC。</td></tr>
+          <tr><td class="port">検証レポート .xlsx</td><td>変換・分類結果と幾何検証の結果をまとめたExcel（PDFも可）。まずここで結果を確認。</td></tr>
+          <tr><td class="port">分割/統合 .3dm</td><td>用途に応じて分割・統合したモデル。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">Rhino.Compute を用意</span><span class="step-body">3dm→IFC方向は幾何解析に <kbd>Rhino.Compute</kbd>（<code>compute.frontend.exe</code> / localhost:5000）が必須。BIM-Shieldが自動起動しますが、初回は立ち上がりを少し待つ。</span></li>
+      <li><span class="step-title">IFCを取り込む</span><span class="step-body">Teklaが出力した <kbd>.ifc</kbd> を <code>run_bim_shield_v27.bat</code> へドラッグ&ドロップ。コンソールに3層レイヤー階層がツリー状に構築されていく。</span></li>
+      <li><span class="step-title">分類結果を確認</span><span class="step-body">部材が IfcType → ProductName → Profile_Material_Class の階層に並ぶ。変換済み.3dmとして開いてレイヤー構成をチェック。</span></li>
+      <li><span class="step-title">検証レポートを見る</span><span class="step-body">出力された <kbd>検証レポート.xlsx</kbd> で、幾何検証や属性補完の結果を確認。取りこぼしがないか目視する。</span></li>
+      <li><span class="step-title">逆方向（3dm→IFC）</span><span class="step-body">Rhinoで属性（UserText）を付けたモデルからIFCを書き出す場合は、v3.2のエクスポータ経路で実行。Solibri納品前のデータ整備に使う。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <p class="flow-solo"><b>単独で使える変換ツールです。</b> 外部の <b>Tekla</b>（IFC出力元）から受け取り、<b>Solibri</b>（検証・納品先）へ渡す関所として働きます。<b>Rhino.Compute</b> を裏で使います。なお、目的がよく似た <b>ifc2rhino</b> が別フォルダに存在し（統合・重複の可能性あり）、監視ダッシュボードの <b>BIM_Dashboard</b> とは現状コード連携がありません。</p>
+  </div>
+</section>
+
+<!-- 7. サンプル/実データ手順 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実データでのデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🛡️</span> 手元のTekla出力IFCで試す</span>
+      <p class="sample-desc">専用サンプルは同梱していません。実案件のTekla出力IFCで動作を確認します。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">小さめのIFCを選ぶ</span><span class="step-body">まずは部材数の少ないIFCで試すと、3層レイヤーの構築が追いやすい。</span></li>
+        <li><span class="step-title">batへドロップ</span><span class="step-body"><code>run_bim_shield_v27.bat</code> にドラッグして実行。Rhino.Computeの起動を待つ。</span></li>
+        <li><span class="step-title">結果を突き合わせる</span><span class="step-body">出力.3dmのレイヤー階層と、検証レポート.xlsxの分類・検証結果を照合。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Rhino.Compute が動いていないと変換できない</div>
+        <p>3dm→IFC方向の幾何解析は外部プロセス <code>Rhino.Compute</code>（localhost:5000）に依存します。自動起動しますが、立ち上がりに時間がかかったり、ポートが塞がっていると失敗します。うまくいかないときはまずComputeの状態を確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 現行エントリは v2.7 / v3.2。旧版は凍結</div>
+        <p>起動は必ず <code>run_bim_shield_v27.bat</code> から。v2.0/2.1/2.5 や旧Eto UIパネル（<code>plugin_main.py</code>）はコードが残っていますが現行からは未importで凍結です（例外的に v2.0 エンジンだけ 3dm→IFC で継続利用）。古いスクリプトを直接叩かないでください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> ifc2rhino と目的が酷似（統合・重複の可能性）</div>
+        <p>別フォルダの <code>ifc2rhino</code> が「Tekla IFC → Rhino変換」というほぼ同じ目的を持っています。どちらを正とするかは未整理のため、混在させる前に用途を確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 空フォルダ／使い捨てスクリプトが同居</div>
+        <p>フォルダ内に <code>file / runs / 3dm / IFC / Rhino</code> などの空フォルダ（ダイアログ処理の誤生成痕）や、<code>_diag_cone.py</code>・<code>_syntax_check.py</code> といった使い捨て診断スクリプトが残っています。現行の動作には無関係なので触らないでください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル（起動エントリ）</span>
+      C:\Python1\BIM_Shield\<span class="fp-accent">run_bim_shield_v27.bat</span>（本体 bim_shield_v2_7_main.py / bim_shield_universal_exporter.py）
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ifc">IFC・データ連携の一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

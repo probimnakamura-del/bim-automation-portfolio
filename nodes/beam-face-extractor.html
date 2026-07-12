@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>梁面・アウトライン抽出群 gh_beam_face_extractor — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス bfe- で衝突回避
+   ①梁ソリッド → ②面と中心線を抽出 → ③断面・中心面まで分解
+   ============================================================ */
+.bfe-svg text { font-family: var(--font); }
+
+/* 梁ソリッド（オブリーク表現） */
+.bfe-solid   { animation: bfeSolid 10s infinite; }
+.bfe-front   { fill: #0f1a30; stroke: var(--accent); stroke-width: 2.2; }
+.bfe-topface { fill: #12213c; stroke: var(--accent); stroke-width: 2.2; }
+.bfe-botface { fill: #0c1526; stroke: var(--accent); stroke-width: 2.2; }
+.bfe-flange  { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: .5; }
+
+/* 面ハイライト（順番に光る） */
+.bfe-hl      { fill: color-mix(in srgb, var(--accent) 32%, transparent); stroke: var(--accent); stroke-width: 3; }
+.bfe-hl-top  { animation: bfeHlTop 10s infinite; }
+.bfe-hl-web  { animation: bfeHlWeb 10s infinite; }
+.bfe-hl-bot  { animation: bfeHlBot 10s infinite; }
+.bfe-facelbl { fill: var(--accent); font-size: 12px; font-weight: 700; }
+
+/* 中心線（一点鎖線・伸びて描かれる） */
+.bfe-center  { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-dasharray: 12 4 2 4;
+               opacity: 0; animation: bfeCenter 10s infinite; }
+
+/* 断面カーブ（H形・端に描画） */
+.bfe-cs      { fill: none; stroke: #ffffff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round;
+               stroke-dasharray: 100; stroke-dashoffset: 100; animation: bfeCs 10s infinite; }
+.bfe-cslbl   { fill: #e6ecff; font-size: 12px; font-weight: 700; opacity: 0; animation: bfeCsLbl 10s infinite; }
+
+/* 中心面（半透明パネル） */
+.bfe-csurf   { fill: color-mix(in srgb, var(--accent) 16%, transparent); stroke: var(--accent); stroke-width: 1.6;
+               opacity: 0; animation: bfeCsurf 10s infinite; }
+
+/* 頂点ドット */
+.bfe-vtx     { fill: #ffffff; opacity: 0; animation: bfeVtx 10s infinite; }
+
+/* テキスト */
+.bfe-cap    { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.bfe-small  { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.bfe-prog-tr { fill: #223052; }
+.bfe-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center;
+               animation: bfeProg 10s linear infinite; }
+
+/* ラベル */
+.bfe-l1 { animation: bfeL1 10s infinite; }
+.bfe-l2 { animation: bfeL2 10s infinite; }
+.bfe-l3 { animation: bfeL3 10s infinite; }
+
+/* ---- キーフレーム（全10秒周期・infinite） ---- */
+@keyframes bfeSolid { 0%,4%{opacity:0} 10%{opacity:1} 100%{opacity:1} }
+@keyframes bfeHlTop { 0%,28%{opacity:0} 34%{opacity:1} 44%{opacity:1} 50%{opacity:.25} 100%{opacity:.25} }
+@keyframes bfeHlWeb { 0%,38%{opacity:0} 44%{opacity:1} 52%{opacity:1} 58%{opacity:.25} 100%{opacity:.25} }
+@keyframes bfeHlBot { 0%,48%{opacity:0} 54%{opacity:1} 60%{opacity:1} 64%{opacity:.25} 100%{opacity:.25} }
+@keyframes bfeCenter { 0%,44%{opacity:0} 56%{opacity:.95} 100%{opacity:.95} }
+@keyframes bfeCs { 0%,62%{stroke-dashoffset:100;opacity:0} 66%{opacity:1} 80%{stroke-dashoffset:0;opacity:1} 100%{stroke-dashoffset:0;opacity:1} }
+@keyframes bfeCsLbl { 0%,66%{opacity:0} 72%{opacity:1} 100%{opacity:1} }
+@keyframes bfeCsurf { 0%,72%{opacity:0} 80%{opacity:1} 100%{opacity:1} }
+@keyframes bfeVtx { 0%,80%{opacity:0} 86%{opacity:1} 92%{opacity:.3} 96%{opacity:1} 100%{opacity:1} }
+@keyframes bfeProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+@keyframes bfeL1 { 0%{opacity:0} 4%{opacity:1} 26%{opacity:1} 31%{opacity:0} 100%{opacity:0} }
+@keyframes bfeL2 { 0%,31%{opacity:0} 36%{opacity:1} 60%{opacity:1} 65%{opacity:0} 100%{opacity:0} }
+@keyframes bfeL3 { 0%,65%{opacity:0} 70%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+</style>
+</head>
+<body data-cat="steel">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">鉄骨モデリング支援</span>
+    <h1 class="node-title">梁面・アウトライン抽出群 <span style="opacity:.75;font-weight:700">gh_beam_face_extractor</span></h1>
+    <p class="catch">梁のソリッドから<span class="em">上下フランジ面・ウェブ面・中心線・断面</span>を<span class="em">一発で取り出す</span>下ごしらえ部品。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">GHパイソン群（4ファイル）</span>
+      <span class="badge st-ver">Rhino7/8 両対応</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg bfe-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="梁ソリッドから面・中心線・断面を抽出するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="bfe-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="bfe-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== 梁ソリッド（オブリーク） ===== -->
+        <!-- 奥行きオフセット dx=+48 dy=-32 -->
+        <g class="bfe-solid">
+          <!-- 下フランジ面（底・パラレログラム） -->
+          <polygon class="bfe-botface" points="200,272 560,272 608,240 248,240"></polygon>
+          <!-- 前面（ウェブ側の見え面） -->
+          <rect class="bfe-front" x="200" y="168" width="360" height="104"></rect>
+          <!-- 上フランジ面（天・パラレログラム） -->
+          <polygon class="bfe-topface" points="200,168 560,168 608,136 248,136"></polygon>
+          <!-- フランジ厚みの目安線（前面上下） -->
+          <line class="bfe-flange" x1="200" y1="184" x2="560" y2="184"></line>
+          <line class="bfe-flange" x1="200" y1="256" x2="560" y2="256"></line>
+          <!-- 奥エッジ（右側） -->
+          <line class="bfe-flange" x1="560" y1="168" x2="608" y2="136"></line>
+          <line class="bfe-flange" x1="560" y1="272" x2="608" y2="240"></line>
+          <line class="bfe-flange" x1="608" y1="136" x2="608" y2="240"></line>
+        </g>
+
+        <!-- 面ハイライト（順番に光る） -->
+        <polygon class="bfe-hl bfe-hl-top" points="200,168 560,168 608,136 248,136"></polygon>
+        <rect    class="bfe-hl bfe-hl-web" x="200" y="184" width="360" height="72"></rect>
+        <polygon class="bfe-hl bfe-hl-bot" points="200,272 560,272 608,240 248,240"></polygon>
+        <text class="bfe-facelbl bfe-hl-top" x="360" y="126" text-anchor="middle">上フランジ上面</text>
+
+        <!-- 中心線（部材の長手軸・一点鎖線） -->
+        <line class="bfe-center" x1="150" y1="220" x2="620" y2="220"></line>
+
+        <!-- ===== ③ 断面カーブ（H形・左端に抽出） ===== -->
+        <!-- H形: 上フランジ／ウェブ／下フランジ -->
+        <path class="bfe-cs" pathLength="100" d="M78,150 L138,150 M78,290 L138,290 M108,150 L108,290"></path>
+        <text class="bfe-cslbl" x="108" y="312" text-anchor="middle">断面カーブ</text>
+
+        <!-- 中心面（ウェブ中間の半透明パネル） -->
+        <polygon class="bfe-csurf" points="224,184 584,184 632,152 272,152"></polygon>
+        <polygon class="bfe-csurf" points="224,256 584,256 632,224 272,224"></polygon>
+        <text class="bfe-small bfe-cslbl" x="470" y="176" text-anchor="middle" style="fill:var(--accent)">中心面</text>
+
+        <!-- 頂点ドット -->
+        <circle class="bfe-vtx" cx="200" cy="168" r="4"></circle>
+        <circle class="bfe-vtx" cx="560" cy="168" r="4"></circle>
+        <circle class="bfe-vtx" cx="200" cy="272" r="4"></circle>
+        <circle class="bfe-vtx" cx="560" cy="272" r="4"></circle>
+        <circle class="bfe-vtx" cx="608" cy="136" r="4"></circle>
+        <circle class="bfe-vtx" cx="608" cy="240" r="4"></circle>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="bfe-cap bfe-l1" x="400" y="428" text-anchor="middle">① 梁ソリッド（H形鋼など）を入力</text>
+        <text class="bfe-cap bfe-l2" x="400" y="428" text-anchor="middle">② 上下フランジ面・ウェブ面・中心線を抽出</text>
+        <text class="bfe-cap bfe-l3" x="400" y="428" text-anchor="middle">③ 断面カーブ・中心面・頂点まで分解</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">梁ソリッドを入力 → 上フランジ上面・ウェブ面・下フランジ面を順に抽出し中心線を通す → 端部の断面カーブ・ウェブの中心面・頂点まで分解する、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>H形鋼などの<strong>梁のソリッド（Brep／メッシュ）を、部位ごとの面や線に分解して取り出す</strong>GHコンポーネント群です。上フランジの上面・下フランジの下面・ウェブ（腹板）の両面・部材の中心線・ウェブ中間の中心面・断面カーブ・エッジ・頂点まで、欲しい要素を端子から個別に受け取れます。</p>
+    <p>「梁のこの面を基準に何かを作りたい」「溶接線や接合部の位置を面から拾いたい」「かさ上げや配置の基準面が欲しい」といった<strong>モデリングの下ごしらえ</strong>に使う、地味だが便利な部品箱です。ブロックインスタンス（アセンブリ）に入った梁にも対応します。</p>
+    <p class="lead">※ フランジ＝H形鋼の上下の板。／ ウェブ＝上下フランジをつなぐ縦の板（腹板）。／ 中心線＝部材の長手方向を示す軸。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力（block版）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">ID</td><td>処理対象のRhinoオブジェクトID（GUID）、またはジオメトリを直接。<strong>リスト可</strong>。ブロックインスタンスなら内部を展開して扱う。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力（block版・12）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">TopFace</td><td>上フランジ<strong>上面</strong>。</td></tr>
+          <tr><td class="port">TopFlangeBottomFace</td><td>上フランジの<strong>下刃</strong>（下側の面）。</td></tr>
+          <tr><td class="port">BottomFace</td><td>下フランジ<strong>下面</strong>。</td></tr>
+          <tr><td class="port">BottomFlangeTopFace</td><td>下フランジの<strong>上刃</strong>。</td></tr>
+          <tr><td class="port">WebFace1 / WebFace2</td><td>ウェブ（腹板）の両面。</td></tr>
+          <tr><td class="port">CenterLine</td><td>部材の長手方向を示す<strong>中心線</strong>（Curve）。</td></tr>
+          <tr><td class="port">CenterSurface</td><td>ウェブ中間に生成される<strong>中心面</strong>（Brep）。</td></tr>
+          <tr><td class="port">Edges / Vertices</td><td>抽出されたエッジ（Curve）と頂点群（Point3d）。</td></tr>
+          <tr><td class="port">CrossSection</td><td>断面を示すカーブ群（H形など）。</td></tr>
+          <tr><td class="port">AllFaces</td><td>分解された<strong>すべての面</strong>。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <!-- ファミリー構成 -->
+    <div class="io-scroll"><table class="io-table" style="margin-top:22px">
+      <caption>この抽出群を構成する4ファイル</caption>
+      <thead><tr><th>ファイル</th><th>役割</th></tr></thead>
+      <tbody>
+        <tr><td class="port">gh_beam_face_extractor_block</td><td>本体。<strong>ブロック対応</strong>で、面・中心線・中心面・断面・エッジ・頂点まで一括抽出（上の端子表）。</td></tr>
+        <tr><td class="port">gh_beam_face_extractor_oriented</td><td>ローカルフレーム（軸・上・横）で<strong>向きを揃えて</strong>抽出する版。断面平面から中心面を精密生成。傾いた梁でも安定。</td></tr>
+        <tr><td class="port">beam_outline</td><td>複数の梁を<strong>合体（Boolean Union）</strong>し、<strong>上面の外形アウトライン</strong>をSurface化して返す。デッキ・床の縁取りなどに。</td></tr>
+        <tr><td class="port">member_brep</td><td>ヘルパー。ベクトル演算・整列ラベル・座標変換など、上記が共有する下請け関数集。</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">梁を渡す</span><span class="step-body">抽出したい梁のGUID（またはジオメトリ）を <span class="port" style="color:var(--accent)">ID</span> へ。複数まとめて渡してもよい。ブロック内の梁もそのまま。</span></li>
+      <li><span class="step-title">欲しい端子だけ使う</span><span class="step-body">必要な面・線だけを下流につなぐ。例: 上面基準なら <span class="port" style="color:var(--accent)">TopFace</span>、軸が欲しければ <span class="port" style="color:var(--accent)">CenterLine</span>。</span></li>
+      <li><span class="step-title">傾いた梁は oriented 版</span><span class="step-body">斜め・回転した梁で面の割り当てが乱れるときは <span class="port" style="color:var(--accent)">gh_beam_face_extractor_oriented</span> に切り替えると安定する。</span></li>
+      <li><span class="step-title">上面の外形が欲しいときは beam_outline</span><span class="step-body">複数梁の天端をひとつの外形線・面として取りたい場合は <span class="port" style="color:var(--accent)">beam_outline</span> に梁群を渡す（合体してから外形化）。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-solo">
+      <b>単独で使えます。</b> どのワークフローにも属さない汎用の「下ごしらえ部品」です。取り出した面・中心線・断面を、かさ上げ鋼材・接合部・寸法基準など<strong>自分の目的の入力</strong>として使ってください。
+    </div>
+  </div>
+</section>
+
+<!-- 7. 自分のモデルで試す -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>自分のモデルで試す</h2>
+    <div class="sample-box">
+      <p class="sample-desc">専用サンプルはありません。H形鋼の梁が1本あればすぐ試せます（柱梁フレームのモデルなどでOK）。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">H形の梁を1本用意</span><span class="step-body">Brepソリッドの梁を1つ選ぶ。ブロックに入っていても可。</span></li>
+        <li><span class="step-title">IDを渡して solve</span><span class="step-body">そのGUIDを <span class="port" style="color:var(--accent)">ID</span> に。<span class="port" style="color:var(--accent)">TopFace</span> や <span class="port" style="color:var(--accent)">CenterLine</span> に結果が出る。</span></li>
+        <li><span class="step-title">面をプレビュー確認</span><span class="step-body">各端子をパネル/プレビューで見て、狙った面が正しく取れているか確認する。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 面の割り当てはH形（フランジ＋ウェブ）前提</div>
+        <p>上フランジ・下フランジ・ウェブという分類は<strong>H形断面を前提</strong>にしています。BOX・パイプ・不整形な断面では面ラベルが期待とずれることがあります。その場合は <span class="port" style="color:var(--accent)">AllFaces</span> から自分で選ぶのが安全です。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 軸の自動検出は最長エッジ／主成分に依存</div>
+        <p>部材の長手軸は「最長の直線エッジ」または頂点群の主成分（PCA）から推定します。極端に短い材・曲がり材・端部形状が複雑な材では軸を取り違えることがあります。うまくいかないときは <code>oriented</code> 版を試してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Py3専用構文は避ける（Rhino7互換）</div>
+        <p><code>beam_outline</code> はRhino7（IronPython 2.7）／Rhino8（Python3）両対応の互換シムを持ちます。改造時に <code>f-string</code> や <code>:=</code> を入れるとRhino7側で止まります。周囲のスタイルに合わせてください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル（本体）</span>
+      C:\Python1\<span class="fp-accent">gh_beam_face_extractor_block.py</span>
+    </div>
+    <div class="file-path" style="margin-top:10px">
+      <span class="fp-label">同群</span>
+      C:\Python1\<span class="fp-accent">gh_beam_face_extractor_oriented.py / beam_outline.py / member_brep.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-steel">鉄骨モデリング支援の一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

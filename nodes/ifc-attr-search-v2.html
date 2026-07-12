@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>IFC属性検索 ifc_attr_search_v2 — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス ifcs- で衝突回避
+   ①製品記号で検索（SearchValue）
+   → ②ヒットしたブロックを白くハイライトして確保
+   → ③SplitPickで 本体=シアン / 附帯=赤 に仕分け
+   ※ 意味のため 本体=カテゴリ色(シアン)・附帯=赤 の2色を使う
+   ============================================================ */
+.ifcs-svg text { font-family: var(--font); }
+
+/* 検索窓 */
+.ifcs-box   { fill: #0c1428; stroke: var(--accent); stroke-width: 1.6; }
+.ifcs-mag   { fill: none; stroke: var(--accent); stroke-width: 2.4; }
+.ifcs-boxtxt{ fill: #e6ecff; font-size: 14px; font-weight: 700; }
+.ifcs-caret { fill: var(--accent); }
+
+/* 部材の共通ラベル */
+.ifcs-flange { fill: none; stroke-width: 2; }
+.ifcs-ptxt   { fill: #9aa7cc; font-size: 11px; font-weight: 700; }
+
+/* 本体（H形鋼）＝色が グレー→白→シアン と変化 */
+.ifcs-main { animation: ifcsMain 10s infinite; }
+/* 附帯（PL/アングル）＝色が グレー→白→赤 と変化 */
+.ifcs-sub  { animation: ifcsSub 10s infinite; }
+
+/* チェックリスト */
+.ifcs-panel { fill: #0c1428; stroke: #34406a; stroke-width: 1.4; }
+.ifcs-panel-lbl { fill: #9aa7cc; font-size: 12.5px; font-weight: 700; }
+.ifcs-cbtxt { fill: #e6ecff; font-size: 13px; font-weight: 600; }
+.ifcs-cbox-sub  { fill: #2a1620; stroke: #f87171; stroke-width: 1.8; }
+.ifcs-cbox-main { fill: #0f1a30; stroke: #9aa7cc; stroke-width: 1.6; }
+.ifcs-check { fill: none; stroke: #f87171; stroke-width: 2.4; stroke-linecap: round; }
+
+/* 出力タグ */
+.ifcs-tag-box { fill: #0b1428; stroke: var(--accent); stroke-width: 1.4; }
+.ifcs-tagtxt  { fill: #e6ecff; font-size: 12.5px; font-weight: 700; }
+.ifcs-swm { fill: var(--accent); }
+.ifcs-sws { fill: #f87171; }
+
+/* テキスト */
+.ifcs-cap { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+
+/* 進捗バー */
+.ifcs-prog-tr { fill: #223052; }
+.ifcs-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（10秒周期・infinite） ---- */
+.ifcs-search { animation: ifcsSearch 10s infinite; }
+.ifcs-caret  { animation: ifcsCaret 1s steps(1) infinite; }
+.ifcs-model  { animation: ifcsModel 10s infinite; }
+.ifcs-panel-g{ animation: ifcsPanel 10s infinite; }
+.ifcs-tag    { animation: ifcsTag 10s infinite; }
+.ifcs-l1 { animation: ifcsL1 10s infinite; }
+.ifcs-l2 { animation: ifcsL2 10s infinite; }
+.ifcs-l3 { animation: ifcsL3 10s infinite; }
+.ifcs-prog { animation: ifcsProg 10s linear infinite; }
+
+@keyframes ifcsSearch {
+  0%,3%   { opacity: 0; transform: translateY(-6px); }
+  9%      { opacity: 1; transform: translateY(0); }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes ifcsCaret { 0%{opacity:1} 50%{opacity:0} 100%{opacity:1} }
+@keyframes ifcsModel {
+  0%,5%   { opacity: 0; }
+  12%     { opacity: 1; }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+/* 本体：グレー → （白ハイライト）→ シアン */
+@keyframes ifcsMain {
+  0%,30%  { stroke: #9aa7cc; fill: #0f1a30; }
+  38%     { stroke: #ffffff; fill: #17223c; }
+  54%     { stroke: #ffffff; fill: #17223c; }
+  64%     { stroke: var(--accent); fill: #0e2233; }
+  100%    { stroke: var(--accent); fill: #0e2233; }
+}
+/* 附帯：グレー → （白ハイライト）→ 赤 */
+@keyframes ifcsSub {
+  0%,30%  { stroke: #9aa7cc; fill: #0f1a30; }
+  38%     { stroke: #ffffff; fill: #17223c; }
+  54%     { stroke: #ffffff; fill: #17223c; }
+  64%     { stroke: #f87171; fill: #2a1620; }
+  100%    { stroke: #f87171; fill: #2a1620; }
+}
+@keyframes ifcsPanel {
+  0%,55%  { opacity: 0; transform: translateX(12px); }
+  63%     { opacity: 1; transform: translateX(0); }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes ifcsTag {
+  0%,66%  { opacity: 0; transform: translateY(8px); }
+  74%     { opacity: 1; transform: translateY(0); }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes ifcsL1 { 0%{opacity:0} 5%{opacity:1} 26%{opacity:1} 31%{opacity:0} 100%{opacity:0} }
+@keyframes ifcsL2 { 0%,31%{opacity:0} 36%{opacity:1} 55%{opacity:1} 60%{opacity:0} 100%{opacity:0} }
+@keyframes ifcsL3 { 0%,60%{opacity:0} 65%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes ifcsProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">IFC属性検索 <span style="opacity:.75;font-weight:700">ifc_attr_search_v2</span></h1>
+    <p class="catch">製品記号ひとつで、モデルの中の<span class="em">本体</span>と<span class="em">附帯パーツ</span>をパッと仕分けする検索ノード。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中（活発に更新）</span>
+      <span class="badge st-ver">v2.2 相当</span>
+      <span class="badge st-ver">GH Python ノード</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg ifcs-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="製品記号で検索してブロックを確保し、本体と附帯を色分けするアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="ifcs-prog-tr" x="300" y="18" width="200" height="6" rx="3"></rect>
+        <rect class="ifcs-prog"    x="300" y="18" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① 検索窓（製品記号で検索） ===== -->
+        <g class="ifcs-search">
+          <rect class="ifcs-box" x="150" y="46" width="400" height="36" rx="18"></rect>
+          <circle class="ifcs-mag" cx="178" cy="64" r="8"></circle>
+          <line class="ifcs-mag" x1="184" y1="70" x2="192" y2="78"></line>
+          <text class="ifcs-boxtxt" x="204" y="69">SearchValue：TKB-01</text>
+          <rect class="ifcs-caret" x="366" y="55" width="2" height="18"></rect>
+        </g>
+
+        <!-- ===== モデル（鉄骨アセンブリ：本体H形鋼＋附帯パーツ） ===== -->
+        <g class="ifcs-model">
+          <!-- 本体：H形鋼（柱） -->
+          <rect class="ifcs-main" x="300" y="130" width="46" height="196" rx="1"></rect>
+          <line class="ifcs-main ifcs-flange" x1="292" y1="130" x2="354" y2="130"></line>
+          <line class="ifcs-main ifcs-flange" x1="292" y1="326" x2="354" y2="326"></line>
+          <text class="ifcs-ptxt" x="323" y="352" text-anchor="middle">本体 H形鋼</text>
+
+          <!-- 附帯：ガセットPL（右上に付く板） -->
+          <polygon class="ifcs-sub" points="346,150 402,158 402,196 346,188"></polygon>
+          <text class="ifcs-ptxt" x="374" y="214" text-anchor="middle">ガセットPL</text>
+
+          <!-- 附帯：クリップアングル（左中） -->
+          <path class="ifcs-sub" d="M300,238 L268,238 L268,272 L280,272 L280,250 L300,250 Z"></path>
+          <text class="ifcs-ptxt" x="270" y="288" text-anchor="middle">アングル</text>
+
+          <!-- 附帯：ベースPL（下） -->
+          <rect class="ifcs-sub" x="284" y="326" width="78" height="14" rx="1"></rect>
+        </g>
+
+        <!-- ===== ③ SplitPick チェックリスト（附帯を選ぶ） ===== -->
+        <g class="ifcs-panel-g">
+          <rect class="ifcs-panel" x="512" y="112" width="238" height="196" rx="8"></rect>
+          <text class="ifcs-panel-lbl" x="528" y="136">SplitPick（附帯を選ぶ）</text>
+
+          <!-- 附帯：チェック済み（赤） -->
+          <rect class="ifcs-cbox-sub" x="528" y="150" width="18" height="18" rx="4"></rect>
+          <path class="ifcs-check" d="M532,159 l4,4 l7,-8"></path>
+          <text class="ifcs-cbtxt" x="556" y="164">ガセットPL</text>
+
+          <rect class="ifcs-cbox-sub" x="528" y="180" width="18" height="18" rx="4"></rect>
+          <path class="ifcs-check" d="M532,189 l4,4 l7,-8"></path>
+          <text class="ifcs-cbtxt" x="556" y="194">クリップアングル</text>
+
+          <rect class="ifcs-cbox-sub" x="528" y="210" width="18" height="18" rx="4"></rect>
+          <path class="ifcs-check" d="M532,219 l4,4 l7,-8"></path>
+          <text class="ifcs-cbtxt" x="556" y="224">ベースPL</text>
+
+          <!-- 本体：チェックなし（グレー） -->
+          <rect class="ifcs-cbox-main" x="528" y="240" width="18" height="18" rx="4"></rect>
+          <text class="ifcs-cbtxt" x="556" y="254">H形鋼（本体）</text>
+
+          <text class="ifcs-panel-lbl" x="528" y="288" style="fill:#f87171">チェック＝附帯 / 残り＝本体</text>
+        </g>
+
+        <!-- ===== 出力タグ ===== -->
+        <g class="ifcs-tag">
+          <rect class="ifcs-tag-box" x="150" y="378" width="500" height="28" rx="14"></rect>
+          <rect class="ifcs-swm" x="166" y="386" width="12" height="12" rx="2"></rect>
+          <text class="ifcs-tagtxt" x="184" y="397">MainGeo（本体）</text>
+          <rect class="ifcs-sws" x="332" y="386" width="12" height="12" rx="2"></rect>
+          <text class="ifcs-tagtxt" x="350" y="397">SubGeo（附帯）</text>
+          <text class="ifcs-tagtxt" x="500" y="397">＋ InstId →</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="ifcs-cap ifcs-l1" x="400" y="432" text-anchor="middle">① 製品記号で検索（SearchValue の部分一致）</text>
+        <text class="ifcs-cap ifcs-l2" x="400" y="432" text-anchor="middle">② ヒットしたブロックを確保（白くハイライト）</text>
+        <text class="ifcs-cap ifcs-l3" x="400" y="432" text-anchor="middle">③ SplitPick で 本体＝シアン / 附帯＝赤 に仕分け</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">製品記号でブロックを検索して確保し、チェックリストで選んだ附帯パーツだけを本体から切り分ける——この一連の仕分けを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>Make2Dパイプラインで<strong>「図面に描く部材」だけを取り出す</strong>ためのノードです。モデルの中で <strong>ProductKey（製品記号）を部分一致で検索</strong>し、対象のブロック（＝ひとつの部材アセンブリ）を確保します。たとえば断面図に載せたい柱を、記号ひとつで一発で選び出せます。</p>
+    <p>さらに <strong>SplitPick のチェックリスト</strong>で、確保したブロックの中身を<strong>本体（MainGeo）と附帯パーツ（SubGeo）に手で分けられます</strong>。柱本体は切断線、ガセットやベースプレートなどの附帯は見え線、というように <a href="make2d-executor.html">Executor</a> が描き分けるための素材になります。分類はブロック定義名をキーにして .3dm に記憶されるので、同じ部材なら次回も選択が復元されます。同じ形状を自動で附帯にまわす機能や、無人バッチ対応も備えています。</p>
+    <p class="lead">※ ProductKey／製品記号＝Teklaなどが部材に振る番号。<a href="ifc2rhino.html">ifc2rhino</a> が焼き込んだ UserText 属性を検索対象にできる。／ 本体＝図面で切断線として描く主部材、附帯＝それに付くプレートやアングル類。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート（4）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">SearchKey /<br>SearchValue</td><td>検索する属性名（キー）と値。<span class="port" style="color:var(--accent)">SearchValue</span> は <a href="make2d-planner.html">プランナー</a> の <span class="port" style="color:var(--accent)">ProductKey</span> を直結できる。<strong>部分一致</strong>で拾う。</td></tr>
+          <tr><td class="port">Run</td><td>検索を実行するトリガ（ボタン）。押すとモデルからヒットしたブロックを確保・ハイライトする。</td></tr>
+          <tr><td class="port">SplitPick</td><td>確保したブロックの中身を並べたチェックリスト。<strong>チェックした要素を附帯</strong>（SubGeo）へまわす。</td></tr>
+          <tr><td class="port">SubRefIds</td><td>手動で附帯に加えたい形状のID。ここに溜めた形状を一体化パーツとして自動的に附帯へ寄せる。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート（3）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">MainGeo</td><td><strong>本体</strong>ジオメトリ。図面で切断線として描く主部材。</td></tr>
+          <tr><td class="port">SubGeo</td><td><strong>附帯</strong>ジオメトリ。プレートやアングル等の見え線用パーツ。</td></tr>
+          <tr><td class="port">InstId</td><td>確保したブロックのインスタンスID。<a href="touch-finder.html">接触検出（RefTouchFinder）</a> の入力になり、周辺部材の抽出につながる。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">検索語を入れる</span><span class="step-body"><span class="port" style="color:var(--accent)">SearchKey</span> に属性名、<span class="port" style="color:var(--accent)">SearchValue</span> に製品記号を入力する。<a href="make2d-planner.html">プランナー</a>の <span class="port" style="color:var(--accent)">ProductKey</span> を直結すると自動で入る。</span></li>
+      <li><span class="step-title">実行して確保する</span><span class="step-body"><span class="port" style="color:var(--accent)">Run</span> を押すと、ヒットしたブロックがモデル上で白くハイライトされる。狙った部材が選べているか確認する。</span></li>
+      <li><span class="step-title">本体と附帯を分ける</span><span class="step-body"><span class="port" style="color:var(--accent)">SplitPick</span> のチェックリストで、附帯にしたいパーツ（ガセット・ベースPL等）にチェックを入れる。チェック分が <span class="port" style="color:var(--accent)">SubGeo</span>、残りが <span class="port" style="color:var(--accent)">MainGeo</span> になる。</span></li>
+      <li><span class="step-title">取りこぼしを手当てする</span><span class="step-body">リストに出ない一体化パーツは <span class="port" style="color:var(--accent)">SubRefIds</span> にIDを溜めると附帯へ寄せられる。飛び地の誤混入は <span class="port" style="color:var(--accent)">FarTol</span> で除外する。</span></li>
+      <li><span class="step-title">下流へ渡す</span><span class="step-body"><span class="port" style="color:var(--accent)">MainGeo / SubGeo</span> を <a href="make2d-executor.html">Executor</a> へ、<span class="port" style="color:var(--accent)">InstId</span> を <a href="touch-finder.html">接触検出</a> へつなぐ。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <a class="chip chip-up" href="make2d-planner.html">Make2Dプランナー（ProductKey）</a>
+        <a class="chip chip-up" href="ifc2rhino.html">IFC⇔Rhino変換 ifc2rhino</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">ifc_attr_search_v2（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="make2d-executor.html">Make2D実行 GH_Make2DExecutor</a>
+        <a class="chip chip-down" href="touch-finder.html">接触検出 touch_finder</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">全体像は <a href="../pipeline.html">Make2Dパイプライン詳細図</a> で確認できます。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\01_柱梁フレーム.3dm</span>
+      <p class="sample-desc">柱梁フレームにガセット／浮きピースが付いた素材。本体と附帯の仕分け、飛び地パーツの除外を試すのにちょうどよいです。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> を開く（またはワークセッションで参照）。</span></li>
+        <li><span class="step-title">記号で検索</span><span class="step-body"><span class="port" style="color:var(--accent)">SearchValue</span> に柱の製品記号を入れて <span class="port" style="color:var(--accent)">Run</span>。対象ブロックが白くハイライトされる。</span></li>
+        <li><span class="step-title">附帯を選ぶ</span><span class="step-body"><span class="port" style="color:var(--accent)">SplitPick</span> でガセットや浮きピースにチェック。本体（柱）と附帯が色で分かれる。</span></li>
+        <li><span class="step-title">飛び地を除外</span><span class="step-body">遠くに離れたパーツが混ざったら <span class="port" style="color:var(--accent)">FarTol</span> を絞って除外し、<span class="port" style="color:var(--accent)">MainGeo / SubGeo</span> がきれいに分かれることを確認する。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> ブロック定義に飛び地パーツが混ざると附帯に誤混入する</div>
+        <p>柱アセンブリの定義に、遠く離れた吊りピースなどの<strong>飛び地パーツ</strong>が含まれていると、附帯として誤って拾ってしまいます。<span class="port" style="color:var(--accent)">FarTol</span>（遠隔パーツ除外）で、対角の最大アンカーから一定距離を超えるものを外してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 検索は部分一致 ― 語がゆるいと余計なブロックまで拾う</div>
+        <p><span class="port" style="color:var(--accent)">SearchValue</span> は部分一致で検索します。記号が短すぎたり共通しすぎると、狙っていない部材まで一緒にヒットします。ハイライトを見て、拾いすぎていないか必ず確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 属性が焼き込まれていないモデルでは記号検索できない</div>
+        <p>検索対象は部材が持つ UserText 属性です。<a href="ifc2rhino.html">ifc2rhino</a> で属性を焼き込んだモデルなら検索できますが、属性のない素のジオメトリでは記号でヒットしません。まず属性の有無を確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 活発に更新中 ― 分類の自己修復に頼りきらない</div>
+        <p>本ノードは頻繁に更新されており、モデルを切り替えても選択を保つ「型｜寸法の緩和照合による自己修復」を備えます。ただし定義名や寸法が大きく変わると再照合が要る場合があります。重要案件では仕分け結果を目視で確認してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\図面整理\<span class="fp-accent">ifc_attr_search_v2.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

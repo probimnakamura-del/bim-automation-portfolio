@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Make2Dパイプライン詳細図 — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+/* ============================================================
+   pipeline.html 専用スタイル（共通は assets/style.css）
+   ============================================================ */
+.pl-intro { padding: 36px 20px 8px; }
+.pl-intro h1 {
+  margin: 0 0 10px; font-size: clamp(26px, 5vw, 40px); font-weight: 900;
+  background: linear-gradient(90deg, #22d3ee, #a78bfa 55%, #f472b6);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.pl-intro p { color: var(--sub); max-width: 74ch; margin: 0 0 6px; }
+.pl-intro p b { color: var(--text); }
+
+.pl-sec { padding: 20px 20px 34px; border-bottom: 1px solid var(--line); }
+.pl-sec h2 {
+  display: inline-block; margin: 6px 0 4px; font-size: 22px; font-weight: 800;
+  padding-bottom: 6px;
+  background: linear-gradient(90deg, var(--accent), transparent) bottom left / 100% 3px no-repeat;
+}
+.pl-sec .pl-note { color: var(--sub); margin: 0 0 18px; max-width: 74ch; }
+
+/* 凡例 */
+.legend { display:flex; flex-wrap:wrap; gap:16px; margin: 14px 0 6px; }
+.legend .lg { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--sub); font-weight:600; }
+.legend .sw { width:26px; height:14px; border-radius:4px; border:2px solid; display:inline-block; }
+.legend .sw.m2d  { border-color:#22d3ee; background:rgba(34,211,238,.14); }
+.legend .sw.ifc  { border-color:#a78bfa; background:rgba(167,139,250,.14); }
+.legend .sw.file { border-color:#6f7db0; background:rgba(111,125,176,.14); }
+.legend .ln { width:30px; height:0; border-top:2px solid #22d3ee; display:inline-block; }
+.legend .ln.dash { border-top-style:dashed; }
+.legend .dt { width:10px; height:10px; border-radius:50%; background:#eafcff; box-shadow:0 0 8px 2px #22d3ee; display:inline-block; }
+
+/* SVG 図 */
+.pipe-svg { display:block; }
+.pipe-svg text { font-family: var(--font); }
+
+/* ノード箱（クリックでノードページへ） */
+.pipe-svg .pnode rect { fill:#0f1a30; stroke:#22d3ee; stroke-width:2.2; transition: fill .18s, stroke .18s; }
+.pipe-svg .pnode:hover rect { fill:#183153; stroke:#7de9fb; }
+.pipe-svg .pnode .pn-name { fill:#e6ecff; font-size:14.5px; font-weight:800; }
+.pipe-svg .pnode .pn-sub  { fill:#9aa7cc; font-size:11px; font-weight:600; }
+.pipe-svg a { cursor:pointer; }
+
+/* 別入口（点線枠） */
+.pipe-svg .pnode.alt rect { stroke-dasharray:7 5; fill:#0d1526; }
+.pipe-svg .pnode.alt:hover rect { fill:#152740; }
+
+/* ファイル（書き戻し先など・非リンク） */
+.pipe-svg .fbox rect { fill:#12172a; stroke:#6f7db0; stroke-width:2; }
+.pipe-svg .fbox text { fill:#c7d0ee; }
+
+/* IFCサブ図のノード色 */
+.pipe-svg .pnode.ifc rect { stroke:#a78bfa; }
+.pipe-svg .pnode.ifc:hover rect { stroke:#c4b3ff; fill:#241a3f; }
+
+/* 接続線 */
+.conn { fill:none; stroke:#22d3ee; stroke-width:2; opacity:.5; }
+.conn.v { stroke:#a78bfa; }              /* IFCサブ図 */
+.conn.dash { stroke-dasharray:8 6; opacity:.42; }
+.conn.thick { stroke-width:2.6; opacity:.6; }
+
+/* 接続ラベル */
+.clbl { font-size:11.5px; fill:#9aa7cc; font-weight:700; }
+.clbl.bg { fill:#0b1020; }               /* 線の上に敷く背景用 */
+
+/* バンドの見出し帯 */
+.band { fill:#9aa7cc; font-size:12.5px; font-weight:800; letter-spacing:.06em; }
+
+/* 流れるドット */
+.flowdot { fill:#eafcff; }
+.flowdot.v { fill:#e9deff; }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- イントロ -->
+<section class="pl-intro">
+  <div class="wrap">
+    <h1>Make2D 図面化パイプライン 全体図</h1>
+    <p><b>3Dモデルと2D図面から情報を集め、切断を計画し、Make2Dで断面を起こして、元の図面ファイルへ書き戻す</b>——この一連の流れを、たくさんのGHノードが分担しています。</p>
+    <p>下の図は、その全ノードのつながりです。<b>箱をクリックすると、そのノードの詳しい説明ページ</b>へ移動します。線の上を光る点が流れているのが「データの流れ」です。箱にマウスを乗せると、そのツールのひとことキャッチが出ます。</p>
+    <div class="legend">
+      <span class="lg"><span class="sw m2d"></span>図面化パイプラインのノード</span>
+      <span class="lg"><span class="sw ifc"></span>IFC連携のノード</span>
+      <span class="lg"><span class="sw file"></span>ファイル（書込先など）</span>
+      <span class="lg"><span class="ln"></span>データの流れ</span>
+      <span class="lg"><span class="ln dash"></span>別入口・補助的な流れ</span>
+      <span class="lg"><span class="dt"></span>流れる点＝データ</span>
+    </div>
+  </div>
+</section>
+
+<!-- メイン全体図 -->
+<section class="pl-sec">
+  <div class="wrap">
+    <h2>本線：2D図面と3Dモデルが合流して製作図になるまで</h2>
+    <p class="pl-note">左の「情報あつめ」から右の「元図面へ書き戻し」へ、左から右へ流れます。上段が<b style="color:var(--text)">2D図面から情報を読む系</b>、下段が<b style="color:var(--text)">3Dモデルから部材を集める系</b>。両者が中央の<b style="color:var(--text)">プランナー／実行（Executor）</b>で合流します。</p>
+    <div class="map-wrap">
+      <svg class="pipe-svg" viewBox="0 0 1390 710" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" role="img" aria-label="Make2Dパイプライン全体図">
+        <defs>
+          <marker id="ah" markerWidth="10" markerHeight="10" refX="7.5" refY="4.5" orient="auto-start-reverse">
+            <path d="M0 0 L9 4.5 L0 9 Z" fill="#22d3ee"/>
+          </marker>
+          <marker id="ah-d" markerWidth="10" markerHeight="10" refX="7.5" refY="4.5" orient="auto-start-reverse">
+            <path d="M0 0 L9 4.5 L0 9 Z" fill="#22d3ee" opacity=".55"/>
+          </marker>
+        </defs>
+
+        <!-- ===== バンド見出し ===== -->
+        <text class="band" x="30" y="40">① 情報あつめ</text>
+        <text class="band" x="300" y="40">② まとめる</text>
+        <text class="band" x="545" y="40">③ 計画する</text>
+        <text class="band" x="985" y="40">④ 実行する</text>
+        <text class="band" x="1215" y="40">⑤ 仕上げ</text>
+        <line x1="270" y1="20" x2="270" y2="560" stroke="#2a3352" stroke-dasharray="3 6"/>
+        <line x1="515" y1="20" x2="515" y2="560" stroke="#2a3352" stroke-dasharray="3 6"/>
+        <line x1="960" y1="20" x2="960" y2="560" stroke="#2a3352" stroke-dasharray="3 6"/>
+        <line x1="1195" y1="20" x2="1195" y2="560" stroke="#2a3352" stroke-dasharray="3 6"/>
+
+        <!-- 2D図面側の帯ラベル -->
+        <text class="clbl" x="36" y="66" fill="#22d3ee" font-size="12">【2D図面側】</text>
+        <text class="clbl" x="36" y="316" fill="#22d3ee" font-size="12">【3Dモデル側】</text>
+
+        <!-- ============ 接続線（箱の下に描く） ============ -->
+        <!-- 2D: extractor / symbol → dataJSON -->
+        <path class="conn" id="c-2d1" d="M194 78 L271 105" marker-end="url(#ah)"/>
+        <path class="conn" d="M194 150 L271 117" marker-end="url(#ah)"/>
+        <!-- dataJSON → section_lower -->
+        <path class="conn" d="M350 138 L350 205" marker-end="url(#ah)"/>
+        <!-- dataJSON → planner -->
+        <path class="conn" id="c-2d2" d="M429 111 L506 168" marker-end="url(#ah)"/>
+        <!-- section_lower → planner -->
+        <path class="conn" d="M429 232 L506 190" marker-end="url(#ah)"/>
+        <!-- grid_intersect → planner（3D側・下から回り込む） -->
+        <path class="conn" id="c-3d1" d="M194 372 L440 372 L440 205" marker-end="url(#ah)"/>
+        <!-- planner → executor（Plan_JSON・上段本線） -->
+        <path class="conn thick" id="c-plan" d="M664 175 L966 175" marker-end="url(#ah)"/>
+        <!-- planner → ifc_attr（ProductKey・下向き） -->
+        <path class="conn dash" id="c-pk" d="M585 202 L585 373" marker-end="url(#ah-d)"/>
+        <!-- ifc_attr → touch -->
+        <path class="conn" d="M664 400 L736 400" marker-end="url(#ah)"/>
+        <!-- touch → final -->
+        <path class="conn" d="M894 400 L966 400" marker-end="url(#ah)"/>
+        <!-- final → executor（TouchGeo・上向き） -->
+        <path class="conn" id="c-final" d="M1045 373 L1045 202" marker-end="url(#ah)"/>
+        <!-- ifc_attr → executor（Main/Sub Geo・上へ弧を描く） -->
+        <path class="conn" id="c-geo" d="M664 388 Q900 300 966 195" marker-end="url(#ah)"/>
+        <!-- executor → 仕上げ3種 -->
+        <path class="conn" d="M1124 165 L1191 105" marker-end="url(#ah)"/>
+        <path class="conn" d="M1124 175 L1191 182" marker-end="url(#ah)"/>
+        <path class="conn" d="M1124 188 L1191 262" marker-end="url(#ah)"/>
+        <!-- executor → 元図面.3dm（WriteBack） -->
+        <path class="conn dash" id="c-wb" d="M1075 202 C1120 320 1170 380 1201 400" marker-end="url(#ah-d)"/>
+
+        <!-- ============ 接続ラベル ============ -->
+        <text class="clbl" x="815" y="168" text-anchor="middle">Plan_JSON（切断計画）</text>
+        <text class="clbl" x="598" y="292">ProductKey</text>
+        <text class="clbl" x="700" y="392" text-anchor="middle">InstId</text>
+        <text class="clbl" x="930" y="392" text-anchor="middle">TouchGeo</text>
+        <text class="clbl" x="1062" y="292">最終セット</text>
+        <text class="clbl" x="812" y="286" text-anchor="middle">Main / Sub Geo</text>
+        <text class="clbl" x="1140" y="352">WriteBack</text>
+        <text class="clbl" x="300" y="362">通り芯交点</text>
+
+        <!-- ============ 流れるドット ============ -->
+        <circle class="flowdot" r="4"><animateMotion dur="2.6s" repeatCount="indefinite"><mpath xlink:href="#c-2d1"/></animateMotion></circle>
+        <circle class="flowdot" r="4"><animateMotion dur="2.4s" repeatCount="indefinite"><mpath xlink:href="#c-2d2"/></animateMotion></circle>
+        <circle class="flowdot" r="4"><animateMotion dur="3.4s" repeatCount="indefinite"><mpath xlink:href="#c-3d1"/></animateMotion></circle>
+        <circle class="flowdot" r="4.5"><animateMotion dur="3.6s" repeatCount="indefinite"><mpath xlink:href="#c-plan"/></animateMotion></circle>
+        <circle class="flowdot" r="4"><animateMotion dur="3s" repeatCount="indefinite"><mpath xlink:href="#c-geo"/></animateMotion></circle>
+        <circle class="flowdot" r="4"><animateMotion dur="2.2s" repeatCount="indefinite"><mpath xlink:href="#c-final"/></animateMotion></circle>
+        <circle class="flowdot" r="4"><animateMotion dur="2.8s" repeatCount="indefinite"><mpath xlink:href="#c-wb"/></animateMotion></circle>
+
+        <!-- ============ ノード箱 ============ -->
+        <!-- 2D側 -->
+        <a xlink:href="nodes/grid-extractor-v2.html" href="nodes/grid-extractor-v2.html" class="pnode">
+          <title>図面の通り芯をまとめて一発抽出（grid_extractor_v2）</title>
+          <rect x="36" y="51" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="115" y="73" text-anchor="middle">通り芯抽出</text>
+          <text class="pn-sub" x="115" y="91" text-anchor="middle">grid_extractor_v2</text>
+        </a>
+        <a xlink:href="nodes/section-symbol-title.html" href="nodes/section-symbol-title.html" class="pnode">
+          <title>A-A などの断面符号と切断図タイトルを自動抽出</title>
+          <rect x="36" y="123" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="115" y="145" text-anchor="middle">断面符号＆タイトル</text>
+          <text class="pn-sub" x="115" y="163" text-anchor="middle">GH_SectionSymbolTitle</text>
+        </a>
+        <a xlink:href="nodes/section-data-json.html" href="nodes/section-data-json.html" class="pnode">
+          <title>通り芯・断面・レベルをひとつのJSONに束ねる結節点</title>
+          <rect x="271" y="84" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="350" y="106" text-anchor="middle">統合JSON生成</text>
+          <text class="pn-sub" x="350" y="124" text-anchor="middle">GH_SectionDataJSON</text>
+        </a>
+        <a xlink:href="nodes/section-lower.html" href="nodes/section-lower.html" class="pnode">
+          <title>小文字 a,b の断面記号をAIで部材名と照合</title>
+          <rect x="271" y="205" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="350" y="227" text-anchor="middle">小文字断面</text>
+          <text class="pn-sub" x="350" y="245" text-anchor="middle">section_lower</text>
+        </a>
+        <!-- 3D側 -->
+        <a xlink:href="nodes/grid-intersect.html" href="nodes/grid-intersect.html" class="pnode">
+          <title>3Dモデルの通り芯交点を X1-Y3 の名前付きで抽出</title>
+          <rect x="36" y="345" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="115" y="367" text-anchor="middle">通り芯交点抽出</text>
+          <text class="pn-sub" x="115" y="385" text-anchor="middle">GH_GridIntersect</text>
+        </a>
+        <!-- 計画 -->
+        <a xlink:href="nodes/make2d-planner.html" href="nodes/make2d-planner.html" class="pnode">
+          <title>どこをどの向きで切るか——切断計画を自動立案</title>
+          <rect x="506" y="148" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="585" y="170" text-anchor="middle">Make2Dプランナー</text>
+          <text class="pn-sub" x="585" y="188" text-anchor="middle">GH_Make2DPlanner</text>
+        </a>
+        <a xlink:href="nodes/ifc-attr-search-v2.html" href="nodes/ifc-attr-search-v2.html" class="pnode">
+          <title>IFC属性で部材を検索、本体と附帯をきれいに仕分け</title>
+          <rect x="506" y="373" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="585" y="395" text-anchor="middle">IFC属性検索</text>
+          <text class="pn-sub" x="585" y="413" text-anchor="middle">ifc_attr_search_v2</text>
+        </a>
+        <a xlink:href="nodes/touch-finder.html" href="nodes/touch-finder.html" class="pnode">
+          <title>くっついている周辺部材を自動で拾い出す</title>
+          <rect x="736" y="373" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="815" y="395" text-anchor="middle">接触検出</text>
+          <text class="pn-sub" x="815" y="413" text-anchor="middle">ref_touch_finder_v2</text>
+        </a>
+        <a xlink:href="nodes/final-select.html" href="nodes/final-select.html" class="pnode">
+          <title>あちこちの選択を一本化する最終セットの中継ハブ</title>
+          <rect x="966" y="373" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="1045" y="395" text-anchor="middle">最終選択ハブ</text>
+          <text class="pn-sub" x="1045" y="413" text-anchor="middle">GH_FinalSelect</text>
+        </a>
+        <!-- 実行（中心・強調） -->
+        <a xlink:href="nodes/make2d-executor.html" href="nodes/make2d-executor.html" class="pnode">
+          <title>モデルをスパッと切って、そのまま元図面へ書き戻す（最終工程）</title>
+          <rect x="966" y="146" width="158" height="58" rx="10" stroke-width="3"/>
+          <text class="pn-name" x="1045" y="169" text-anchor="middle" font-size="15.5">Make2D 実行</text>
+          <text class="pn-sub" x="1045" y="188" text-anchor="middle">GH_Make2DExecutor</text>
+        </a>
+        <!-- 仕上げ -->
+        <a xlink:href="nodes/partmark.html" href="nodes/partmark.html" class="pnode">
+          <title>同じ形は同じ記号。部材記号を自動採番して部材表に</title>
+          <rect x="1191" y="78" width="168" height="54" rx="9"/>
+          <text class="pn-name" x="1275" y="100" text-anchor="middle">部材記号システム</text>
+          <text class="pn-sub" x="1275" y="118" text-anchor="middle">GH_PartMark / PartsList</text>
+        </a>
+        <a xlink:href="nodes/annotate-dim-gh.html" href="nodes/annotate-dim-gh.html" class="pnode">
+          <title>AIが寸法位置を提案。図面注記をGHで自動化</title>
+          <rect x="1191" y="155" width="168" height="54" rx="9"/>
+          <text class="pn-name" x="1275" y="177" text-anchor="middle">寸法注記GH版</text>
+          <text class="pn-sub" x="1275" y="195" text-anchor="middle">GH_AnnotateDim</text>
+        </a>
+        <a xlink:href="nodes/hokan-system.html" href="nodes/hokan-system.html" class="pnode">
+          <title>柱詳細図の描き漏れをスキャンして自動で補完注記</title>
+          <rect x="1191" y="235" width="168" height="54" rx="9"/>
+          <text class="pn-name" x="1275" y="257" text-anchor="middle">柱詳細図補完</text>
+          <text class="pn-sub" x="1275" y="275" text-anchor="middle">hokan_system</text>
+        </a>
+        <!-- 書き戻し先ファイル -->
+        <g class="fbox">
+          <rect x="1201" y="373" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="1280" y="395" text-anchor="middle">元図面 .3dm</text>
+          <text class="pn-sub" x="1280" y="413" text-anchor="middle">新レイヤーで書込（自動.bak）</text>
+        </g>
+
+        <!-- ============ 別入口（3つ・点線枠） ============ -->
+        <text class="band" x="30" y="600">別の入口</text>
+        <line x1="20" y1="612" x2="1360" y2="612" stroke="#2a3352" stroke-dasharray="3 6"/>
+
+        <!-- 別入口の誘導線 -->
+        <path class="conn dash" id="c-sys" d="M240 636 C240 470 380 240 505 200" marker-end="url(#ah-d)"/>
+        <path class="conn dash" id="c-pre" d="M610 636 C720 540 900 300 990 206" marker-end="url(#ah-d)"/>
+        <path class="conn dash" id="c-easy" d="M905 636 C960 560 1010 320 1035 206" marker-end="url(#ah-d)"/>
+
+        <a xlink:href="nodes/make2d-system.html" href="nodes/make2d-system.html" class="pnode alt">
+          <title>「M2D」で下の9ノードを自動配線して一括構築</title>
+          <rect x="120" y="636" width="240" height="56" rx="9"/>
+          <text class="pn-name" x="240" y="659" text-anchor="middle">ワンボタン構築 make2d_system</text>
+          <text class="pn-sub" x="240" y="678" text-anchor="middle">「M2D」で9ノードを自動配線</text>
+        </a>
+        <a xlink:href="nodes/make2d-precut.html" href="nodes/make2d-precut.html" class="pnode alt">
+          <title>統合JSONなしでも動く、切断だけの手軽ルート</title>
+          <rect x="500" y="636" width="220" height="56" rx="9"/>
+          <text class="pn-name" x="610" y="659" text-anchor="middle">単体ルート GH_Make2DPreCut</text>
+          <text class="pn-sub" x="610" y="678" text-anchor="middle">統合JSON不要で直接Executorへ</text>
+        </a>
+        <a xlink:href="nodes/easy-make2d.html" href="nodes/easy-make2d.html" class="pnode alt">
+          <title>GH不要。切断位置をクリックすれば即Make2D</title>
+          <rect x="800" y="636" width="210" height="56" rx="9"/>
+          <text class="pn-name" x="905" y="659" text-anchor="middle">クイック版 easy_make2d</text>
+          <text class="pn-sub" x="905" y="678" text-anchor="middle">GH不要・クリックで即Make2D</text>
+        </a>
+
+        <!-- 流れるドット（別入口） -->
+        <circle class="flowdot" r="3.6" opacity=".8"><animateMotion dur="4s" repeatCount="indefinite"><mpath xlink:href="#c-sys"/></animateMotion></circle>
+        <circle class="flowdot" r="3.6" opacity=".8"><animateMotion dur="4.2s" repeatCount="indefinite"><mpath xlink:href="#c-pre"/></animateMotion></circle>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- IFC連携サブ図 -->
+<section class="pl-sec">
+  <div class="wrap">
+    <h2>サブ図：IFC連携ルート（属性が本線へ届くまで）</h2>
+    <p class="pl-note">本線の「IFC属性検索」が使う<b style="color:var(--text)">部材の属性データ</b>は、こちらのIFC連携ルートで用意します。TeklaなどのIFCを、スキーマ変換・結合を経てRhinoへ取り込み、<b style="color:var(--text)">属性をUserTextとして焼き込む</b>。すると本線の属性検索でその値を使えるようになります。</p>
+    <div class="map-wrap">
+      <svg class="pipe-svg" viewBox="0 0 1240 260" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" role="img" aria-label="IFC連携ルートのサブ図">
+        <defs>
+          <marker id="ahv" markerWidth="10" markerHeight="10" refX="7.5" refY="4.5" orient="auto-start-reverse">
+            <path d="M0 0 L9 4.5 L0 9 Z" fill="#a78bfa"/>
+          </marker>
+        </defs>
+
+        <!-- 接続線 -->
+        <path class="conn v" id="i1" d="M170 120 L221 120" marker-end="url(#ahv)"/>
+        <path class="conn v" id="i2" d="M379 120 L431 120" marker-end="url(#ahv)"/>
+        <path class="conn v" id="i3" d="M589 120 L641 120" marker-end="url(#ahv)"/>
+        <path class="conn v" id="i4" d="M799 120 L851 120" marker-end="url(#ahv)"/>
+        <path class="conn" id="i5" d="M1009 120 L1061 120" marker-end="url(#ah)"/>
+
+        <text class="clbl" x="405" y="110" text-anchor="middle">結合</text>
+        <text class="clbl" x="615" y="110" text-anchor="middle">3dm化</text>
+        <text class="clbl" x="825" y="110" text-anchor="middle">属性焼込</text>
+        <text class="clbl" x="1035" y="110" text-anchor="middle">検索対象に</text>
+
+        <!-- 流れるドット -->
+        <circle class="flowdot v" r="4"><animateMotion dur="6s" repeatCount="indefinite" keyPoints="0;0.2;0.4;0.6;0.8;1" keyTimes="0;0.2;0.4;0.6;0.8;1" calcMode="linear">
+          <mpath xlink:href="#i1"/></animateMotion></circle>
+
+        <!-- ソース：Tekla IFC（ファイル） -->
+        <g class="fbox">
+          <rect x="20" y="93" width="150" height="54" rx="9"/>
+          <text class="pn-name" x="95" y="115" text-anchor="middle">Tekla / Solibri</text>
+          <text class="pn-sub" x="95" y="133" text-anchor="middle">.ifc ファイル</text>
+        </g>
+        <!-- ifc_converter -->
+        <a xlink:href="nodes/ifc-converter.html" href="nodes/ifc-converter.html" class="pnode ifc">
+          <title>IFC2X3 を IFC4 へスキーマ変換（非対応要素は事前置換）</title>
+          <rect x="221" y="93" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="300" y="115" text-anchor="middle">IFCスキーマ変換</text>
+          <text class="pn-sub" x="300" y="133" text-anchor="middle">IFC_Converter</text>
+        </a>
+        <!-- join系 -->
+        <a xlink:href="nodes/join-ifc-model.html" href="nodes/join-ifc-model.html" class="pnode ifc">
+          <title>原点キューブのズレを見て複数IFCを自動位置合わせ結合（Join_IFC_model / Join_IF_model）</title>
+          <rect x="431" y="93" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="510" y="115" text-anchor="middle">IFC結合（join系）</text>
+          <text class="pn-sub" x="510" y="133" text-anchor="middle">Join_IFC_model 他</text>
+        </a>
+        <!-- ifc2rhino -->
+        <a xlink:href="nodes/ifc2rhino.html" href="nodes/ifc2rhino.html" class="pnode ifc">
+          <title>孔もキレイなIFC⇔Rhino変換。属性を焼き込んで往復可</title>
+          <rect x="641" y="93" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="720" y="115" text-anchor="middle">IFC⇔Rhino変換</text>
+          <text class="pn-sub" x="720" y="133" text-anchor="middle">ifc2rhino</text>
+        </a>
+        <!-- UserText属性（データ） -->
+        <g class="fbox">
+          <rect x="851" y="93" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="930" y="115" text-anchor="middle">UserText 属性</text>
+          <text class="pn-sub" x="930" y="133" text-anchor="middle">各部材に焼き込み</text>
+        </g>
+        <!-- ifc_attr_search（本線へ） -->
+        <a xlink:href="nodes/ifc-attr-search-v2.html" href="nodes/ifc-attr-search-v2.html" class="pnode">
+          <title>本線のノード：IFC属性で部材を検索、本体と附帯を仕分け</title>
+          <rect x="1061" y="93" width="158" height="54" rx="9"/>
+          <text class="pn-name" x="1140" y="115" text-anchor="middle">IFC属性検索</text>
+          <text class="pn-sub" x="1140" y="133" text-anchor="middle">ifc_attr_search_v2 →本線</text>
+        </a>
+
+        <text class="clbl" x="20" y="180" fill="#9aa7cc">※ 「ライノセラスに変換」パイプラインや BIM-Shield も、IFC→Rhino を担う別ルートです（カタログの IFC カテゴリを参照）。</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- フッタ -->
+<footer class="site-footer">
+  <div class="wrap">
+    <p>各ノードの詳しい使い方・入出力・既知の罠は、図の箱をクリックして個別ページでどうぞ。</p>
+    <div class="foot-links">
+      <a href="index.html">← カタログへ戻る</a>
+      <a href="index.html#cat-m2d">図面化パイプラインの一覧</a>
+      <a href="index.html#cat-ifc">IFC・データ連携の一覧</a>
+      <a href="nodes/make2d-executor.html">Make2D実行（最終工程）</a>
+    </div>
+    <p style="color:var(--sub);font-size:13px;margin-top:12px">生成日: 2026-07-12　／　コードベース調査（scout 13体）にもとづく自動ドキュメント。</p>
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

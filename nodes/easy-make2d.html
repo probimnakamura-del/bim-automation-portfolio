@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>簡単Make2D easy_make2d — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス em2d- で衝突回避
+   ①モデルを選択 → ②切断位置をクリック（実断面線をライブプレビュー）
+   → ③原点付近の空きスロットへ 1:1 で配置
+   ============================================================ */
+.em2d-svg text { font-family: var(--font); }
+
+/* 部材（柱・梁）＝簡略矩形 */
+.em2d-mem   { fill: #0f1a30; stroke: var(--accent); stroke-width: 2.2; }
+.em2d-depth { fill: none;    stroke: var(--accent); stroke-width: 1.3; opacity: .38; }
+.em2d-base  { stroke: #6f7db0; stroke-width: 2; }
+/* 通り芯＝一点鎖線 */
+.em2d-grid    { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: .75;
+                stroke-dasharray: 11 4 2 4; }
+.em2d-gridlbl { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: .8; }
+
+/* クリックした切断位置の線＋カーソル */
+.em2d-cutline { fill: none; stroke: var(--accent); stroke-width: 3.4; stroke-linecap: round; }
+.em2d-cursor  { fill: var(--accent); }
+.em2d-ripple  { fill: none; stroke: var(--accent); stroke-width: 2.2;
+                transform-box: fill-box; transform-origin: center; }
+/* カーソル追従の実断面線プレビュー */
+.em2d-preview { fill: none; stroke: var(--accent); stroke-width: 2.8; stroke-linecap: round; }
+
+/* 変換の矢印＋流れるデータドット */
+.em2d-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.6; opacity: .85; }
+.em2d-arrow-head  { fill: var(--accent); }
+.em2d-flowdot     { fill: #ffffff; }
+
+/* 図面スロット */
+.em2d-ghost   { fill: none; stroke: #3f4a72; stroke-width: 1.8; }
+.em2d-slotbox { fill: none; stroke: color-mix(in srgb, var(--accent) 50%, #34406a);
+                stroke-width: 1.4; stroke-dasharray: 6 5; }
+.em2d-2d      { fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round;
+                stroke-dasharray: 100; }
+.em2d-tag-box { fill: #0b1428; stroke: var(--accent); stroke-width: 1.4; }
+.em2d-symbol  { fill: #0b1428; stroke: var(--accent); stroke-width: 1.6; }
+
+/* テキスト */
+.em2d-cap    { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.em2d-small  { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+.em2d-tagtxt { fill: #e6ecff; font-size: 12.5px; font-weight: 700; }
+
+/* 進捗バー */
+.em2d-prog-tr { fill: #223052; }
+.em2d-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.em2d-model   { animation: em2dModel   10s infinite; }
+.em2d-cut     { animation: em2dCut     10s infinite; }
+.em2d-ripple  { animation: em2dRipple  10s infinite; }
+.em2d-preview { animation: em2dPreview 10s infinite; }
+.em2d-arrow   { animation: em2dArrow   10s infinite; }
+.em2d-flow    { animation: em2dFlow    10s infinite; }
+.em2d-slot    { animation: em2dSlot    10s infinite; }
+.em2d-drawA   { animation: em2dDrawA   10s infinite; }
+.em2d-drawB   { animation: em2dDrawB   10s infinite; }
+.em2d-tag     { animation: em2dTag     10s infinite; }
+.em2d-l1      { animation: em2dL1      10s infinite; }
+.em2d-l2      { animation: em2dL2      10s infinite; }
+.em2d-l3      { animation: em2dL3      10s infinite; }
+.em2d-prog    { animation: em2dProg    10s linear infinite; }
+
+@keyframes em2dModel {
+  0%,3%   { opacity: 0; }
+  8%      { opacity: 1; }
+  60%     { opacity: 1; }
+  70%,90% { opacity: .5; }
+  97%,100%{ opacity: 0; }
+}
+@keyframes em2dCut {
+  0%,30%  { opacity: 0; transform: translateX(-46px); }
+  34%     { opacity: 1; transform: translateX(-10px); }
+  46%     { opacity: 1; transform: translateX(0); }
+  60%     { opacity: 1; transform: translateX(0); }
+  66%,100%{ opacity: 0; transform: translateX(6px); }
+}
+@keyframes em2dRipple {
+  0%,33%  { opacity: 0; transform: scale(.3); }
+  37%     { opacity: .85; transform: scale(.6); }
+  46%     { opacity: 0; transform: scale(1.9); }
+  100%    { opacity: 0; transform: scale(1.9); }
+}
+@keyframes em2dPreview {
+  0%,36%  { opacity: 0; }
+  42%     { opacity: 1; }
+  50%     { opacity: .45; }
+  56%     { opacity: 1; }
+  62%,100%{ opacity: 0; }
+}
+@keyframes em2dArrow {
+  0%,58%  { opacity: 0; }
+  64%     { opacity: 1; }
+  95%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes em2dFlow {
+  0%,60%   { opacity: 0; transform: translateX(0); }
+  64%      { opacity: 1; transform: translateX(0); }
+  74%      { opacity: 1; transform: translateX(148px); }
+  78%,100% { opacity: 0; transform: translateX(148px); }
+}
+@keyframes em2dSlot {
+  0%,58%  { opacity: 0; transform: translateY(8px); }
+  66%     { opacity: 1; transform: translateY(0); }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+/* 柱（縦線）を先に描く */
+@keyframes em2dDrawA {
+  0%,66%  { stroke-dashoffset: 100; }
+  82%     { stroke-dashoffset: 0; }
+  100%    { stroke-dashoffset: 0; }
+}
+/* 梁・基準線を少し遅れて描く */
+@keyframes em2dDrawB {
+  0%,74%  { stroke-dashoffset: 100; }
+  88%     { stroke-dashoffset: 0; }
+  100%    { stroke-dashoffset: 0; }
+}
+@keyframes em2dTag {
+  0%,84%  { opacity: 0; transform: translateY(6px); }
+  89%     { opacity: 1; transform: translateY(0); }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes em2dL1 { 0%{opacity:0} 4%{opacity:1} 30%{opacity:1} 35%{opacity:0} 100%{opacity:0} }
+@keyframes em2dL2 { 0%,35%{opacity:0} 39%{opacity:1} 60%{opacity:1} 65%{opacity:0} 100%{opacity:0} }
+@keyframes em2dL3 { 0%,65%{opacity:0} 69%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes em2dProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">簡単Make2D <span style="opacity:.75;font-weight:700">easy_make2d</span></h1>
+    <p class="catch">Grasshopper要らず。<span class="em">切りたい場所をクリックするだけ</span>で、その場に断面図が出てくる。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">v3.1 相当</span>
+      <span class="badge st-ver">Rhinoコマンド（GH不要）</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg em2d-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="切断位置をクリックして、その場で断面図を作るアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="em2d-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="em2d-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① 3Dモデル（柱梁フレーム）を選択 ===== -->
+        <g class="em2d-model">
+          <!-- 奥行きエッジ（3D感） -->
+          <line class="em2d-depth" x1="120" y1="150" x2="146" y2="132"></line>
+          <line class="em2d-depth" x1="266" y1="150" x2="292" y2="132"></line>
+          <line class="em2d-depth" x1="266" y1="330" x2="292" y2="312"></line>
+          <!-- 通り芯（一点鎖線）＋符号 -->
+          <line class="em2d-grid" x1="193" y1="120" x2="193" y2="352"></line>
+          <circle class="em2d-gridlbl" cx="193" cy="112" r="11"></circle>
+          <text class="em2d-small" x="193" y="116" text-anchor="middle">X2</text>
+          <!-- 柱2・梁 -->
+          <rect class="em2d-mem" x="120" y="150" width="16" height="180" rx="1"></rect>
+          <rect class="em2d-mem" x="250" y="150" width="16" height="180" rx="1"></rect>
+          <rect class="em2d-mem" x="120" y="150" width="146" height="16" rx="1"></rect>
+          <line class="em2d-base" x1="108" y1="330" x2="282" y2="330"></line>
+        </g>
+
+        <!-- カーソル追従の実断面線プレビュー（点滅） -->
+        <g class="em2d-preview">
+          <rect x="120" y="150" width="16" height="180" rx="1"></rect>
+          <rect x="250" y="150" width="16" height="180" rx="1"></rect>
+          <rect x="120" y="150" width="146" height="16" rx="1"></rect>
+        </g>
+
+        <!-- ===== ② 切断位置をクリック ===== -->
+        <g class="em2d-cut">
+          <line class="em2d-cutline" x1="193" y1="130" x2="193" y2="346"></line>
+          <polygon class="em2d-cursor" points="193,126 185,110 201,110"></polygon>
+          <circle class="em2d-ripple" cx="193" cy="240" r="11"></circle>
+        </g>
+
+        <!-- ===== 変換の矢印＋データドット ===== -->
+        <g class="em2d-arrow">
+          <line class="em2d-arrow-shaft" x1="308" y1="240" x2="452" y2="240"></line>
+          <polygon class="em2d-arrow-head" points="452,240 438,232 438,248"></polygon>
+        </g>
+        <circle class="em2d-flow em2d-flowdot" cx="308" cy="240" r="5"></circle>
+
+        <!-- ===== ③ 原点付近の空きスロットへ 1:1 で配置 ===== -->
+        <g class="em2d-slot">
+          <!-- 既存出力（ゴースト＝すでに作った断面） -->
+          <g class="em2d-ghost">
+            <rect x="476" y="168" width="11" height="132"></rect>
+            <rect x="556" y="168" width="11" height="132"></rect>
+            <rect x="476" y="168" width="91" height="11"></rect>
+          </g>
+          <text class="em2d-small" x="521" y="320" text-anchor="middle">既存の出力</text>
+          <!-- 右隣の空きスロット枠 -->
+          <rect class="em2d-slotbox" x="600" y="140" width="166" height="176" rx="6"></rect>
+          <text class="em2d-small" x="683" y="132" text-anchor="middle">右隣の空きスロット</text>
+          <!-- 新規2D断面線（線が伸びて描かれる） -->
+          <path class="em2d-2d em2d-drawA" pathLength="100" d="M628,300 L628,170"></path>
+          <path class="em2d-2d em2d-drawA" pathLength="100" d="M738,300 L738,170"></path>
+          <path class="em2d-2d em2d-drawB" pathLength="100" d="M616,170 L750,170"></path>
+          <path class="em2d-2d em2d-drawB" pathLength="100" d="M614,300 L752,300"></path>
+          <!-- 符号ドット -->
+          <g class="em2d-tag">
+            <circle class="em2d-symbol" cx="628" cy="158" r="10"></circle>
+            <text class="em2d-small" x="628" y="162" text-anchor="middle" style="fill:var(--accent)">A</text>
+            <rect class="em2d-tag-box" x="640" y="306" width="96" height="24" rx="12"></rect>
+            <text class="em2d-tagtxt" x="688" y="322" text-anchor="middle">1:1 で配置</text>
+          </g>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="em2d-cap em2d-l1" x="400" y="428" text-anchor="middle">① モデルを選択（GH不要・その場で起動）</text>
+        <text class="em2d-cap em2d-l2" x="400" y="428" text-anchor="middle">② 切断位置をクリック → 実断面線をライブプレビュー</text>
+        <text class="em2d-cap em2d-l3" x="400" y="428" text-anchor="middle">③ 原点付近の空きスロットへ 1:1 で断面図を配置</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">モデルを選ぶ → 切りたい場所をクリック（実断面線をライブプレビュー）→ その場で断面図が原点付近に1:1配置、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>Grasshopperを一切開かず、<strong>Rhinoのコマンドラインから起動して「切断位置をクリックするだけ」</strong>で、その場に2Dの断面図・平面図をつくる手軽版のMake2Dです。対象を選び、切りたい場所をクリックすると、<strong>原点付近の空いた場所へ1:1スケール</strong>で断面線がきれいに並びます。</p>
+    <p>いちばんの特長は、<strong>カーソルを動かすと切断面に現れる「実際の断面線」がその場でプレビュー</strong>される点。「切ってみないと分からない」がありません。奥行き（矢視先を何mmまで描くか）も立体プレビューされます。大きな図面化パイプライン（<a href="make2d-executor.html">GH_Make2DExecutor</a>）の解決済みコアを1系統に絞って移植した、"すぐ1枚欲しい" ときの相棒です。</p>
+    <p class="lead">※ Make2D＝3Dモデルを指定した視点で2Dの線画（平面図・断面図など）に落とす処理。／ 矢視＝断面をどちら側から見るかの向き。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>操作と結果（Rhinoコマンド）</h2>
+    <p class="lead" style="margin-bottom:16px">GHの端子ではなく、コマンド中のクリック操作とオプションで動かします。</p>
+    <div class="io-scroll"><table class="io-table">
+      <caption>おもな操作 → 結果</caption>
+      <thead><tr><th>操作</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><td class="port">対象を選ぶ</td><td>事前選択・クリック追加（Shift不要）・窓選択いずれもOK。<strong>ワークセッション参照モデルやブロックも選べる</strong>。</td></tr>
+        <tr><td class="port">モードを選ぶ</td><td>2点指定 / 水平切断（上から）/ X直交 / Y直交 / 部材直交 / 部材立面 / 外観（クリップなし）で切り方と矢視を切替。</td></tr>
+        <tr><td class="port">切断位置を<br>クリック</td><td>その場でMake2D実行。<strong>原点付近の右隣スロットへ1:1で配置</strong>（既存出力と重ならない）。</td></tr>
+        <tr><td class="port">カーソル移動</td><td>切断面に現れる<strong>実断面線</strong>＋描画ボリューム（切断面=太実線／奥行き限界=点線）をライブプレビュー。</td></tr>
+        <tr><td class="port">取消</td><td>直前に作った断面を<strong>図面・切断位置マーク・レイヤーごと</strong>削除（符号も再利用）。連続取消可。</td></tr>
+        <tr><td class="port">設定</td><td>隠れ線 / 接線 / 断面塗り（Solidハッチ）/ 尺度 1:N / 符号の手動指定など低頻度設定。</td></tr>
+        <tr><td class="port">Enter / Esc</td><td>コマンド終了。</td></tr>
+      </tbody>
+    </table></div>
+    <p class="lead" style="margin-top:16px"><strong>出力先</strong>：レイヤー <span class="port" style="color:var(--accent)">EasyMake2D::&lt;符号&gt;</span> の下に <code>01_切断線 / 02_見え線 / 03_隠れ線 / 04_断面塗り</code>、モデル空間には <code>09_切断位置</code> マーク。全オブジェクトに <code>UserText EZM2D_Sec=&lt;符号&gt;</code> が付きます。</p>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">起動する</span><span class="step-body">Rhinoで <kbd>断面</kbd> または <kbd>M2D</kbd> と打つ（EasyM2D.rui のアイコンでも可）。GHは開かなくてOK。</span></li>
+      <li><span class="step-title">対象を選ぶ</span><span class="step-body">先に選んでおけば即採用。クリックで追加、空所からドラッグで窓選択。<strong>ワークセッション参照モデル・ブロックも選べる</strong>。</span></li>
+      <li><span class="step-title">モードを決める</span><span class="step-body">水平・部材直交・外観など。勾配部材は <strong>「2点指定」</strong> で切断線に沿わせると、紙面でも実長が読めます。</span></li>
+      <li><span class="step-title">切断位置をクリック</span><span class="step-body">カーソル追従の<strong>断面線プレビュー</strong>を見ながら位置決め → クリックで確定。すぐ原点付近に断面図が現れます。</span></li>
+      <li><span class="step-title">続けて作る／取り消す</span><span class="step-body">クリックを繰り返して連続作成。間違えたら <kbd>取消</kbd> で直前を丸ごと削除（符号も再利用）。</span></li>
+      <li><span class="step-title">仕上げる</span><span class="step-body"><kbd>設定</kbd> で断面塗り・尺度（1:N）・隠れ線などを調整。<kbd>Enter</kbd> / <kbd>Esc</kbd> で終了。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <p class="flow-solo"><b>単独で使えます。</b> GHやパイプラインの配線なしで、Rhinoから直接1枚ずつ断面図を起こせます。</p>
+    <p class="lead" style="margin-top:8px">きちんと計画して量産・図面へ書き戻したいときは、GH版の <a href="make2d-executor.html">GH_Make2DExecutor</a> と <a href="../pipeline.html">Make2Dパイプライン</a> をどうぞ。本ツールはその「クイック単発版」にあたります。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\01_柱梁フレーム.3dm</span>
+      <p class="sample-desc">2×1スパンの柱梁フレーム＋通り芯線＋ガセット／浮きピース入り。切断位置クリックで断面図がすぐ出るのを体験できます。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> を開く。</span></li>
+        <li><span class="step-title">起動して全選択</span><span class="step-body"><kbd>断面</kbd> と打ち、フレーム一式を選ぶ（先に選んでから起動でもOK）。</span></li>
+        <li><span class="step-title">水平切断を試す</span><span class="step-body">モードを「水平切断（上から）」にして、柱の中ほどをクリック → 床伏図が原点付近に1:1で出る。</span></li>
+        <li><span class="step-title">2点指定も試す</span><span class="step-body">「2点指定」で通り芯 X2 に沿って2点を打ち、3点目で矢視側を決める → 断面図が並ぶ。<kbd>取消</kbd> で気軽にやり直せます。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 重いモデルではライブプレビューが自動OFF</div>
+        <p>断面線プレビューは対象が多すぎる（約600ジオメトリ超）と自動でオフになります。プレビューが出なくても<strong>クリックすれば断面図は作れます</strong>。動作が重いと感じたらそのまま進めてOK。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 水平切断だけ線が出ないときはZ基準（1FL）を確認</div>
+        <p>水平断面だけ線がゼロになる場合、切断高さが階の基準（1FL）からずれているのが典型。切る高さを部材が通る位置に合わせ直してください（Make2Dパイプライン共通の罠）。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 断面線が0本のときはビューを1つ開いてから</div>
+        <p>内部で既存ビューポートを複製して投影します。全ビューが閉じた特殊な状態だと可視0本になり得るため、通常の作業ビューを開いた状態で実行してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Rhino 8 / RunPythonScript 前提</div>
+        <p>IronPython2.7・CPython3の両対応コードですが、動作確認はRhino 8想定です。エイリアス「断面／M2D」は <code>install_m2d_alias.py</code> で登録すると便利です。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\<span class="fp-accent">easy_make2d.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Make2D実行 GH_Make2DExecutor — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス m2dx- で衝突回避
+   ①3Dモデル＋切断計画 → ②クリップ平面で薄切り → ③図面へ配置＋WriteBack
+   ============================================================ */
+.m2dx-svg text { font-family: var(--font); }
+
+/* 部材（柱・梁）＝簡略矩形 */
+.m2dx-mem   { fill: #0f1a30; stroke: var(--accent); stroke-width: 2.2; }
+.m2dx-back  { fill: none;    stroke: var(--accent); stroke-width: 1.6; opacity: .28; }
+.m2dx-depth { fill: none;    stroke: var(--accent); stroke-width: 1.3; opacity: .38; }
+.m2dx-base  { stroke: #6f7db0; stroke-width: 2; }
+/* 通り芯＝一点鎖線 */
+.m2dx-grid  { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: .75;
+              stroke-dasharray: 11 4 2 4; }
+.m2dx-gridlbl { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: .8; }
+
+/* クリップ平面（薄切りする面） */
+.m2dx-clipface { fill: var(--accent); opacity: .16; }
+.m2dx-clipedge { fill: none; stroke: var(--accent); stroke-width: 3; }
+/* 薄切りで浮かぶ断面ハイライト */
+.m2dx-slice { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; }
+
+/* 変換の矢印＋流れるデータドット */
+.m2dx-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.6; opacity: .85; }
+.m2dx-arrow-head  { fill: var(--accent); }
+.m2dx-flowdot     { fill: #ffffff; }
+
+/* 図面シート */
+.m2dx-sheet-bg    { fill: #0c1428; }
+.m2dx-sheet-frame { fill: none; stroke: #34406a; stroke-width: 1.6; }
+.m2dx-title-box   { fill: #0a1122; stroke: #34406a; stroke-width: 1.2; }
+.m2dx-2d          { fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round;
+                    stroke-dasharray: 100; }
+.m2dx-hatch       { stroke: var(--accent); stroke-width: 1.6; opacity: .9; }
+
+/* WriteBack タグ＋枠フラッシュ */
+.m2dx-tag-box  { fill: #0b1428; stroke: var(--accent); stroke-width: 1.4; }
+.m2dx-disk     { fill: var(--accent); }
+.m2dx-flash    { fill: none; stroke: var(--accent); stroke-width: 3.5; }
+
+/* テキスト */
+.m2dx-cap    { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.m2dx-small  { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+.m2dx-tagtxt { fill: #e6ecff; font-size: 12.5px; font-weight: 700; }
+
+/* 進捗バー */
+.m2dx-prog-tr { fill: #223052; }
+.m2dx-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.m2dx-model  { animation: m2dxModel 10s infinite; }
+.m2dx-clip   { animation: m2dxClip  10s infinite; }
+.m2dx-slice  { animation: m2dxSlice 10s infinite; }
+.m2dx-arrow  { animation: m2dxArrow 10s infinite; }
+.m2dx-flow   { animation: m2dxFlow  10s infinite; }
+.m2dx-sheet  { animation: m2dxSheet 10s infinite; }
+.m2dx-drawA  { animation: m2dxDrawA 10s infinite; }
+.m2dx-drawB  { animation: m2dxDrawB 10s infinite; }
+.m2dx-wb     { animation: m2dxWb    10s infinite; }
+.m2dx-flashA { animation: m2dxFlash 10s infinite; }
+.m2dx-l1     { animation: m2dxL1    10s infinite; }
+.m2dx-l2     { animation: m2dxL2    10s infinite; }
+.m2dx-l3     { animation: m2dxL3    10s infinite; }
+.m2dx-prog   { animation: m2dxProg  10s linear infinite; }
+
+@keyframes m2dxModel {
+  0%,3%   { opacity: 0; }
+  8%      { opacity: 1; }
+  60%     { opacity: 1; }
+  70%,90% { opacity: .45; }
+  97%,100%{ opacity: 0; }
+}
+@keyframes m2dxClip {
+  0%,29%  { opacity: 0; transform: translateX(-34px); }
+  32%     { opacity: .95; transform: translateX(-24px); }
+  54%     { opacity: .95; transform: translateX(150px); }
+  58%,100%{ opacity: 0; transform: translateX(160px); }
+}
+@keyframes m2dxSlice {
+  0%,34%  { opacity: 0; }
+  41%     { opacity: 1; }
+  52%     { opacity: 1; }
+  58%,100%{ opacity: 0; }
+}
+@keyframes m2dxArrow {
+  0%,49%  { opacity: 0; }
+  55%     { opacity: 1; }
+  93%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes m2dxFlow {
+  0%,51%   { opacity: 0; transform: translateX(0); }
+  55%      { opacity: 1; transform: translateX(0); }
+  65%      { opacity: 1; transform: translateX(150px); }
+  69%,100% { opacity: 0; transform: translateX(150px); }
+}
+@keyframes m2dxSheet {
+  0%,50%  { opacity: 0; transform: translateY(8px); }
+  59%     { opacity: 1; transform: translateY(0); }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+/* 柱を先に描く */
+@keyframes m2dxDrawA {
+  0%,60%  { stroke-dashoffset: 100; }
+  75%     { stroke-dashoffset: 0; }
+  100%    { stroke-dashoffset: 0; }
+}
+/* 梁・基準線を少し遅れて描く */
+@keyframes m2dxDrawB {
+  0%,68%  { stroke-dashoffset: 100; }
+  84%     { stroke-dashoffset: 0; }
+  100%    { stroke-dashoffset: 0; }
+}
+@keyframes m2dxWb {
+  0%,82%  { opacity: 0; transform: translateY(6px); }
+  87%     { opacity: 1; transform: translateY(0); }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes m2dxFlash {
+  0%,83%  { opacity: 0; }
+  87%     { opacity: .9; }
+  91%     { opacity: 0; }
+  95%     { opacity: .7; }
+  99%,100%{ opacity: 0; }
+}
+@keyframes m2dxL1 { 0%{opacity:0} 4%{opacity:1} 28%{opacity:1} 33%{opacity:0} 100%{opacity:0} }
+@keyframes m2dxL2 { 0%,33%{opacity:0} 37%{opacity:1} 56%{opacity:1} 61%{opacity:0} 100%{opacity:0} }
+@keyframes m2dxL3 { 0%,61%{opacity:0} 65%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes m2dxProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">Make2D実行 <span style="opacity:.75;font-weight:700">GH_Make2DExecutor</span></h1>
+    <p class="catch">3Dモデルを<span class="em">スパッと切って</span>、そのまま<span class="em">元の図面へ書き戻す</span>——製作図づくりの最終工程。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中（活発に更新）</span>
+      <span class="badge st-ver">v2.87 相当 / HOLD_VER 27</span>
+      <span class="badge st-ver">GH Python3 ノード</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg m2dx-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="3Dモデルを切断して図面へ書き戻すアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="m2dx-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="m2dx-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① 3Dモデル ＋ 切断計画 ===== -->
+        <g class="m2dx-model">
+          <!-- 奥フレーム（深さ表現） -->
+          <g transform="translate(28,-20)">
+            <rect class="m2dx-back" x="120" y="150" width="16" height="182"></rect>
+            <rect class="m2dx-back" x="250" y="150" width="16" height="182"></rect>
+            <rect class="m2dx-back" x="120" y="150" width="146" height="16"></rect>
+          </g>
+          <!-- 奥行きエッジ -->
+          <line class="m2dx-depth" x1="120" y1="150" x2="148" y2="130"></line>
+          <line class="m2dx-depth" x1="266" y1="150" x2="294" y2="130"></line>
+          <line class="m2dx-depth" x1="266" y1="332" x2="294" y2="312"></line>
+          <!-- 通り芯（一点鎖線）＋符号 -->
+          <line class="m2dx-grid" x1="193" y1="120" x2="193" y2="352"></line>
+          <circle class="m2dx-gridlbl" cx="193" cy="112" r="11"></circle>
+          <text class="m2dx-small" x="193" y="116" text-anchor="middle">X2</text>
+          <!-- 手前フレーム（柱2・梁2） -->
+          <rect class="m2dx-mem" x="120" y="150" width="16" height="182" rx="1"></rect>
+          <rect class="m2dx-mem" x="250" y="150" width="16" height="182" rx="1"></rect>
+          <rect class="m2dx-mem" x="120" y="150" width="146" height="16" rx="1"></rect>
+          <rect class="m2dx-mem" x="120" y="236" width="146" height="13" rx="1"></rect>
+          <line class="m2dx-base" x1="108" y1="332" x2="278" y2="332"></line>
+        </g>
+
+        <!-- 薄切りで浮かぶ断面ハイライト -->
+        <g class="m2dx-slice">
+          <line x1="128" y1="150" x2="128" y2="332"></line>
+          <line x1="258" y1="150" x2="258" y2="332"></line>
+          <line x1="120" y1="158" x2="266" y2="158"></line>
+        </g>
+
+        <!-- ===== ② クリップ平面（スイープ） ===== -->
+        <g class="m2dx-clip">
+          <polygon class="m2dx-clipface" points="150,116 170,100 170,330 150,346"></polygon>
+          <line class="m2dx-clipedge" x1="170" y1="100" x2="170" y2="330"></line>
+          <line class="m2dx-clipedge" x1="150" y1="116" x2="150" y2="346"></line>
+        </g>
+
+        <!-- ===== 変換の矢印＋データドット ===== -->
+        <g class="m2dx-arrow">
+          <line class="m2dx-arrow-shaft" x1="308" y1="234" x2="452" y2="234"></line>
+          <polygon class="m2dx-arrow-head" points="452,234 438,226 438,242"></polygon>
+        </g>
+        <circle class="m2dx-flow m2dx-flowdot" cx="308" cy="234" r="5"></circle>
+
+        <!-- ===== ③ 図面シートへ配置 ＋ WriteBack ===== -->
+        <g class="m2dx-sheet">
+          <rect class="m2dx-sheet-bg"    x="470" y="66" width="300" height="308" rx="6"></rect>
+          <rect class="m2dx-sheet-frame" x="470" y="66" width="300" height="308" rx="6"></rect>
+          <rect class="m2dx-sheet-frame" x="482" y="78" width="276" height="284"></rect>
+          <!-- 2D断面線（線が伸びて描かれる） -->
+          <path class="m2dx-2d m2dx-drawA" pathLength="100" d="M548,120 L548,300"></path>
+          <path class="m2dx-2d m2dx-drawA" pathLength="100" d="M700,120 L700,300"></path>
+          <path class="m2dx-2d m2dx-drawB" pathLength="100" d="M548,120 L700,120"></path>
+          <path class="m2dx-2d m2dx-drawB" pathLength="100" d="M548,212 L700,212"></path>
+          <path class="m2dx-2d m2dx-drawB" pathLength="100" d="M536,300 L712,300"></path>
+          <!-- 切断ハッチ -->
+          <line class="m2dx-hatch m2dx-drawB" pathLength="100" x1="556" y1="126" x2="566" y2="116"></line>
+          <line class="m2dx-hatch m2dx-drawB" pathLength="100" x1="684" y1="126" x2="694" y2="116"></line>
+          <!-- 表題欄 -->
+          <rect class="m2dx-title-box" x="628" y="330" width="130" height="30"></rect>
+          <text class="m2dx-small" x="636" y="349">断面 A-A  S=1:50</text>
+        </g>
+
+        <!-- 枠フラッシュ（書込みの瞬間） -->
+        <rect class="m2dx-flash m2dx-flashA" x="470" y="66" width="300" height="308" rx="6"></rect>
+
+        <!-- WriteBack タグ -->
+        <g class="m2dx-wb">
+          <rect class="m2dx-tag-box" x="486" y="34" width="268" height="26" rx="13"></rect>
+          <circle class="m2dx-disk" cx="504" cy="47" r="6"></circle>
+          <text class="m2dx-tagtxt" x="518" y="51">＋ レイヤー「断面_A-A」を 元.3dm へ書込</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="m2dx-cap m2dx-l1" x="400" y="428" text-anchor="middle">① 3Dモデル ＋ 切断計画（Plan_JSON）</text>
+        <text class="m2dx-cap m2dx-l2" x="400" y="428" text-anchor="middle">② クリップ平面でスパッと薄切り</text>
+        <text class="m2dx-cap m2dx-l3" x="400" y="428" text-anchor="middle">③ 2D断面線を図面へ配置 → 元.3dmへ WriteBack</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">3Dモデル＋切断計画 → クリップ平面で薄切り → 2D断面線を図面へ配置して元図面に書き戻す、という一連の流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>Make2D図面化パイプラインの<strong>最終工程</strong>です。上流のプランナーが作った「どこをどの向きで切るか」の計画（Plan_JSON）と、IFC属性検索が仕分けた本体／附帯の部材、周辺の接触部材を受け取り、<strong>断面ごとにクリップ平面付きでMake2D（3D→2D線画化）</strong>します。</p>
+    <p>切断線・見え線・隠れ線を分け、本体／附帯／周辺のタグごとにレイヤー分けした2D線を図面座標へきれいに並べます。仕上がりを目で確認したら、<strong>WriteBackボタンひとつで元の図面.3dmへ新しいレイヤーとして直接書き込み</strong>ます（書き込み前に自動で.bakバックアップを作成）。「モデルから製作図を起こして、いつもの図面ファイルに反映する」までを1ノードで担う、パイプラインの出口です。</p>
+    <p class="lead">※ Make2D＝3Dモデルを指定した視点で2Dの線画（平面図・断面図など）に落とす処理。／ Plan_JSON＝各断面の切断面・矢視方向・クリップ範囲をまとめた計画データ。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート（7）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">PlanJSON</td><td>プランナーが作った切断計画。各断面の切断面・矢視方向・クリップ範囲が入る。</td></tr>
+          <tr><td class="port">MainGeo / SubGeo</td><td>IFC属性検索で仕分けた<strong>本体</strong>ジオメトリと<strong>附帯</strong>ジオメトリ。切断線と見え線を描き分ける素材。</td></tr>
+          <tr><td class="port">TouchGeo</td><td>周辺の接触部材（背景として薄く描く見え線用）。GH_FinalSelect由来。</td></tr>
+          <tr><td class="port">Adjust / AddSec</td><td>配置の微調整パラメータと、断面の手動追加。</td></tr>
+          <tr><td class="port">PickSec / ScopeSec /<br>MoveSec / EditSec /<br>JointSec / Panel</td><td>断面ごとの選択・範囲指定・移動・編集・継ぎ目処理と、対話操作パネル。</td></tr>
+          <tr><td class="port">WriteBack</td><td>元図面.3dmへの書き戻しを実行するトリガ（ボタン）。<strong>不可逆</strong>。</td></tr>
+          <tr><td class="port">OutDir /<br>LayerRoot / WsSync</td><td>出力先フォルダ／レイヤ階層のルート名／ワークセッション同期の有無。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート（4）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Report</td><td>実行ログ。各断面の線数・成否などのサマリを返す。まずここで結果を確認。</td></tr>
+          <tr><td class="port">SecNames /<br>SecXf / SecBox</td><td>断面名／各断面を図面座標へ置く変換行列／断面の外接ボックス。後工程の注記・記号付けが使う。</td></tr>
+          <tr><td class="port">CutFaces</td><td>生成された切断面（クリップ面）のジオメトリ。</td></tr>
+          <tr><td class="port">Target3dm</td><td>WriteBackで書き戻す先の元図面.3dmのパス。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">パイプラインを用意する</span><span class="step-body">Rhinoで <kbd>M2D</kbd> と打って <a href="make2d-system.html">make2d_system</a> に一括構築させるか、既存のGHに本ノードを置く。</span></li>
+      <li><span class="step-title">上流を配線する</span><span class="step-body"><a href="make2d-planner.html">GH_Make2DPlanner</a> の <span class="port" style="color:var(--accent)">Plan_JSON</span> を <span class="port" style="color:var(--accent)">PlanJSON</span> へ、<a href="ifc-attr-search-v2.html">IFC属性検索</a> の本体／附帯を <span class="port" style="color:var(--accent)">MainGeo/SubGeo</span> へ、<a href="final-select.html">GH_FinalSelect</a> の周辺部材を <span class="port" style="color:var(--accent)">TouchGeo</span> へつなぐ。</span></li>
+      <li><span class="step-title">出力先を決める</span><span class="step-body"><span class="port" style="color:var(--accent)">OutDir</span>（出力フォルダ）と <span class="port" style="color:var(--accent)">LayerRoot</span>（レイヤ名の頭）を指定。ワークセッション連携なら <span class="port" style="color:var(--accent)">WsSync</span> をオン。</span></li>
+      <li><span class="step-title">一度solveして確認する</span><span class="step-body">各断面がクリップ平面でMake2Dされ、図面座標に2D線が並ぶ。<span class="port" style="color:var(--accent)">Report</span> で線数・成否をチェック。</span></li>
+      <li><span class="step-title">ずれを微調整する</span><span class="step-body">配置がずれていれば <span class="port" style="color:var(--accent)">MoveSec / ScopeSec / EditSec</span> で断面ごとに調整。</span></li>
+      <li><span class="step-title">元図面へ書き戻す</span><span class="step-body">仕上がりを<strong>目視で確認したら</strong> <span class="port" style="color:var(--accent)">WriteBack</span> を押す。元図面.3dmへ新レイヤーとして書き込み（自動で.bakを作成）。</span></li>
+      <li><span class="step-title">図面を仕上げる</span><span class="step-body">後工程の <a href="partmark.html">部材記号</a>・<a href="annotate-dim-gh.html">寸法注記</a>・<a href="hokan-system.html">補完</a> へ渡して完成させる。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <a class="chip chip-up" href="make2d-planner.html">GH_Make2DPlanner</a>
+        <a class="chip chip-up" href="ifc-attr-search-v2.html">IFC属性検索 v2</a>
+        <a class="chip chip-up" href="final-select.html">GH_FinalSelect</a>
+        <a class="chip chip-up" href="make2d-precut.html">GH_Make2DPreCut</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">GH_Make2DExecutor（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="partmark.html">部材記号 GH_PartMark</a>
+        <a class="chip chip-down" href="annotate-dim-gh.html">寸法注記 GH_AnnotateDim</a>
+        <a class="chip chip-down" href="hokan-system.html">柱詳細図補完 hokan_system</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">全体像は <a href="../pipeline.html">Make2Dパイプライン詳細図</a> で確認できます。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\01_柱梁フレーム.3dm</span>
+      <p class="sample-desc">2×1スパンの柱梁フレーム＋通り芯線＋ガセット／浮きピース入り。接触検出・Make2D・部材記号のデモ用。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> を開く（またはワークセッションで参照）。</span></li>
+        <li><span class="step-title">切断計画を作る</span><span class="step-body">上流で通り芯交点を抽出し、プランナーで水平切断（床伏図）と鉛直切断（断面図）を1面ずつ組む。</span></li>
+        <li><span class="step-title">本ノードでMake2D</span><span class="step-body">PlanJSONと部材ジオメトリを渡してsolve。図面座標に断面線が現れる。</span></li>
+        <li><span class="step-title">安全に確認</span><span class="step-body">練習では <span class="port" style="color:var(--accent)">WriteBack</span> はオフのまま、OutDir側に出た結果だけを確認すると安心。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> WriteBackは不可逆。まず目視、原本は別バックアップ</div>
+        <p>WriteBackは<strong>元の図面.3dmを直接書き換えます</strong>。自動の.bakは1世代しか残らないため、大事なファイルは実行前に別フォルダへ原本をコピーしておくのが安全です。必ず出力を確認してから押してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 水平切断だけ線が出ないときはZ基準を疑う</div>
+        <p>水平断面（床伏図など）だけ線がゼロになる場合、原因の多くは上流の切断高さ <span class="port" style="color:var(--accent)">CutHeight_Z</span> が1FL基準からずれていること。本ノードのZオートフィットである程度吸収しますが、まず上流のZ設定を確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> OutDirのパスにスペース・日本語があると失敗することがある</div>
+        <p>出力フォルダのパスに空白や特殊文字が含まれると、引用符の扱いで書き出しに失敗する場合があります。うまくいかないときはASCIIの短いパスで試してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 数千行・ほぼ毎日更新の巨大ノード</div>
+        <p>本ノードは非常に大きく活発に更新されています（v2.87相当）。回帰テストは多数ありますが実機未検証の項目も残るため、重要案件では必ず出力線を目で確かめてから採用してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\図面整理\<span class="fp-accent">GH_Make2DExecutor.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

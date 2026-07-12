@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Tekla色転写結合 Join_IF_model — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス jifm- で衝突回避
+   ①色つきTekla ＋ 色なし意匠 → ②Tekla判定→色マップ転写 → ③統合IFC
+   ============================================================ */
+.jifm-svg text { font-family: var(--font); }
+
+/* IFCファイルの箱 */
+.jifm-box    { fill: #0f1a30; stroke: var(--accent); stroke-width: 2.2; }
+.jifm-tag    { fill: var(--accent); opacity: .9; }
+.jifm-tagtxt { fill: #0b1020; font-size: 10px; font-weight: 800; }
+
+/* 部材（色つき＝Tekla由来の3色 / 色なし＝意匠モデル） */
+.jifm-mA   { fill: #fbbf24; }   /* アンバー */
+.jifm-mB   { fill: #22d3ee; }   /* シアン */
+.jifm-mC   { fill: #34d399; }   /* エメラルド */
+.jifm-gray { fill: #5b678f; }   /* 色なし・グレー */
+.jifm-base { stroke: #6f7db0; stroke-width: 2; }
+
+/* ラベル */
+.jifm-lbl  { fill: #e6ecff; font-size: 14px; font-weight: 700; }
+.jifm-sub  { fill: #9aa7cc; font-size: 11px; font-weight: 600; }
+
+/* Tekla判定バッジ */
+.jifm-judge-box { fill: #12183a; stroke: var(--accent); stroke-width: 1.6; }
+.jifm-judge-txt { fill: var(--accent); font-size: 13px; font-weight: 800; }
+
+/* 色マップの流れドット */
+.jifm-dot { stroke: #0b1020; stroke-width: 1; }
+
+/* 収束矢印 */
+.jifm-arrow     { fill: none; stroke: var(--accent); stroke-width: 2.6; opacity: .9; }
+.jifm-arrowhead { fill: var(--accent); }
+
+/* 3拍見出し */
+.jifm-cap { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+
+/* 進捗バー */
+.jifm-prog-tr { fill: #223052; }
+.jifm-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.jifm-left   { animation: jifmLeft   10s infinite; }
+.jifm-rgray  { animation: jifmRgray  10s infinite; }
+.jifm-rcolor { animation: jifmRcolor 10s infinite; }
+.jifm-judge  { animation: jifmJudge  10s infinite; }
+.jifm-flow   { animation: jifmFlow   10s infinite; }
+.jifm-mergea { animation: jifmMergeA 10s infinite; }
+.jifm-merged { animation: jifmMerged 10s infinite; }
+.jifm-l1     { animation: jifmL1 10s infinite; }
+.jifm-l2     { animation: jifmL2 10s infinite; }
+.jifm-l3     { animation: jifmL3 10s infinite; }
+.jifm-prog   { animation: jifmProg 10s linear infinite; }
+
+@keyframes jifmLeft   { 0%,2%{opacity:0} 8%{opacity:1} 60%{opacity:1} 66%,100%{opacity:0} }
+@keyframes jifmRgray  { 0%,2%{opacity:0} 8%{opacity:1} 40%{opacity:1} 50%,100%{opacity:0} }
+@keyframes jifmRcolor { 0%,40%{opacity:0} 50%{opacity:1} 60%{opacity:1} 66%,100%{opacity:0} }
+@keyframes jifmJudge  { 0%,34%{opacity:0} 40%{opacity:1} 62%{opacity:1} 66%,100%{opacity:0} }
+@keyframes jifmFlow {
+  0%,36%   { opacity:0; transform: translateX(0); }
+  40%      { opacity:1; transform: translateX(0); }
+  56%      { opacity:1; transform: translateX(242px); }
+  60%,100% { opacity:0; transform: translateX(242px); }
+}
+@keyframes jifmMergeA { 0%,58%{opacity:0} 64%{opacity:1} 70%{opacity:1} 74%,100%{opacity:0} }
+@keyframes jifmMerged {
+  0%,66%  { opacity:0; transform: translateY(8px); }
+  72%     { opacity:1; transform: translateY(0); }
+  97%     { opacity:1; }
+  100%    { opacity:0; }
+}
+@keyframes jifmL1 { 0%{opacity:0} 3%{opacity:1} 30%{opacity:1} 34%{opacity:0} 100%{opacity:0} }
+@keyframes jifmL2 { 0%,34%{opacity:0} 38%{opacity:1} 62%{opacity:1} 66%{opacity:0} 100%{opacity:0} }
+@keyframes jifmL3 { 0%,66%{opacity:0} 70%{opacity:1} 97%{opacity:1} 100%{opacity:0} }
+@keyframes jifmProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ifc">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">IFC・データ連携</span>
+    <h1 class="node-title">Tekla色転写結合 <span style="opacity:.75;font-weight:700">Join_IF_model</span></h1>
+    <p class="catch">2つのIFCを合わせるとき、<span class="em">Teklaの色までそのまま</span>持ってくる——ビューアで見やすい統合IFCを作る。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">2ファイル結合サービス</span>
+      <span class="badge st-ver">IFC / ifcopenshell</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg jifm-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="色つきTeklaモデルと色なし意匠モデルを統合し、色を転写するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="jifm-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="jifm-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== 左：色つきTeklaのIFC ===== -->
+        <g class="jifm-left">
+          <rect class="jifm-box" x="64" y="120" width="210" height="205" rx="6"></rect>
+          <rect class="jifm-tag" x="64" y="120" width="52" height="20" rx="4"></rect>
+          <text class="jifm-tagtxt" x="72" y="134">.ifc</text>
+          <!-- 色つき部材 -->
+          <rect class="jifm-mA" x="104" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-mB" x="162" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-mC" x="220" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-mA" x="104" y="150" width="130" height="12" rx="1"></rect>
+          <rect class="jifm-mB" x="104" y="224" width="130" height="10" rx="1"></rect>
+          <line class="jifm-base" x1="94" y1="300" x2="244" y2="300"></line>
+          <text class="jifm-lbl" x="169" y="349" text-anchor="middle">TeklaのIFC</text>
+          <text class="jifm-sub" x="169" y="366" text-anchor="middle">部材ごとに色つき</text>
+        </g>
+
+        <!-- ===== 右：色なし意匠モデル（グレー） ===== -->
+        <g class="jifm-rgray">
+          <rect class="jifm-box" x="526" y="120" width="210" height="205" rx="6"></rect>
+          <rect class="jifm-tag" x="526" y="120" width="52" height="20" rx="4"></rect>
+          <text class="jifm-tagtxt" x="534" y="134">.ifc</text>
+          <rect class="jifm-gray" x="566" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-gray" x="624" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-gray" x="682" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-gray" x="566" y="150" width="130" height="12" rx="1"></rect>
+          <rect class="jifm-gray" x="566" y="224" width="130" height="10" rx="1"></rect>
+          <line class="jifm-base" x1="556" y1="300" x2="706" y2="300"></line>
+          <text class="jifm-lbl" x="631" y="349" text-anchor="middle">意匠モデルIFC</text>
+          <text class="jifm-sub" x="631" y="366" text-anchor="middle">色なし・グレー</text>
+        </g>
+        <!-- 右：色が転写された状態（オーバーレイ） -->
+        <g class="jifm-rcolor">
+          <rect class="jifm-mA" x="566" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-mB" x="624" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-mC" x="682" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-mA" x="566" y="150" width="130" height="12" rx="1"></rect>
+          <rect class="jifm-mB" x="566" y="224" width="130" height="10" rx="1"></rect>
+          <text class="jifm-lbl" x="631" y="349" text-anchor="middle">意匠モデルIFC</text>
+          <text class="jifm-sub" x="631" y="366" text-anchor="middle">Teklaの色が転写された</text>
+        </g>
+
+        <!-- ===== Tekla判定バッジ＋色マップの流れ ===== -->
+        <g class="jifm-judge">
+          <rect class="jifm-judge-box" x="330" y="60" width="140" height="30" rx="15"></rect>
+          <text class="jifm-judge-txt" x="400" y="80" text-anchor="middle">Tekla と判定 ✓</text>
+        </g>
+        <g class="jifm-flow">
+          <circle class="jifm-dot jifm-mA" cx="288" cy="190" r="6"></circle>
+          <circle class="jifm-dot jifm-mB" cx="288" cy="210" r="6"></circle>
+          <circle class="jifm-dot jifm-mC" cx="288" cy="230" r="6"></circle>
+        </g>
+
+        <!-- 収束矢印（統合へ） -->
+        <g class="jifm-mergea">
+          <line class="jifm-arrow" x1="276" y1="234" x2="356" y2="234"></line>
+          <polygon class="jifm-arrowhead" points="356,234 342,227 342,241"></polygon>
+          <line class="jifm-arrow" x1="524" y1="234" x2="444" y2="234"></line>
+          <polygon class="jifm-arrowhead" points="444,234 458,227 458,241"></polygon>
+        </g>
+
+        <!-- ===== 統合IFC ===== -->
+        <g class="jifm-merged">
+          <rect class="jifm-box" x="250" y="118" width="300" height="205" rx="6"></rect>
+          <rect class="jifm-tag" x="250" y="118" width="80" height="20" rx="4"></rect>
+          <text class="jifm-tagtxt" x="258" y="132">merged.ifc</text>
+          <rect class="jifm-mA" x="290" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-mB" x="340" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-mC" x="390" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-mA" x="440" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-mB" x="490" y="150" width="14" height="150" rx="1"></rect>
+          <rect class="jifm-mA" x="290" y="150" width="214" height="12" rx="1"></rect>
+          <rect class="jifm-mC" x="290" y="224" width="214" height="10" rx="1"></rect>
+          <line class="jifm-base" x1="280" y1="300" x2="516" y2="300"></line>
+          <text class="jifm-lbl" x="400" y="347" text-anchor="middle">統合IFC（色・レイヤーが揃った）</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="jifm-cap jifm-l1" x="400" y="428" text-anchor="middle">① 色つきTekla ＋ 色なし意匠モデル</text>
+        <text class="jifm-cap jifm-l2" x="400" y="428" text-anchor="middle">② Teklaと判定 → 部材ごとの色を転写</text>
+        <text class="jifm-cap jifm-l3" x="400" y="428" text-anchor="middle">③ 色・レイヤーが揃った1つのIFCへ統合</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">色つきTeklaモデルと色なしの意匠モデル → Teklaと自動判定して色マップを作成・転写 → 見やすい統合IFCを書き出す流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p><strong>2つのIFCファイルを、賢く1つに結合する</strong>ツールです。ふつうにIFCを重ねただけだと、Teklaで付いていた部材の色（鉄骨=青、ボルト=赤…といった見分け）が消えて真っ白なモデルになりがちです。このツールは、まず<strong>どちらがTeklaのモデルかを自動で判定</strong>し、Teklaの色（スタイル）をもう一方のモデルへ<strong>転写</strong>してから統合します。</p>
+    <p>色の転写だけでなく、<strong>表現コンテキストの孤立修正</strong>（ビューアで表示が壊れる原因の修復）や<strong>絶対座標への変換</strong>など、「他のIFCビューアで開いても崩れない」ことを重視した作り込みが入っています。同じ目的の姉妹ツール <a href="join-ifc-model.html">Join_IFC_model</a> よりもTekla連携まわりが深く、<strong>2ファイル限定</strong>で手厚く仕上げるのが役割です。</p>
+    <p class="lead">※ IFC＝建物のBIMモデルを異なるソフト間でやり取りする共通ファイル形式。／ スタイル（色）＝IFC内で部材の見た目を決める情報で、ソフトによって付き方が違うため統合時に消えやすい。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（入れるファイル・出るファイル）</h2>
+    <p class="lead" style="margin:-6px 0 16px">GHノードではなく、2つのIFCを渡すと1つの統合IFCを返す結合サービスです。</p>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力（2ファイル）</caption>
+        <thead><tr><th>操作</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">ifc_a</td><td>1つめのIFC。<strong>Teklaのモデル</strong>（鉄骨など・色つき）を想定。色の供給元になる。</td></tr>
+          <tr><td class="port">ifc_b</td><td>2つめのIFC。<strong>意匠モデル</strong>など、もう一方のファイル。色を受け取る側になる。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力（1ファイル）</caption>
+        <thead><tr><th>結果</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">merged.ifc</td><td>2つを結合し、Teklaの色とレイヤーを転写した<strong>統合IFC</strong>。孤立コンテキストの修復・絶対座標変換済みでビューア互換性が高い。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">結合したい2つのIFCを用意</span><span class="step-body">Tekla側（鉄骨など色つき）と、もう一方（意匠モデルなど）のIFCを揃える。<strong>2ファイル</strong>が対象。</span></li>
+      <li><span class="step-title">サービスを起動する</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">Join_IF_model\run.bat</span> を実行して結合処理を呼び出す（フォルダ内の <span class="port" style="color:var(--accent)">merge_service.py</span> が本体）。</span></li>
+      <li><span class="step-title">2ファイルを指定</span><span class="step-body">基準側 <span class="port" style="color:var(--accent)">ifc_a</span> と相手側 <span class="port" style="color:var(--accent)">ifc_b</span> を渡す。Tekla有無・要素数から <b>[A]Tekla+外部 / [B]Tekla+Tekla / [C]外部+外部</b> のどれかを自動判定。</span></li>
+      <li><span class="step-title">色・レイヤーを転写して結合</span><span class="step-body">Teklaの部材色マップを作り、もう一方へ転写。孤立した表現コンテキストの修復・絶対座標変換も自動で行う。</span></li>
+      <li><span class="step-title">統合IFCを確認</span><span class="step-body">出力された <span class="port" style="color:var(--accent)">merged.ifc</span> をビューアで開き、色が付いて崩れなく表示されるか確認。</span></li>
+      <li><span class="step-title">次工程へ渡す</span><span class="step-body">そのまま <a href="ifc2rhino.html">ifc2rhino</a> で.3dm化したり、<a href="rhino-henkan.html">自動変換パイプライン</a>に流したりできる。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <span class="flow-solo">特になし（2つのIFCファイルを直接入力します）。スキーマを揃えたいときは <a href="ifc-converter.html">IFC_Converter</a> でIFC4化してから。</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">Join_IF_model（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="ifc2rhino.html">IFC⇔Rhino変換 ifc2rhino</a>
+        <a class="chip chip-down" href="rhino-henkan.html">IFC自動変換パイプライン</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">3つ以上のファイルを基準＋複数で結合したいときは、姉妹ツール <a href="join-ifc-model.html">Join_IFC_model（原点キューブ結合）</a> を使います。</p>
+  </div>
+</section>
+
+<!-- 7. 実データでためす -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実データでためす</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> 手元のIFC 2ファイル（Tekla ＋ 意匠）</span>
+      <p class="sample-desc">専用のサンプル.3dmはありません。実際のプロジェクトのIFCで試すのがいちばん分かりやすいツールです。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">Tekla書き出しIFCを用意</span><span class="step-body">鉄骨などをTeklaからIFCで書き出したファイル（色つき）を <span class="port" style="color:var(--accent)">ifc_a</span> に。</span></li>
+        <li><span class="step-title">相手のIFCを用意</span><span class="step-body">意匠・設備など、別ソフトのIFC（色なしになりがち）を <span class="port" style="color:var(--accent)">ifc_b</span> に。</span></li>
+        <li><span class="step-title">結合して見比べる</span><span class="step-body">出力 <span class="port" style="color:var(--accent)">merged.ifc</span> をビューアで開き、単純に重ねたときと比べて<strong>色が付いて見分けやすい</strong>ことを確認。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 対象は「2ファイル」まで</div>
+        <p>このツールは2つのIFCを手厚く結合する作りです。<strong>3つ以上をまとめたい</strong>ときは、基準＋複数ファイルに対応した姉妹ツール <a href="join-ifc-model.html">Join_IFC_model（原点キューブ結合）</a> を使ってください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Tekla判定は自動。意図と違えば結果を確認</div>
+        <p>どちらがTeklaかは要素数などから自動判定します（[A]/[B]/[C]の3モード）。まれに想定と違うモードで処理されることがあるので、色の付き方がおかしいときは入力を入れ替えて再実行し、出力を目で確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 絶対座標変換・コンテキスト修復で中身は書き換わる</div>
+        <p>ビューア互換のため、表現コンテキストの孤立修正や絶対座標への変換を行います。<strong>入力IFCそのものではなく整形後のモデル</strong>が出力される点を理解した上で、元ファイルは別に残しておくと安心です。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 姉妹ツールと目的が近い</div>
+        <p><a href="join-ifc-model.html">Join_IFC_model</a> と並行して作られた別実装です。「2ファイル＋Tekla色重視」なら本ツール、「基準＋複数ファイルの位置合わせ結合」なら Join_IFC_model、と用途で使い分けてください。</p>
+      </li>
+    </ul>
+    <p class="lead" style="margin-top:14px">💡 この機能は統合版 <a href="ifc-merger.html">IFCMerger</a> にも搭載されています（本ツールは単体で引き続き使用可）。</p>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\Join_IF_model\<span class="fp-accent">merge_service.py</span>（起動は run.bat）
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ifc">IFC・データ連携の一覧</a>
+      <a href="join-ifc-model.html">姉妹ツール Join_IFC_model</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

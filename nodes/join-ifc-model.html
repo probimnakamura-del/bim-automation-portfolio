@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>IFC原点キューブ結合 Join_IFC_model — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス jim- で衝突回避
+   ①基準IFC(原点キューブ)＋ズレた追加モデル → ②原点キューブの差分を自動計測(GUI確認)
+   → ③階ごとに補正して1つのIFCへ合体
+   ============================================================ */
+.jim-svg text { font-family: var(--font); }
+
+/* 建物アウトライン */
+.jim-base   { fill: #10203c; stroke: var(--accent); stroke-width: 2.4; }
+.jim-base-fl { fill: none; stroke: var(--accent); stroke-width: 1.2; opacity: .45; }
+.jim-target { fill: #0f1a30; stroke: #6f7db0; stroke-width: 2.2; }
+.jim-target-fl { fill: none; stroke: #6f7db0; stroke-width: 1.2; opacity: .5; }
+.jim-target-hot { stroke: var(--accent); }
+
+/* 原点キューブ */
+.jim-cube-base { fill: var(--accent); stroke: var(--accent); stroke-width: 1.5; }
+.jim-cube-tgt  { fill: none; stroke: #f0b3ff; stroke-width: 2.4; }
+.jim-cube-lb   { fill: #9aa7cc; font-size: 11px; font-weight: 700; }
+
+/* 計測（差分） */
+.jim-measure   { fill: none; stroke: #f0b3ff; stroke-width: 2; stroke-dasharray: 5 5; }
+.jim-measure-h { fill: #f0b3ff; }
+.jim-delta-box { fill: #21182f; stroke: var(--accent); stroke-width: 1.4; }
+.jim-delta-txt { fill: #e6ecff; font-size: 12px; font-weight: 800; }
+
+/* GUI確認ダイアログ */
+.jim-gui       { fill: #12203c; stroke: var(--accent); stroke-width: 1.8; }
+.jim-gui-bar   { fill: var(--accent); }
+.jim-gui-txt   { fill: #e6ecff; font-size: 11px; font-weight: 700; }
+.jim-ok-box    { fill: var(--ok); }
+.jim-ok-txt    { fill: #0b1020; font-size: 11px; font-weight: 800; }
+
+/* 合体後 */
+.jim-merged    { fill: #10203c; stroke: var(--ok); stroke-width: 2.6; }
+.jim-merged-fl { fill: none; stroke: var(--ok); stroke-width: 1.2; opacity: .5; }
+.jim-flash     { fill: none; stroke: var(--ok); stroke-width: 3.5; }
+.jim-merged-lb { fill: var(--ok); font-size: 12.5px; font-weight: 800; }
+
+/* テキスト */
+.jim-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.jim-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.jim-prog-tr { fill: #223052; }
+.jim-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.jim-b1    { animation: jimB1 10s infinite; }
+.jim-b2    { animation: jimB2 10s infinite; }
+.jim-meas  { animation: jimMeas 10s infinite; }
+.jim-gui-a { animation: jimGui 10s infinite; }
+.jim-b3    { animation: jimB3 10s infinite; }
+.jim-slide1{ animation: jimSlide1 10s infinite; }
+.jim-slide2{ animation: jimSlide2 10s infinite; }
+.jim-flashA{ animation: jimFlash 10s infinite; }
+.jim-l1    { animation: jimL1 10s infinite; }
+.jim-l2    { animation: jimL2 10s infinite; }
+.jim-l3    { animation: jimL3 10s infinite; }
+.jim-prog  { animation: jimProg 10s linear infinite; }
+
+/* 基準は常時、追加は beat1で登場 */
+@keyframes jimB1 { 0%{opacity:0} 4%{opacity:1} 30%{opacity:1} 100%{opacity:1} }
+@keyframes jimB2 { 0%,30%{opacity:0} 36%{opacity:1} 58%{opacity:1} 64%,100%{opacity:0} }
+/* 計測線が伸びる */
+@keyframes jimMeas {
+  0%,32%  { opacity:0; }
+  40%     { opacity:1; }
+  60%     { opacity:1; }
+  64%,100%{ opacity:0; }
+}
+/* GUIダイアログ */
+@keyframes jimGui {
+  0%,42%  { opacity:0; transform: translateY(8px); }
+  48%     { opacity:1; transform: translateY(0); }
+  60%     { opacity:1; }
+  64%,100%{ opacity:0; }
+}
+@keyframes jimB3 { 0%,62%{opacity:0} 68%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+/* 追加モデルが基準へスライドして重なる */
+@keyframes jimSlide1 {
+  0%,64%  { opacity:0; transform: translate(0,0); }
+  70%     { opacity:1; transform: translate(0,0); }
+  84%     { opacity:1; transform: translate(-190px,60px); }
+  92%     { opacity:0; transform: translate(-190px,60px); }
+  100%    { opacity:0; }
+}
+@keyframes jimSlide2 {
+  0%,64%  { opacity:0; transform: translate(0,0); }
+  70%     { opacity:1; transform: translate(0,0); }
+  84%     { opacity:1; transform: translate(-190px,-70px); }
+  92%     { opacity:0; transform: translate(-190px,-70px); }
+  100%    { opacity:0; }
+}
+@keyframes jimFlash { 0%,84%{opacity:0} 88%{opacity:.9} 92%{opacity:0} 96%{opacity:.7} 100%{opacity:0} }
+@keyframes jimL1 { 0%{opacity:0} 4%{opacity:1} 29%{opacity:1} 35%{opacity:0} 100%{opacity:0} }
+@keyframes jimL2 { 0%,35%{opacity:0} 40%{opacity:1} 60%{opacity:1} 65%{opacity:0} 100%{opacity:0} }
+@keyframes jimL3 { 0%,65%{opacity:0} 70%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes jimProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ifc">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">IFC・データ連携</span>
+    <h1 class="node-title">IFC 原点キューブ結合 <span style="opacity:.75;font-weight:700">Join_IFC_model</span></h1>
+    <p class="catch">複数の IFC を<span class="em">原点キューブのズレから自動で位置合わせ</span>して、<span class="em">一発でピタッと合体</span>——階ごとに補正する爆速版。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">v6.1（超高速フルバースト版）</span>
+      <span class="badge st-ver">Python スクリプト（Tk GUI）</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg jim-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="原点キューブの差分から複数IFCを位置合わせして結合するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="jim-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="jim-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== 基準IFC（原点キューブ入り・左に常駐） ===== -->
+        <g class="jim-b1">
+          <rect class="jim-base" x="96" y="150" width="120" height="160" rx="4"></rect>
+          <line class="jim-base-fl" x1="96" y1="190" x2="216" y2="190"></line>
+          <line class="jim-base-fl" x1="96" y1="230" x2="216" y2="230"></line>
+          <line class="jim-base-fl" x1="96" y1="270" x2="216" y2="270"></line>
+          <!-- 原点キューブ（基準・原点にピタリ） -->
+          <rect class="jim-cube-base" x="90" y="304" width="12" height="12"></rect>
+          <text class="jim-cube-lb" x="96" y="336" text-anchor="middle">基準 IFC（原点キューブ）</text>
+        </g>
+
+        <!-- ===== ① ＋ ② 追加モデル（ズレて登場）＋ 差分計測 ===== -->
+        <g class="jim-b2">
+          <!-- 追加モデル1（右上・ズレている） -->
+          <g>
+            <rect class="jim-target jim-target-hot" x="430" y="96" width="104" height="120" rx="4"></rect>
+            <line class="jim-target-fl" x1="430" y1="130" x2="534" y2="130"></line>
+            <line class="jim-target-fl" x1="430" y1="164" x2="534" y2="164"></line>
+            <rect class="jim-cube-tgt" x="424" y="210" width="12" height="12"></rect>
+          </g>
+          <!-- 追加モデル2（右下・ズレている） -->
+          <g>
+            <rect class="jim-target jim-target-hot" x="470" y="300" width="104" height="120" rx="4"></rect>
+            <line class="jim-target-fl" x1="470" y1="334" x2="574" y2="334"></line>
+            <line class="jim-target-fl" x1="470" y1="368" x2="574" y2="368"></line>
+            <rect class="jim-cube-tgt" x="464" y="414" width="12" height="12"></rect>
+          </g>
+
+          <!-- 差分計測線（追加キューブ → 基準キューブ） -->
+          <g class="jim-meas">
+            <path class="jim-measure" d="M424,216 L102,310"></path>
+            <polygon class="jim-measure-h" points="102,310 116,305 114,317"></polygon>
+            <path class="jim-measure" d="M464,420 L102,312"></path>
+            <polygon class="jim-measure-h" points="102,312 116,309 113,321"></polygon>
+            <rect class="jim-delta-box" x="250" y="238" width="150" height="24" rx="12"></rect>
+            <text class="jim-delta-txt" x="325" y="255" text-anchor="middle">Δ = (+3200, −1800, 0)</text>
+          </g>
+
+          <!-- GUI確認ダイアログ -->
+          <g class="jim-gui-a">
+            <rect class="jim-gui" x="560" y="228" width="180" height="86" rx="8"></rect>
+            <rect class="jim-gui-bar" x="560" y="228" width="180" height="18" rx="8"></rect>
+            <text class="jim-gui-txt" x="570" y="241" style="fill:#0b1020">ズレの確認</text>
+            <text class="jim-gui-txt" x="572" y="268">モデルA … Δ 検出</text>
+            <text class="jim-gui-txt" x="572" y="284">モデルB … Δ 検出</text>
+            <rect class="jim-ok-box" x="672" y="292" width="56" height="16" rx="8"></rect>
+            <text class="jim-ok-txt" x="700" y="304" text-anchor="middle">OK で結合</text>
+          </g>
+        </g>
+
+        <!-- ===== ③ 階ごとに補正して1つのIFCへ合体 ===== -->
+        <g class="jim-b3">
+          <!-- 統合後モデル -->
+          <rect class="jim-merged" x="96" y="150" width="120" height="160" rx="4"></rect>
+          <line class="jim-merged-fl" x1="96" y1="190" x2="216" y2="190"></line>
+          <line class="jim-merged-fl" x1="96" y1="230" x2="216" y2="230"></line>
+          <line class="jim-merged-fl" x1="96" y1="270" x2="216" y2="270"></line>
+          <!-- スライドして重なる追加モデル -->
+          <g class="jim-slide1">
+            <rect class="jim-target jim-target-hot" x="290" y="250" width="104" height="120" rx="4"></rect>
+          </g>
+          <g class="jim-slide2">
+            <rect class="jim-target jim-target-hot" x="290" y="220" width="104" height="120" rx="4"></rect>
+          </g>
+          <!-- 合体フラッシュ -->
+          <rect class="jim-flash jim-flashA" x="92" y="146" width="128" height="168" rx="6"></rect>
+          <!-- 出力タグ -->
+          <text class="jim-merged-lb" x="156" y="338" text-anchor="middle">merged.ifc（1ファイルに統合）</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="jim-cap jim-l1" x="400" y="418" text-anchor="middle">① 基準 IFC（原点キューブ）＋ ズレた追加モデル</text>
+        <text class="jim-cap jim-l2" x="400" y="418" text-anchor="middle">② 原点キューブの差分を自動計測（GUI で確認）</text>
+        <text class="jim-cap jim-l3" x="400" y="418" text-anchor="middle">③ 階ごとに補正して 1 つの IFC へ合体</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">基準 IFC の原点キューブを軸に、ズレた追加モデルの差分を自動計測 → GUI で確認 → 階ごとに補正して1つの IFC へ合体、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>ばらばらに書き出された <strong>複数の IFC ファイルを、1つに統合する</strong>ツールです。難しいのは「各モデルの位置（座標原点）が揃っていない」こと。そこでこのツールは、<strong>各 IFC に仕込んだ「原点キューブ」の座標の差から、モデルごとのズレ（オフセット）を自動で計算</strong>し、ぴったり重ねてから結合します。</p>
+    <p>結合前には <strong>tkinter の GUI ダイアログで「どれだけズレているか」を数値で表示</strong>してくれるので、勝手にズレたまま合体してしまう事故を防げます。補正は <strong>階（IfcBuildingStorey）単位</strong>で当て、各要素の相対座標はそのまま維持します。</p>
+    <p>v6.1 は <strong>速度に全振りした「超高速フルバースト版」</strong>。重い numpy 行列計算や、マテリアルの重複チェック（reuse_identities）を省いて、とにかく速く合体させることを優先しています。<strong>基準1ファイル＋追加を複数</strong>まとめて処理できます。</p>
+    <p class="lead">※ 原点キューブ＝各モデルの基準位置を示すために置いておく小さな立方体。これの座標差がそのままモデルのズレになる。／ IfcBuildingStorey＝IFC の「階」を表す要素。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>できること（操作 → 結果）</h2>
+    <p class="lead" style="margin-bottom:16px">GHノードではなく、単体で動く Python スクリプト（tkinter GUI）です。起動すると2段階でファイルを選ぶだけ。</p>
+    <div class="io-scroll"><table class="io-table">
+      <caption>操作と結果</caption>
+      <thead><tr><th>操作</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><td class="port"><span class="io-dir in">入</span>【Step1】基準 IFC を選択</td><td>原点キューブ入りの IFC を<strong>基準（ベースモデル）</strong>として読み込む。</td></tr>
+        <tr><td class="port"><span class="io-dir in">入</span>【Step2】追加 IFC を複数選択</td><td>合算したい IFC をまとめて選ぶ。各モデルのオフセットを<strong>事前計算</strong>する。</td></tr>
+        <tr><td class="port">ズレ確認ダイアログ</td><td>各モデルの<strong>座標差（オフセット）を GUI に表示</strong>。内容を見て OK すると結合実行。</td></tr>
+        <tr><td class="port"><span class="io-dir out">出</span>merged.ifc</td><td>階ごとにオフセット補正した<strong>1つの統合 IFC</strong>。相対座標は維持される。</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">各 IFC に原点キューブがあるか確認</span><span class="step-body">結合するすべての IFC に、基準位置を示す<strong>原点キューブ</strong>が入っていることを確認する（無いとズレを計算できない）。</span></li>
+      <li><span class="step-title">ツールを起動する</span><span class="step-body"><kbd>py C:\Python1\Join_IFC_model\Join_IFC_model.py</kbd> で起動（IDE 実行でも可）。</span></li>
+      <li><span class="step-title">基準 IFC を選ぶ</span><span class="step-body">【Step1】のダイアログで<strong>原点キューブ入りの基準 IFC</strong> を1つ選択。</span></li>
+      <li><span class="step-title">追加 IFC を選ぶ</span><span class="step-body">【Step2】で<strong>合算したい IFC を複数選択</strong>。各モデルのオフセットが自動計算される。</span></li>
+      <li><span class="step-title">ズレを確認して OK</span><span class="step-body">GUI に出た<strong>座標差（オフセット）を目視で確認</strong>し、問題なければ OK。階ごとに補正して結合が走る。</span></li>
+      <li><span class="step-title">統合 IFC を後工程へ</span><span class="step-body">出力された <span class="port" style="color:var(--accent)">merged.ifc</span> を <a href="ifc2rhino.html">ifc2rhino</a> や <a href="rhino-henkan.html">ライノセラスに変換</a> へ渡して 3dm 化する。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="chip chip-self">IFC 原点キューブ結合 Join_IFC_model（このツール）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="ifc2rhino.html">IFC⇔Rhino変換 ifc2rhino</a>
+        <a class="chip chip-down" href="rhino-henkan.html">IFC自動変換パイプライン（ライノセラスに変換）</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">位置の揃った1本の統合 IFC を作る<strong>前さばき</strong>です。ここで合体させておくと、Rhino への変換や属性検索を一度で回せます。より高機能な色転写つきの2ファイル結合が必要なら、姉妹版の <strong>Join_IF_model</strong>（Tekla の色まで転写）も選べます。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルでの手順 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実データでの手順</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧱</span> 原点キューブ入りの IFC 2〜3本で試す</span>
+      <p class="sample-desc">専用サンプルはありません。同じ原点キューブを仕込んだ実案件の IFC を数本用意すると、位置合わせの効果が一目でわかります。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">基準＋追加を用意</span><span class="step-body">原点キューブ入りの IFC を、基準1本＋追加1〜2本そろえる。わざと原点をずらした状態で用意すると効果がわかりやすい。</span></li>
+        <li><span class="step-title">結合して確認</span><span class="step-body">起動して Step1／Step2 でファイルを選び、GUI に出た Δ（オフセット）を確認して OK。</span></li>
+        <li><span class="step-title">3dm 化して重なりを見る</span><span class="step-body">出力の merged.ifc を <a href="ifc2rhino.html">ifc2rhino</a> で 3dm 化し、各モデルが原点でぴたりと重なっているか Rhino 上で確認する。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 原点キューブが無いとズレを計算できない</div>
+        <p>このツールの位置合わせは <strong>各 IFC に入った原点キューブの座標差</strong>が頼りです。キューブが入っていない IFC はオフセットを算出できず、正しく合わせられません。結合前に全ファイルへキューブが仕込まれているか確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 最速版ゆえ「マテリアル重複チェック」は省略</div>
+        <p>v6.1 は速度優先で <strong>reuse_identities（マテリアル等の重複チェック）をスキップ</strong>しています。その分、統合ファイルはやや大きめになり、重複エンティティが残ることがあります。色を正しく持ち込みたい・厳密に統合したい場合は、姉妹版の <strong>Join_IF_model（高機能・色転写つき）</strong>を使ってください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 補正は「階（Storey）単位」。階構成が想定と違うと崩れる</div>
+        <p>オフセットは <strong>IfcBuildingStorey 単位</strong>で適用します。階の切り方がモデル間で食い違っていると、補正が意図とずれることがあります。結合後は必ず 3dm 化などで重なりを目視確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> ズレ確認ダイアログは飛ばさない</div>
+        <p>結合前の <strong>GUI ダイアログで Δ（オフセット）を必ず確認</strong>してください。値が想定外に大きいときは、原点キューブの位置ミスや単位（mm/m）の食い違いを疑うサインです。</p>
+      </li>
+    </ul>
+    <p class="lead" style="margin-top:14px">💡 この機能は統合版 <a href="ifc-merger.html">IFCMerger</a> にも搭載されています（本ツールは単体で引き続き使用可）。</p>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\Join_IFC_model\<span class="fp-accent">Join_IFC_model.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ifc">IFC・データ連携の一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

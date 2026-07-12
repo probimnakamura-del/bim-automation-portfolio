@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>接触検出ファミリー touch_finder_v2 / ref_touch_finder_v2 — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス tf- で衝突回避
+   ①基準の本体を選ぶ → ②触れている周辺部材を自動スキャン → ③遠隔の飛び地は除外して確定
+   ============================================================ */
+.tf-svg text { font-family: var(--font); }
+
+/* 全体フェード */
+.tf-scene { animation: tfScene 10s infinite; }
+@keyframes tfScene {
+  0%,2%   { opacity: 0; }
+  7%      { opacity: 1; }
+  97%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+
+/* 基準の本体（柱・梁）＝グレーで確定表示 */
+.tf-body  { fill: #14203a; stroke: #7c88b4; stroke-width: 2.4; }
+.tf-base  { stroke: #6f7db0; stroke-width: 2.4; }
+/* 基準タグ */
+.tf-anchor-box { fill: #0b1428; stroke: #7c88b4; stroke-width: 1.3; }
+.tf-anchor-txt { fill: #cdd6f4; font-size: 12px; font-weight: 700; }
+
+/* 周辺の接触パーツ＝はじめグレー→スキャンでアクセント点灯 */
+.tf-touch { fill: #0f1a30; stroke: #55617f; stroke-width: 2.2; }
+.tf-brace { fill: none;    stroke: #55617f; stroke-width: 9; stroke-linecap: round; }
+.tf-t1 { animation: tfLight1 10s infinite; }
+.tf-t2 { animation: tfLight2 10s infinite; }
+.tf-t3 { animation: tfLight3 10s infinite; }
+.tf-t4 { animation: tfLight4 10s infinite; }
+@keyframes tfLight1 {
+  0%,26% { fill:#0f1a30; stroke:#55617f; }
+  31%,100% { fill: color-mix(in srgb, var(--accent) 16%, transparent); stroke: var(--accent); }
+}
+@keyframes tfLight2 {
+  0%,33% { stroke:#55617f; }
+  38%,100% { stroke: var(--accent); }
+}
+@keyframes tfLight3 {
+  0%,40% { fill:#0f1a30; stroke:#55617f; }
+  45%,100% { fill: color-mix(in srgb, var(--accent) 16%, transparent); stroke: var(--accent); }
+}
+@keyframes tfLight4 {
+  0%,47% { fill:#0f1a30; stroke:#55617f; }
+  52%,100% { fill: color-mix(in srgb, var(--accent) 16%, transparent); stroke: var(--accent); }
+}
+
+/* スキャンのパルス波紋 */
+.tf-ring { fill: none; stroke: var(--accent); stroke-width: 2.2; }
+.tf-ring1 { animation: tfRing 10s infinite; }
+.tf-ring2 { animation: tfRing 10s infinite 0.7s; }
+.tf-ring3 { animation: tfRing 10s infinite 1.4s; }
+@keyframes tfRing {
+  0%,27%   { r: 4; opacity: 0; }
+  30%      { r: 4; opacity: .85; }
+  40%      { r: 34; opacity: 0; }
+  100%     { r: 34; opacity: 0; }
+}
+
+/* 遠隔の飛び地パーツ＝除外されてフェード＋バツ */
+.tf-far    { fill:#0f1a30; stroke:#55617f; stroke-width:2.2; animation: tfFar 10s infinite; }
+.tf-farx   { stroke:#f87171; stroke-width:3.2; stroke-linecap:round; animation: tfFarx 10s infinite; }
+.tf-far-lbl{ fill:#8792b6; font-size:12px; font-weight:700; animation: tfFar 10s infinite; }
+@keyframes tfFar {
+  0%,56%  { opacity:.85; }
+  66%     { opacity:.16; }
+  100%    { opacity:.16; }
+}
+@keyframes tfFarx {
+  0%,56%  { opacity:0; }
+  63%     { opacity:1; }
+  100%    { opacity:1; }
+}
+
+/* 確定バッジ */
+.tf-badge-box { fill:#0b1428; stroke:var(--accent); stroke-width:1.4; }
+.tf-badge-dot { fill:var(--accent); }
+.tf-badge-txt { fill:#e6ecff; font-size:12.5px; font-weight:700; }
+.tf-badge { animation: tfBadge 10s infinite; }
+@keyframes tfBadge {
+  0%,68%  { opacity:0; transform: translateY(6px); }
+  74%     { opacity:1; transform: translateY(0); }
+  100%    { opacity:1; }
+}
+
+/* 3拍ラベル */
+.tf-cap { fill:#e6ecff; font-size:17px; font-weight:700; }
+.tf-l1 { animation: tfL1 10s infinite; }
+.tf-l2 { animation: tfL2 10s infinite; }
+.tf-l3 { animation: tfL3 10s infinite; }
+@keyframes tfL1 { 0%{opacity:0} 4%{opacity:1} 30%{opacity:1} 35%{opacity:0} 100%{opacity:0} }
+@keyframes tfL2 { 0%,35%{opacity:0} 40%{opacity:1} 58%{opacity:1} 63%{opacity:0} 100%{opacity:0} }
+@keyframes tfL3 { 0%,63%{opacity:0} 68%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+
+/* 進捗バー */
+.tf-prog-tr { fill:#223052; }
+.tf-prog { fill:var(--accent); transform-box: fill-box; transform-origin: left center; animation: tfProg 10s linear infinite; }
+@keyframes tfProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">接触検出ファミリー <span style="opacity:.75;font-weight:700">touch_finder_v2 / ref_touch_finder_v2</span></h1>
+    <p class="catch">この部材に<span class="em">触れているモノ</span>を、まわりから<span class="em">自動でぜんぶ拾う</span>——ガセットもブレースも取りこぼさない。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">通常版 v2 ／ 参照版 v2.7</span>
+      <span class="badge st-ver">GHノード ＋ ピッカー</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg tf-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="基準の本体に触れている周辺部材を自動で見つけ、遠隔の飛び地を除外するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="tf-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="tf-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <g class="tf-scene">
+          <!-- ===== 基準の本体（柱＋梁） ===== -->
+          <rect class="tf-body" x="352" y="104" width="30" height="252" rx="1"></rect>
+          <rect class="tf-body" x="232" y="140" width="150" height="20" rx="1"></rect>
+          <line class="tf-base" x1="330" y1="358" x2="404" y2="358"></line>
+          <!-- 基準タグ -->
+          <g>
+            <rect class="tf-anchor-box" x="392" y="98" width="96" height="24" rx="12"></rect>
+            <text class="tf-anchor-txt" x="404" y="114">◎ 基準の本体</text>
+          </g>
+
+          <!-- ===== 周辺の接触パーツ（グレー→点灯） ===== -->
+          <!-- ① ガセット（梁-柱の入隅） -->
+          <polygon class="tf-touch tf-t1" points="352,162 352,196 322,162"></polygon>
+          <!-- ② ブレース（斜材） -->
+          <line class="tf-brace tf-t2" x1="300" y1="164" x2="352" y2="258"></line>
+          <!-- ③ 柱脚のガセット -->
+          <rect class="tf-touch tf-t3" x="336" y="334" width="24" height="20" rx="1"></rect>
+          <!-- ④ 柱側のブラケット -->
+          <rect class="tf-touch tf-t4" x="382" y="206" width="20" height="30" rx="1"></rect>
+
+          <!-- スキャンのパルス波紋 -->
+          <circle class="tf-ring tf-ring1" cx="340" cy="176" r="4"></circle>
+          <circle class="tf-ring tf-ring2" cx="326" cy="210" r="4"></circle>
+          <circle class="tf-ring tf-ring3" cx="392" cy="221" r="4"></circle>
+
+          <!-- ===== 遠隔の飛び地パーツ（除外される） ===== -->
+          <rect class="tf-far" x="588" y="150" width="46" height="30" rx="1"></rect>
+          <line class="tf-farx" x1="592" y1="154" x2="630" y2="176"></line>
+          <line class="tf-farx" x1="630" y1="154" x2="592" y2="176"></line>
+          <text class="tf-far-lbl" x="588" y="200">飛び地（遠隔）→ 除外</text>
+
+          <!-- 確定バッジ -->
+          <g class="tf-badge">
+            <rect class="tf-badge-box" x="470" y="290" width="176" height="30" rx="15"></rect>
+            <circle class="tf-badge-dot" cx="488" cy="305" r="6"></circle>
+            <text class="tf-badge-txt" x="502" y="309">接触セット 4 ／ 遠隔除外 1</text>
+          </g>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="tf-cap tf-l1" x="400" y="428" text-anchor="middle">① 基準の本体（柱・梁）を選ぶ</text>
+        <text class="tf-cap tf-l2" x="400" y="428" text-anchor="middle">② 触れている周辺部材を自動スキャンして点灯</text>
+        <text class="tf-cap tf-l3" x="400" y="428" text-anchor="middle">③ 遠くの飛び地は除外して接触セットを確定</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">基準の本体を選ぶ → 触れている周辺部材（ガセット・ブレース・ブラケット）を自動で点灯 → 遠く離れた飛び地パーツだけ除外、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>柱や梁の<strong>本体を1つ選ぶと、それに触れている周辺の部材（ガセットプレート・ブレース・ブラケットなど）を自動でぜんぶ見つけ出す</strong>ツールです。図面化のときに「本体だけでなく、くっついている金物も一緒に描きたい」——その面倒な拾い出しを機械にやらせます。</p>
+    <p>3つの部品がセットになっています。<strong>touch_finder_v2</strong>（通常のモデル用）と <strong>ref_touch_finder_v2</strong>（ワークセッションで読み込んだ参照モデル用）が自動スキャンの本体で、<strong>touch_picker</strong> は「これは追加」「これは除外」を手でつまむGUID蓄積ピッカーです。参照版は点や薄い面を除外し、天端の高さで2段のサイズフィルタをかけ、さらに<strong>遠く離れた飛び地パーツ（同じアセンブリ定義に紛れ込んだ吊りピース等）を自動で除外</strong>します。</p>
+    <p class="lead">※ ワークセッション＝別の.3dmを「参照」として読み込む仕組み。参照モデルの部材は直接は編集できないため専用の拾い方が要ります。／ 拾った結果の最終的な足し引きは、下流の <a href="final-select.html">GH_FinalSelect</a> に集約する設計です。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（3部品の端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>ref_touch_finder_v2（参照モデル版・自動スキャン）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">InstIds</td><td>基準にする本体（アセンブリ）のGUID。ここに触れているものを探す。</td></tr>
+          <tr><td class="port">Key / Tolerance</td><td>照合キーと接触判定の許容距離。近ければ「触れている」とみなす。</td></tr>
+          <tr><td class="port">ExcludeKw /<br>OnlyKw</td><td>名前で除外／限定するキーワード。ノイズを外す。</td></tr>
+          <tr><td class="port">MaxSize /<br>MaxSizeUp / MaxSizeLo</td><td>拾う部材の最大サイズ。天端の上下で2段に分けて効かせる。</td></tr>
+          <tr><td class="port">ZMargin / FarTol</td><td>Z方向の余裕と、<strong>遠隔の飛び地</strong>を切り捨てる距離しきい値。</td></tr>
+          <tr><td class="port">RefIds / RefGeos <span class="io-dir out">出力</span></td><td>見つけた接触パーツのGUIDと形状。下流のFinalSelectへ。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>touch_picker（追加／除外ピッカー・手動）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Pick / Clear</td><td>クリックで部材を1つずつ蓄積／全消去。</td></tr>
+          <tr><td class="port">PoolKey / Label</td><td>選択プールの識別キーと表示名。ノードごとに独立して記録。</td></tr>
+          <tr><td class="port">Highlight / Color</td><td>選んだものの強調表示と色。</td></tr>
+          <tr><td class="port">Ids <span class="io-dir out">出力</span></td><td>蓄積したGUID。同じスクリプトを2個置き、<strong>追加用→AddIds・除外用→DelIds</strong> にそれぞれつなぐ。</td></tr>
+          <tr><td colspan="2" style="color:var(--sub);font-size:13px">通常のモデルでは <span class="port" style="color:var(--accent)">touch_finder_v2</span>（入力 InstIds / ExcludeKw / Tolerance、出力 TouchIds・TouchGeos・Count）を自動スキャンに使います。旧版のモーダル方式は廃止済みです。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">本体を渡す</span><span class="step-body"><a href="ifc-attr-search-v2.html">IFC属性検索</a> などで仕分けた本体（アセンブリ）のGUIDを <span class="port" style="color:var(--accent)">InstIds</span> へ。参照モデルなら ref版を、通常モデルなら touch_finder_v2 を使う。</span></li>
+      <li><span class="step-title">許容距離を決める</span><span class="step-body"><span class="port" style="color:var(--accent)">Tolerance</span> で「どれだけ近ければ接触とみなすか」を設定。<kbd>Run</kbd> でスキャン開始。</span></li>
+      <li><span class="step-title">拾いすぎ・飛び地を絞る</span><span class="step-body">ノイズは <span class="port" style="color:var(--accent)">ExcludeKw</span>、大きすぎる部材は <span class="port" style="color:var(--accent)">MaxSize</span>、遠く離れた飛び地は <span class="port" style="color:var(--accent)">FarTol</span> で切り捨てる。</span></li>
+      <li><span class="step-title">取りこぼしは手で足す</span><span class="step-body">自動で拾えなかった部材は <span class="port" style="color:var(--accent)">touch_picker</span>（追加用）でクリック蓄積。要らないものは除外用ピッカーへ。</span></li>
+      <li><span class="step-title">FinalSelectへ集約する</span><span class="step-body">自動結果 <span class="port" style="color:var(--accent)">RefIds</span> と手動の追加／除外を <a href="final-select.html">GH_FinalSelect</a> の各端子へ。足し引きはあちらで確定する。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <a class="chip chip-up" href="ifc-attr-search-v2.html">IFC属性検索 v2</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">接触検出ファミリー（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="final-select.html">最終選択ハブ GH_FinalSelect</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">本体の仕分けは <a href="ifc-attr-search-v2.html">IFC属性検索</a> から受け取り、拾った接触セットは <a href="final-select.html">GH_FinalSelect</a> でまとめて <a href="make2d-executor.html">Make2D実行</a> の背景見え線（TouchGeo）へ流れます。全体像は <a href="../pipeline.html">パイプライン詳細図</a> で確認できます。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\01_柱梁フレーム.3dm</span>
+      <p class="sample-desc">2×1スパンの柱梁フレーム＋通り芯線＋ガセット／浮きピース入り。接触検出のデモにそのまま使えます。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> を開く（参照で読むなら ref版を使用）。</span></li>
+        <li><span class="step-title">基準の柱を渡す</span><span class="step-body">中央スパンの柱1本のGUIDを <span class="port" style="color:var(--accent)">InstIds</span> へ。<kbd>Run</kbd> でスキャン。</span></li>
+        <li><span class="step-title">接触パーツが点灯</span><span class="step-body">その柱に触れるガセットやブレースがハイライトされる。混入している浮きピースは <span class="port" style="color:var(--accent)">FarTol</span> を効かせると消える。</span></li>
+        <li><span class="step-title">FinalSelectで確認</span><span class="step-body">結果を <a href="final-select.html">GH_FinalSelect</a> に流し、確定セットの数を <span class="port" style="color:var(--accent)">Count</span> で確認する。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 手動の追加・除外は端子で分離する（フリーズ回避）</div>
+        <p>GHのsolve中にモーダルなピック＋表示切替を行うとフリーズします。そのため自動スキャンは純計算だけに専念させ、手でのピックは <span class="port" style="color:var(--accent)">touch_picker</span> を別ノードとして立て、AddIds／DelIds 端子に分けて渡す設計です。1ノードに詰め込まないでください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 参照モデルのピックは ReferenceObjectSelect が必須</div>
+        <p>ワークセッションの参照モデルは通常の選択では拾えません。参照版は専用の参照オブジェクト選択を使います。参照で読み込んでいるのに拾えないときは、モデルが参照として正しく入っているかを先に確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 飛び地パーツの混入は FarTol で切る</div>
+        <p>アセンブリ定義に遠く離れた吊りピース等が紛れ込んでいると、接触判定が巻き込んでしまいます（例: 柱定義に十数m離れたピースが混入）。対角最大のアンカーから一定距離を超えるものを <span class="port" style="color:var(--accent)">FarTol</span> で除外してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 自動結果は保持される・実機での最終確認を</div>
+        <p>自動スキャン結果はキャッシュに保持され、モデルを切り替えても消えません。意図せず前のセットが残ることがあるため、重要案件では最終セットを目視で確認してください（ref版の一部は実機未検証項目あり）。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル（3部品）</span>
+      C:\Python1\図面整理\<span class="fp-accent">ref_touch_finder_v2.py</span> ／ C:\Python1\<span class="fp-accent">touch_finder_v2.py</span> ／ C:\Python1\図面整理\<span class="fp-accent">touch_picker.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

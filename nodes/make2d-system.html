@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>make2d_system ワンボタン構築 — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス m2ds- で衝突回避
+   ①空のGHキャンバス＋Buildボタン → ②9ノードと配線がパッと出現 → ③操作パネルがポップアップ
+   ============================================================ */
+.m2ds-svg text { font-family: var(--font); }
+
+/* GHキャンバス */
+.m2ds-canvas   { fill: #0a1122; stroke: #2a3352; stroke-width: 1.6; }
+.m2ds-empty    { fill: #6f7db0; font-size: 15px; font-weight: 600; }
+
+/* Buildボタン */
+.m2ds-btn      { fill: var(--accent); }
+.m2ds-btn-txt  { fill: #06202a; font-size: 15px; font-weight: 800; }
+.m2ds-press    { animation: m2dsPress 10s infinite; }
+
+/* 生成される9ノード（小さな箱） */
+.m2ds-node     { fill: #10203a; stroke: var(--accent); stroke-width: 2; }
+.m2ds-node-txt { fill: #cfe9f5; font-size: 10px; font-weight: 700; }
+/* ノード間の配線 */
+.m2ds-wire     { fill: none; stroke: var(--accent); stroke-width: 2; opacity: .8;
+                 stroke-dasharray: 120; }
+/* グループ枠 */
+.m2ds-group    { fill: color-mix(in srgb, var(--accent) 6%, transparent);
+                 stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 5 4; opacity: .7; }
+
+/* 操作パネル（Rhinoにポップアップ） */
+.m2ds-panel    { fill: #121a30; stroke: var(--accent); stroke-width: 2;
+                 filter: drop-shadow(0 6px 18px rgba(0,0,0,.6)); }
+.m2ds-panel-bar{ fill: var(--accent); }
+.m2ds-panel-txt{ fill: #06202a; font-size: 11px; font-weight: 800; }
+.m2ds-panel-row{ fill: #1b2740; stroke: #2a3352; stroke-width: 1; }
+.m2ds-panel-lbl{ fill: #9aa7cc; font-size: 9.5px; font-weight: 600; }
+.m2ds-panel-chip{ fill: color-mix(in srgb, var(--accent) 24%, transparent); }
+
+/* テキスト */
+.m2ds-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.m2ds-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.m2ds-prog-tr { fill: #223052; }
+.m2ds-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.m2ds-buildui { animation: m2dsBuildUi 10s infinite; }
+.m2ds-btn-g   { animation: m2dsBtnG   10s infinite; }
+.m2ds-nodes   { animation: m2dsNodes  10s infinite; }
+.m2ds-n1 { animation: m2dsPop 10s infinite; }
+.m2ds-n2 { animation: m2dsPop 10s infinite; animation-delay: .18s; }
+.m2ds-n3 { animation: m2dsPop 10s infinite; animation-delay: .36s; }
+.m2ds-n4 { animation: m2dsPop 10s infinite; animation-delay: .54s; }
+.m2ds-n5 { animation: m2dsPop 10s infinite; animation-delay: .72s; }
+.m2ds-n6 { animation: m2dsPop 10s infinite; animation-delay: .90s; }
+.m2ds-n7 { animation: m2dsPop 10s infinite; animation-delay: 1.08s; }
+.m2ds-n8 { animation: m2dsPop 10s infinite; animation-delay: 1.26s; }
+.m2ds-n9 { animation: m2dsPop 10s infinite; animation-delay: 1.44s; }
+.m2ds-wire { animation: m2dsWire 10s infinite; }
+.m2ds-panel-g { animation: m2dsPanel 10s infinite; }
+.m2ds-prog  { animation: m2dsProg 10s linear infinite; }
+.m2ds-l1 { animation: m2dsL1 10s infinite; }
+.m2ds-l2 { animation: m2dsL2 10s infinite; }
+.m2ds-l3 { animation: m2dsL3 10s infinite; }
+
+/* transform系アニメは自要素の中心を基準にスケール（左上へ飛ぶのを防ぐ） */
+.m2ds-press,
+.m2ds-panel-g,
+.m2ds-n1,.m2ds-n2,.m2ds-n3,.m2ds-n4,.m2ds-n5,
+.m2ds-n6,.m2ds-n7,.m2ds-n8,.m2ds-n9 {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* ①空のキャンバス＋Buildボタンは前半で表示、押下後にフェード */
+@keyframes m2dsBuildUi {
+  0%,3%   { opacity: 0; }
+  8%      { opacity: 1; }
+  30%     { opacity: 1; }
+  40%,100%{ opacity: 0; }
+}
+@keyframes m2dsBtnG {
+  0%,3%   { opacity: 0; }
+  8%      { opacity: 1; }
+  28%     { opacity: 1; }
+  38%,100%{ opacity: 0; }
+}
+/* ボタン押下のへこみ */
+@keyframes m2dsPress {
+  0%,22%  { transform: scale(1); }
+  26%     { transform: scale(.9); }
+  30%,100%{ transform: scale(1); }
+}
+/* 9ノードの群 全体表示window */
+@keyframes m2dsNodes {
+  0%,30%  { opacity: 0; }
+  38%     { opacity: 1; }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+/* 各ノードがパッと出現 */
+@keyframes m2dsPop {
+  0%,32%  { opacity: 0; transform: scale(.4); }
+  40%     { opacity: 1; transform: scale(1.08); }
+  44%     { transform: scale(1); }
+  100%    { opacity: 1; transform: scale(1); }
+}
+/* 配線が伸びる */
+@keyframes m2dsWire {
+  0%,44%  { opacity: 0; stroke-dashoffset: 120; }
+  52%     { opacity: .8; }
+  60%     { opacity: .8; stroke-dashoffset: 0; }
+  100%    { opacity: .8; stroke-dashoffset: 0; }
+}
+/* 操作パネルがポップアップ */
+@keyframes m2dsPanel {
+  0%,62%  { opacity: 0; transform: translate(10px, 14px) scale(.92); }
+  72%     { opacity: 1; transform: translate(0,0) scale(1); }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes m2dsProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+@keyframes m2dsL1 { 0%{opacity:0} 5%{opacity:1} 27%{opacity:1} 33%{opacity:0} 100%{opacity:0} }
+@keyframes m2dsL2 { 0%,33%{opacity:0} 40%{opacity:1} 58%{opacity:1} 63%{opacity:0} 100%{opacity:0} }
+@keyframes m2dsL3 { 0%,63%{opacity:0} 70%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">make2d_system <span style="opacity:.75;font-weight:700">ワンボタン構築</span></h1>
+    <p class="catch">Make2Dパイプライン<span class="em">丸ごと一式</span>を、<span class="em">ボタン1つ</span>でキャンバスに組み立てる司令塔。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中（正本の配布形態）</span>
+      <span class="badge st-ver">システム整理 2026-07-03</span>
+      <span class="badge st-ver">GH Python3 ノード（RH8専用）</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg m2ds-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Buildボタンで9ノードと配線が一括生成され操作パネルが現れるアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="m2ds-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="m2ds-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- GHキャンバス枠（常時） -->
+        <rect class="m2ds-canvas" x="60" y="70" width="680" height="300" rx="8"></rect>
+
+        <!-- ===== ① 空のキャンバス ＋ Buildボタン ===== -->
+        <g class="m2ds-buildui">
+          <text class="m2ds-empty" x="400" y="180" text-anchor="middle">空の Grasshopper キャンバス</text>
+        </g>
+        <g class="m2ds-btn-g">
+          <g transform="translate(340,220)">
+            <g class="m2ds-press">
+              <rect class="m2ds-btn" x="0" y="0" width="120" height="42" rx="9"></rect>
+              <text class="m2ds-btn-txt" x="60" y="27" text-anchor="middle">▶ Build</text>
+            </g>
+          </g>
+        </g>
+
+        <!-- ===== ② 9ノード＋配線がパッと出現 ===== -->
+        <g class="m2ds-nodes">
+          <!-- グループ枠 -->
+          <rect class="m2ds-group" x="78" y="88" width="644" height="118" rx="6"></rect>
+          <rect class="m2ds-group" x="78" y="222" width="644" height="126" rx="6"></rect>
+
+          <!-- 配線（先に定義して背面に） -->
+          <path class="m2ds-wire" pathLength="120" d="M168,124 L214,124"></path>
+          <path class="m2ds-wire" pathLength="120" d="M304,124 L350,124"></path>
+          <path class="m2ds-wire" pathLength="120" d="M440,124 L486,124"></path>
+          <path class="m2ds-wire" pathLength="120" d="M576,124 L622,124"></path>
+          <path class="m2ds-wire" pathLength="120" d="M240,150 C240,200 240,220 260,258"></path>
+          <path class="m2ds-wire" pathLength="120" d="M520,150 C520,200 500,220 470,258"></path>
+          <path class="m2ds-wire" pathLength="120" d="M330,284 L376,284"></path>
+          <path class="m2ds-wire" pathLength="120" d="M466,284 L512,284"></path>
+
+          <!-- 上段5ノード -->
+          <g class="m2ds-n1"><rect class="m2ds-node" x="96" y="104" width="72" height="40" rx="5"></rect><text class="m2ds-node-txt" x="132" y="128" text-anchor="middle">通り芯交点</text></g>
+          <g class="m2ds-n2"><rect class="m2ds-node" x="232" y="104" width="72" height="40" rx="5"></rect><text class="m2ds-node-txt" x="268" y="128" text-anchor="middle">プランナー</text></g>
+          <g class="m2ds-n3"><rect class="m2ds-node" x="368" y="104" width="72" height="40" rx="5"></rect><text class="m2ds-node-txt" x="404" y="128" text-anchor="middle">IFC属性検索</text></g>
+          <g class="m2ds-n4"><rect class="m2ds-node" x="504" y="104" width="72" height="40" rx="5"></rect><text class="m2ds-node-txt" x="540" y="128" text-anchor="middle">接触検出</text></g>
+          <g class="m2ds-n5"><rect class="m2ds-node" x="640" y="104" width="72" height="40" rx="5"></rect><text class="m2ds-node-txt" x="676" y="128" text-anchor="middle">追加/除外</text></g>
+          <!-- 下段4ノード -->
+          <g class="m2ds-n6"><rect class="m2ds-node" x="188" y="264" width="72" height="40" rx="5"></rect><text class="m2ds-node-txt" x="224" y="288" text-anchor="middle">最終選択</text></g>
+          <g class="m2ds-n7"><rect class="m2ds-node" x="324" y="264" width="72" height="40" rx="5"></rect><text class="m2ds-node-txt" x="360" y="288" text-anchor="middle">Make2D実行</text></g>
+          <g class="m2ds-n8"><rect class="m2ds-node" x="460" y="264" width="72" height="40" rx="5"></rect><text class="m2ds-node-txt" x="496" y="288" text-anchor="middle">部材記号</text></g>
+          <g class="m2ds-n9"><rect class="m2ds-node" x="596" y="264" width="72" height="40" rx="5"></rect><text class="m2ds-node-txt" x="632" y="288" text-anchor="middle">寸法注記</text></g>
+        </g>
+
+        <!-- ===== ③ 操作パネルがポップアップ ===== -->
+        <g class="m2ds-panel-g">
+          <g style="transform-box:fill-box;transform-origin:center">
+            <rect class="m2ds-panel" x="470" y="150" width="250" height="182" rx="8"></rect>
+            <rect class="m2ds-panel-bar" x="470" y="150" width="250" height="26" rx="8"></rect>
+            <rect class="m2ds-panel-bar" x="470" y="164" width="250" height="12"></rect>
+            <text class="m2ds-panel-txt" x="482" y="168">Make2D 操作パネル</text>
+            <rect class="m2ds-panel-row" x="482" y="186" width="226" height="26" rx="4"></rect>
+            <text class="m2ds-panel-lbl" x="492" y="203">① 通り芯 → 交点抽出</text>
+            <rect class="m2ds-panel-chip" x="660" y="190" width="38" height="18" rx="4"></rect>
+            <rect class="m2ds-panel-row" x="482" y="218" width="226" height="26" rx="4"></rect>
+            <text class="m2ds-panel-lbl" x="492" y="235">② 断面プラン作成</text>
+            <rect class="m2ds-panel-chip" x="660" y="222" width="38" height="18" rx="4"></rect>
+            <rect class="m2ds-panel-row" x="482" y="250" width="226" height="26" rx="4"></rect>
+            <text class="m2ds-panel-lbl" x="492" y="267">③ Make2D 実行 → 書戻</text>
+            <rect class="m2ds-panel-chip" x="660" y="254" width="38" height="18" rx="4"></rect>
+            <rect class="m2ds-panel-row" x="482" y="282" width="226" height="26" rx="4"></rect>
+            <text class="m2ds-panel-lbl" x="492" y="299">④ 部材記号・寸法注記</text>
+            <rect class="m2ds-panel-chip" x="660" y="286" width="38" height="18" rx="4"></rect>
+          </g>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="m2ds-cap m2ds-l1" x="400" y="428" text-anchor="middle">① 空のキャンバスに「Build」ボタンを1つ置く</text>
+        <text class="m2ds-cap m2ds-l2" x="400" y="428" text-anchor="middle">② 押すと9ノード＋全配線＋グループ枠がパッと出現</text>
+        <text class="m2ds-cap m2ds-l3" x="400" y="428" text-anchor="middle">③ さらにRhino画面に常時操作パネルがポップアップ</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">BuildボタンひとつでMake2Dパイプラインの9ノードと配線・グループ枠が一括生成され、さらにキャンバスを触らずに使える操作パネルが立ち上がる様子を10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>Make2D図面化パイプラインは<strong>9個ものノードを正しい順番でつなぐ</strong>必要があり、毎回手で並べて配線するのは大変です。このツールは、その面倒な組み立てを<strong>ボタン1つで肩代わり</strong>します。空のGrasshopperキャンバスにこのノードを置いて <span class="port" style="color:var(--accent)">Build</span> を押すだけで、通り芯交点抽出・プランナー・IFC属性検索・接触検出・追加/除外ピッカー・最終選択・Make2D実行・部材記号・寸法注記の<strong>全ノードと配線、グループ枠まで一気に生成</strong>されます。</p>
+    <p>各ノードは「正本の.pyを1行で読み込むスタブ（ローダー）」として置かれるので、あとからコードを直したいときは <span class="file-path" style="display:inline-block;white-space:nowrap;padding:2px 8px">C:\Python1\図面整理\</span> の正本を編集するだけでOK。全ノードに貼り直す必要はありません。さらに、Grasshopperのキャンバスを開かなくても操作できる<strong>常時表示のコントロールパネル</strong>もポップアップし、「通り芯を拾う→断面を決める→Make2D→書き戻す」の手順をパネル上のボタンから順に実行できます。</p>
+    <p class="lead">※ スタブ（ローダー）＝本体のコードを別ファイルから読み込むだけの短いつなぎ。中身は正本1か所に集約されるので、更新が全ノードへ一発で反映されます。／ このページで扱う旧配布形態「Make2D共有版.zip」については <a href="#note-zip">下の注記</a> を参照してください。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート（2）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Build</td><td><strong>これがメインのボタン。</strong>押すとMake2Dパイプライン一式（9ノード＋配線＋グループ枠）をキャンバスに生成する。<kbd>Button</kbd>接続を推奨。</td></tr>
+          <tr><td class="port">SlimMigrate</td><td>任意。既存の「Make2D実行」ノードを、端子を絞った軽量版「Make2D実行(スリム)」へ自動移行する（配線は端子名一致で自動移設、旧ノードは無効化して残す）。使わなくてよい上級者向けボタン。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート（1）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Report</td><td>構築の結果ログ。何個のノードを生成し、どの配線を張った／スキップしたかのサマリを返す。うまく組めたかはまずここで確認。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <p class="lead" style="margin-top:14px">再実行しても安全な設計です。同じニックネームのノードは再生成せず再利用し、既存の配線はスキップするので、<strong>途中で切れた配線の修復</strong>にも使えます。</p>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">Grasshopperを開く</span><span class="step-body">Rhino 8 でGrasshopperを起動する（このシステムはRhino 8 / Python 3 専用）。Rhinoエイリアス <kbd>M2D</kbd> からの起動にも対応。</span></li>
+      <li><span class="step-title">ビルダーノードを置く</span><span class="step-body">Python 3 Script コンポーネントを1つ置き、<span class="file-path" style="display:inline-block;white-space:nowrap;padding:2px 8px">make2d_system\GH_SystemBuilder.py</span> の内容を貼り付け、入力 <span class="port" style="color:var(--accent)">Build</span>（bool）と出力 <span class="port" style="color:var(--accent)">Report</span> を作る。</span></li>
+      <li><span class="step-title">Buildを押す</span><span class="step-body"><span class="port" style="color:var(--accent)">Build</span> に <kbd>Button</kbd> を接続して押す。キャンバスにパイプライン一式（9ノード・全配線・グループ枠）が生成され、Rhino画面に操作パネルが現れる。</span></li>
+      <li><span class="step-title">パネルから順に実行</span><span class="step-body">ポップアップした操作パネルの「① 通り芯 → ② 断面プラン → ③ Make2D実行 → ④ 記号・注記」を上から順に実行していく。キャンバスを直接触らなくても回せる。</span></li>
+      <li><span class="step-title">コード修正は正本だけ</span><span class="step-body">ノードの挙動を直したくなったら、貼り直しは不要。<span class="file-path" style="display:inline-block;white-space:nowrap;padding:2px 8px">C:\Python1\図面整理\</span> の正本.pyを編集すれば全ノードに反映される。</span></li>
+      <li><span class="step-title">配線が切れたら再Build</span><span class="step-body">誤って配線を消しても、もう一度 <span class="port" style="color:var(--accent)">Build</span> を押せば足りない配線だけ張り直される（既存は温存）。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="chip chip-self">make2d_system（このノード）</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="flow-label">構築する</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <a class="chip chip-down" href="grid-intersect.html">通り芯交点抽出 GH_GridIntersect</a>
+        <a class="chip chip-down" href="make2d-planner.html">Make2Dプランナー</a>
+        <a class="chip chip-down" href="ifc-attr-search-v2.html">IFC属性検索 v2</a>
+        <a class="chip chip-down" href="touch-finder.html">接触検出</a>
+      </div>
+      <div class="flow-row" style="margin-top:10px">
+        <a class="chip chip-down" href="final-select.html">最終選択 GH_FinalSelect</a>
+        <a class="chip chip-down" href="make2d-executor.html">Make2D実行 GH_Make2DExecutor</a>
+        <a class="chip chip-down" href="partmark.html">部材記号 GH_PartMark</a>
+        <a class="chip chip-down" href="annotate-dim-gh.html">寸法注記 GH_AnnotateDim</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">つまりこのノードは<strong>パイプライン全体の入口</strong>。個々のノードの役割や、データがどう流れるかの全体像は <a href="../pipeline.html">Make2Dパイプライン詳細図</a> で確認できます。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\01_柱梁フレーム.3dm</span>
+      <p class="sample-desc">2×1スパンの柱梁フレーム＋通り芯線＋ガセット／浮きピース入り。パイプライン一式を試すデモ用モデル。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> を開く（またはワークセッションで参照）。</span></li>
+        <li><span class="step-title">Grasshopperで一括構築</span><span class="step-body">GHにビルダーノードを置いて <span class="port" style="color:var(--accent)">Build</span> を押す。9ノードと配線が生成され、操作パネルが立ち上がる。</span></li>
+        <li><span class="step-title">パネルから通り芯を拾う</span><span class="step-body">パネルの手順①で、フレームに付いている通り芯線から交点（X1-Y1…）を抽出する。</span></li>
+        <li><span class="step-title">断面→Make2Dまで回す</span><span class="step-body">手順②③と進め、床伏図と断面図を1面ずつ試作。練習では書き戻しはオフのまま出力だけ確認すると安心。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Rhino 8（Python 3）専用</div>
+        <p>このシステムは <strong>Rhino 8 の Python 3 コンポーネント</strong>で動きます。共有エンジン <span class="port" style="color:var(--accent)">ghkit</span>（<span class="file-path" style="display:inline-block;white-space:nowrap;padding:2px 8px">C:\Python1\gh_ai_nodegen\ghkit.py</span>）とスタブ置き場（make2d_system\stubs\）が前提です。Rhino 7 / IronPython 環境では動きません。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> スタブ方式＝正本の場所を動かさない</div>
+        <p>生成されるノードは正本.pyを読み込むスタブです。<strong>正本（図面整理\ 内の各.py）やstubsフォルダを移動・リネームすると全ノードが動かなくなります</strong>。共有時はフォルダ構成をそのまま保ってください。</p>
+      </li>
+      <li class="trap-box" id="note-zip">
+        <div class="trap-title"><span class="ico">ℹ</span> 旧配布形態「Make2D共有版.zip」との違い</div>
+        <p>以前はGHファイル（260703作図メイク2D.gh）とローダースタブ群を固めた <strong>Make2D共有版.zip</strong> という配布物がありました。この make2d_system は 2026-07-03 の「システム化」以降の<strong>正本の配布形態</strong>で、両者は別物です。新規に使うならこちら（ワンボタン構築）が本命です。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> SlimMigrateは任意・移行後は目視確認</div>
+        <p><span class="port" style="color:var(--accent)">SlimMigrate</span> による軽量版への移行は<strong>任意</strong>です。旧・多端子ノードもそのまま全機能動作します。移行すると旧ノードは無効化されて残るので、問題ないことを目視確認してから手動で削除してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\図面整理\make2d_system\<span class="fp-accent">GH_SystemBuilder.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

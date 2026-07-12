@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>かさ上げ鋼材 7分割クラスター版 kasage_nodes — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス kn- で衝突回避
+   ①既存梁＋通り芯を [1] に投入 → ②データが [1]→[7] を流れ各工程が点灯
+   → ③ [7] でかさ上げ鋼材をベイク（材質UDA付き）
+   ============================================================ */
+.kn-svg text { font-family: var(--font); }
+
+/* 入力（既存梁＋通り芯） */
+.kn-beam    { fill: #241d0f; stroke: var(--accent); stroke-width: 2; }
+.kn-cube-face { fill: #1b2338; stroke: var(--accent); stroke-width: 1.6; }
+.kn-cube-top  { fill: #232c46; stroke: var(--accent); stroke-width: 1.4; }
+.kn-cube-side { fill: #10152a; stroke: var(--accent); stroke-width: 1.4; }
+.kn-gridline  { fill: none; stroke: var(--accent); stroke-width: 1.3; opacity: .8;
+                stroke-dasharray: 9 4 2 4; }
+
+/* 7ノードの箱 */
+.kn-boxbase { fill: #1b2338; stroke: color-mix(in srgb, var(--accent) 40%, var(--line)); stroke-width: 1.6; }
+.kn-glow    { fill: color-mix(in srgb, var(--accent) 26%, transparent);
+              stroke: var(--accent); stroke-width: 2.6; }
+.kn-num     { fill: var(--accent); font-size: 21px; font-weight: 800; }
+.kn-boxlbl  { fill: #c9d3f2; font-size: 11px; font-weight: 700; }
+.kn-conn      { fill: none; stroke: color-mix(in srgb, var(--accent) 45%, var(--line)); stroke-width: 2; }
+.kn-conn-head { fill: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+.kn-flowdot   { fill: #fff7e0; }
+
+/* 結果（ベイク） */
+.kn-res-beam  { fill: #241d0f; stroke: var(--accent); stroke-width: 2; }
+.kn-res-steel { fill: color-mix(in srgb, var(--accent) 80%, #3a2c05); stroke: var(--accent); stroke-width: 1.8; }
+.kn-tag-box   { fill: #0b1428; stroke: var(--accent); stroke-width: 1.4; }
+.kn-disk      { fill: var(--accent); }
+.kn-res-arrow { fill: none; stroke: var(--accent); stroke-width: 2.2; }
+.kn-res-head  { fill: var(--accent); }
+
+/* テキスト */
+.kn-cap    { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.kn-small  { fill: #9aa7cc; font-size: 11px; font-weight: 600; }
+.kn-tagtxt { fill: #e6ecff; font-size: 12.5px; font-weight: 700; }
+
+/* 進捗バー */
+.kn-prog-tr { fill: #4a3a12; }
+.kn-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.kn-input  { animation: knInput  10s infinite; }
+.kn-boxes  { animation: knBoxes  10s infinite; }
+.kn-flow   { animation: knFlow   10s infinite; }
+.kn-result { animation: knResult 10s infinite; }
+.kn-g1 { animation: knG1 10s infinite; }
+.kn-g2 { animation: knG2 10s infinite; }
+.kn-g3 { animation: knG3 10s infinite; }
+.kn-g4 { animation: knG4 10s infinite; }
+.kn-g5 { animation: knG5 10s infinite; }
+.kn-g6 { animation: knG6 10s infinite; }
+.kn-g7 { animation: knG7 10s infinite; }
+.kn-l1 { animation: knL1 10s infinite; }
+.kn-l2 { animation: knL2 10s infinite; }
+.kn-l3 { animation: knL3 10s infinite; }
+.kn-prog { animation: knProg 10s linear infinite; }
+
+@keyframes knInput  { 0%,2%{opacity:0} 8%{opacity:1} 92%{opacity:1} 98%,100%{opacity:0} }
+@keyframes knBoxes  { 0%,4%{opacity:0} 12%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes knFlow {
+  0%,16%   { opacity: 0; transform: translateX(0); }
+  20%      { opacity: 1; transform: translateX(0); }
+  74%      { opacity: 1; transform: translateX(601px); }
+  78%,100% { opacity: 0; transform: translateX(601px); }
+}
+@keyframes knG1 { 0%,20%{opacity:0} 24%{opacity:.95} 30%{opacity:0} 100%{opacity:0} }
+@keyframes knG2 { 0%,28%{opacity:0} 32%{opacity:.95} 38%{opacity:0} 100%{opacity:0} }
+@keyframes knG3 { 0%,36%{opacity:0} 40%{opacity:.95} 46%{opacity:0} 100%{opacity:0} }
+@keyframes knG4 { 0%,43%{opacity:0} 47%{opacity:.95} 53%{opacity:0} 100%{opacity:0} }
+@keyframes knG5 { 0%,50%{opacity:0} 54%{opacity:.95} 60%{opacity:0} 100%{opacity:0} }
+@keyframes knG6 { 0%,57%{opacity:0} 61%{opacity:.95} 67%{opacity:0} 100%{opacity:0} }
+@keyframes knG7 { 0%,64%{opacity:0} 68%{opacity:.95} 74%{opacity:0} 100%{opacity:0} }
+@keyframes knResult {
+  0%,74%  { opacity: 0; transform: translateY(8px); }
+  80%     { opacity: 1; transform: translateY(0); }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes knL1 { 0%{opacity:0} 4%{opacity:1} 30%{opacity:1} 35%{opacity:0} 100%{opacity:0} }
+@keyframes knL2 { 0%,33%{opacity:0} 37%{opacity:1} 70%{opacity:1} 75%{opacity:0} 100%{opacity:0} }
+@keyframes knL3 { 0%,73%{opacity:0} 77%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes knProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="steel">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">鉄骨モデリング支援</span>
+    <h1 class="node-title">かさ上げ鋼材 7分割クラスター版 <span style="opacity:.75;font-weight:700">kasage_nodes</span></h1>
+    <p class="catch">同じかさ上げ鋼材づくりを、<span class="em">7つのノードに分けて</span>パイプライン化した版。<span class="em">途中に別処理を挟める。</span></p>
+    <div class="badges">
+      <span class="badge st-live">稼働中（姉妹実装）</span>
+      <span class="badge st-ver">7分割クラスター版</span>
+      <span class="badge st-ver">GH Python3 ノード</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg kn-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="7つのノードにデータが流れてかさ上げ鋼材がベイクされるアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="kn-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="kn-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① 入力（既存梁＋通り芯） ===== -->
+        <g class="kn-input">
+          <polygon class="kn-cube-top"  points="42,190 52,182 74,182 64,190"></polygon>
+          <polygon class="kn-cube-side" points="64,190 74,182 74,206 64,214"></polygon>
+          <rect    class="kn-cube-face" x="42" y="190" width="22" height="24"></rect>
+          <line class="kn-gridline" x1="55" y1="176" x2="55" y2="222"></line>
+          <rect class="kn-beam" x="26" y="224" width="80" height="14" rx="1"></rect>
+          <text class="kn-small" x="66" y="256" text-anchor="middle">既存梁＋通り芯</text>
+          <path class="kn-conn" d="M108,206 L126,206"></path>
+          <polygon class="kn-conn-head" points="126,206 118,202 118,210"></polygon>
+        </g>
+
+        <!-- ===== 7ノードの箱（配線＋番号＋工程名） ===== -->
+        <g class="kn-boxes">
+          <!-- 箱の間の配線 -->
+          <g class="kn-conn">
+            <path d="M204,206 L224,206"></path>
+            <path d="M298,206 L318,206"></path>
+            <path d="M392,206 L412,206"></path>
+            <path d="M486,206 L506,206"></path>
+            <path d="M580,206 L600,206"></path>
+            <path d="M674,206 L694,206"></path>
+          </g>
+          <g class="kn-conn-head">
+            <polygon points="224,206 216,202 216,210"></polygon>
+            <polygon points="318,206 310,202 310,210"></polygon>
+            <polygon points="412,206 404,202 404,210"></polygon>
+            <polygon points="506,206 498,202 498,210"></polygon>
+            <polygon points="600,206 592,202 592,210"></polygon>
+            <polygon points="694,206 686,202 686,210"></polygon>
+          </g>
+
+          <!-- 箱の下地 -->
+          <rect class="kn-boxbase" x="130" y="176" width="74" height="60" rx="8"></rect>
+          <rect class="kn-boxbase" x="224" y="176" width="74" height="60" rx="8"></rect>
+          <rect class="kn-boxbase" x="318" y="176" width="74" height="60" rx="8"></rect>
+          <rect class="kn-boxbase" x="412" y="176" width="74" height="60" rx="8"></rect>
+          <rect class="kn-boxbase" x="506" y="176" width="74" height="60" rx="8"></rect>
+          <rect class="kn-boxbase" x="600" y="176" width="74" height="60" rx="8"></rect>
+          <rect class="kn-boxbase" x="694" y="176" width="74" height="60" rx="8"></rect>
+
+          <!-- 点灯グロー（データが通ると光る） -->
+          <rect class="kn-glow kn-g1" x="130" y="176" width="74" height="60" rx="8"></rect>
+          <rect class="kn-glow kn-g2" x="224" y="176" width="74" height="60" rx="8"></rect>
+          <rect class="kn-glow kn-g3" x="318" y="176" width="74" height="60" rx="8"></rect>
+          <rect class="kn-glow kn-g4" x="412" y="176" width="74" height="60" rx="8"></rect>
+          <rect class="kn-glow kn-g5" x="506" y="176" width="74" height="60" rx="8"></rect>
+          <rect class="kn-glow kn-g6" x="600" y="176" width="74" height="60" rx="8"></rect>
+          <rect class="kn-glow kn-g7" x="694" y="176" width="74" height="60" rx="8"></rect>
+
+          <!-- 番号 -->
+          <text class="kn-num" x="167" y="214" text-anchor="middle">1</text>
+          <text class="kn-num" x="261" y="214" text-anchor="middle">2</text>
+          <text class="kn-num" x="355" y="214" text-anchor="middle">3</text>
+          <text class="kn-num" x="449" y="214" text-anchor="middle">4</text>
+          <text class="kn-num" x="543" y="214" text-anchor="middle">5</text>
+          <text class="kn-num" x="637" y="214" text-anchor="middle">6</text>
+          <text class="kn-num" x="731" y="214" text-anchor="middle">7</text>
+
+          <!-- 工程名（箱の下） -->
+          <text class="kn-boxlbl" x="167" y="254" text-anchor="middle">梁データ</text>
+          <text class="kn-boxlbl" x="261" y="254" text-anchor="middle">断面選定</text>
+          <text class="kn-boxlbl" x="355" y="254" text-anchor="middle">プロファイル</text>
+          <text class="kn-boxlbl" x="449" y="254" text-anchor="middle">レール補正</text>
+          <text class="kn-boxlbl" x="543" y="254" text-anchor="middle">ソリッド</text>
+          <text class="kn-boxlbl" x="637" y="254" text-anchor="middle">再スタンプ</text>
+          <text class="kn-boxlbl" x="731" y="254" text-anchor="middle">ベイク</text>
+        </g>
+
+        <!-- 流れるデータドット -->
+        <circle class="kn-flow kn-flowdot" cx="130" cy="206" r="6"></circle>
+
+        <!-- ===== ③ 結果（ベイク） ===== -->
+        <g class="kn-result">
+          <path class="kn-res-arrow" d="M430,262 L430,290"></path>
+          <polygon class="kn-res-head" points="430,290 425,280 435,280"></polygon>
+          <rect class="kn-tag-box" x="306" y="296" width="248" height="26" rx="13"></rect>
+          <circle class="kn-disk" cx="324" cy="309" r="6"></circle>
+          <text class="kn-tagtxt" x="340" y="313">ベイク完了 ・ 材質／断面 UDA付き</text>
+          <rect class="kn-res-beam"  x="340" y="352" width="180" height="15" rx="1"></rect>
+          <rect class="kn-res-steel" x="358" y="336" width="144" height="16" rx="1"></rect>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="kn-cap kn-l1" x="400" y="430" text-anchor="middle">① 既存梁＋通り芯を [1] に投入</text>
+        <text class="kn-cap kn-l2" x="400" y="430" text-anchor="middle">② データが [1] → [7] を流れて各工程が点灯</text>
+        <text class="kn-cap kn-l3" x="400" y="430" text-anchor="middle">③ [7] でかさ上げ鋼材をベイク（材質UDA付き）</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">既存梁＋通り芯を先頭ノードに入れると、データが [1]→[7] を数珠つなぎで流れ、各工程が順に点灯して、最後にかさ上げ鋼材がベイクされる——という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>単一ファイル版の <a href="kasage-steel.html">kasage_steel</a> とまったく同じ<strong>「梁の上にかさ上げ鋼材を自動で乗せる」</strong>処理を、1本の巨大スクリプトではなく<strong>7個のGHPythonコンポーネントに分割</strong>し、クラスター化して使う姉妹実装です。</p>
+    <p>FL基準取得 → 断面選定 → 2Dプロファイル → レール補正 → ソリッド化 →（Split／Boolean後の）メタ再スタンプ → ベイク、という7段パイプライン。各ノードは <code>sc.sticky</code> や <code>ghenv</code> に依存しない<strong>純粋関数寄りの設計</strong>なので、<strong>ソリッド化と再スタンプの間に部材カットなどの別処理を割り込ませても、UserStringに刻んだ材質・断面が子形状へ引き継がれます</strong>。断面カタログとFL取得ロジックは単一版と共通です。</p>
+    <p class="lead">※ クラスター＝複数のGHコンポーネントを1つにまとめて部品化したもの。UserString/UDA＝オブジェクトに紐づく属性（材質・断面名など）。「1ノードで済ませたい」なら単一版、「工程の途中に割り込みたい」なら本7分割版が向きます。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（7工程のパイプライン）</h2>
+    <p class="lead" style="margin-bottom:16px"><strong>[1]〜[5]</strong> がクラスター内、<strong>[6][7]</strong> は分割（Split／Boolean）処理の後段です。各ノードは前ノードの出力を入力名で受け取ります。</p>
+    <div class="io-scroll"><table class="io-table">
+      <caption>7段パイプラインの流れ</caption>
+      <thead><tr><th>工程</th><th>役割</th><th>主な入力 → 出力</th></tr></thead>
+      <tbody>
+        <tr><td class="port">[1] beam_data</td><td>通り芯からFL取得＋梁レール抽出</td><td>Base_Ref / Beam_Obj / Is_Main → <strong>FL_Z / Top_Z / Rails / Center / Rail_Dir</strong></td></tr>
+        <tr><td class="port">[2] section_select</td><td>主／次梁ルールで断面自動選定＋かさ上げ量計算</td><td>[1]のFL・Top_Z / Material / Section_Override / Special_Name → <strong>Section_Params / Material / Section_Name</strong></td></tr>
+        <tr><td class="port">[3] profile</td><td>断面パラメータから2Dプロファイル生成</td><td>[2] Section_Params → <strong>Profile</strong></td></tr>
+        <tr><td class="port">[4] rail_fix</td><td>セットバック等でレールを補正</td><td>[1] Rails / Rail_Dir・Dist_S/E・Z_Offset_S/E → <strong>Adjusted_Rails</strong></td></tr>
+        <tr><td class="port">[5] solid</td><td>プロファイル×レールでソリッド化＋UDA刻印</td><td>[3][4]統合 → <strong>Steel_Breps</strong>（Material／Section内包）</td></tr>
+        <tr><td class="port">[6] restamp</td><td>Split／Boolean後の子形状へUDAを再継承</td><td>[5] Parents ＋ 分割後 Children → <strong>Out_Geo / Out_Material / Out_Section</strong></td></tr>
+        <tr><td class="port">[7] bake</td><td>ドキュメントへベイク（属性UDA付き）</td><td>[6]出力 → <strong>Baked_Ids / Log</strong></td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">7ノードを取り込む</span><span class="step-body"><code>kasage_nodes\1〜7</code> を <a href="nodegen.html">NodeGen</a> 等でノード化し、<strong>[1]→[7] の順に配線</strong>（クラスター化推奨）。</span></li>
+      <li><span class="step-title">FL基準と梁を渡す</span><span class="step-body">[1] の <span class="port" style="color:var(--accent)">Base_Ref</span> に通り芯ブロック、<span class="port" style="color:var(--accent)">Beam_Obj</span> に梁、<span class="port" style="color:var(--accent)">Is_Main</span> で主／次を指定。</span></li>
+      <li><span class="step-title">断面・材質を決める</span><span class="step-body">[2] で <span class="port" style="color:var(--accent)">Material / Section_Override / Special_Name</span> を指定（未指定は自動選定）。</span></li>
+      <li><span class="step-title">逃げを調整</span><span class="step-body">[4] で <span class="port" style="color:var(--accent)">Dist_S/E</span> と <span class="port" style="color:var(--accent)">Z_Offset_S/E</span> を設定。</span></li>
+      <li><span class="step-title">ソリッド生成</span><span class="step-body">[5] で <span class="port" style="color:var(--accent)">Steel_Breps</span> が出る。ここまでがクラスター内。</span></li>
+      <li><span class="step-title">（必要なら）分割処理を挟む</span><span class="step-body">[5] と [6] の間に <a href="buzai-cut.html">部材カット</a> やブーリアンなどの別処理を割り込ませられる。</span></li>
+      <li><span class="step-title">再スタンプ → ベイク</span><span class="step-body">[6] で子形状へ材質／断面を継ぎ直し、[7] で <span class="port" style="color:var(--accent)">Bake</span>。属性UDA付きでドキュメントへ焼き込む。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <p class="flow-solo"><b>単独で使えます。</b> [1]〜[7] のクラスター内で「梁上かさ上げ鋼材の生成→ベイク」が完結します。</p>
+    <p class="lead" style="margin-top:8px">成果物は単一ファイル版の <a href="kasage-steel.html">kasage_steel</a> と同じです。1ノードで手早く済ませたいなら単一版、<strong>ソリッド化とベイクの間に分割・カットを挟みたいなら本7分割版</strong>を選びます。取り込みには <a href="nodegen.html">NodeGen</a>、途中のカットには <a href="buzai-cut.html">部材カット自動延長ツール</a> が便利です。</p>
+  </div>
+</section>
+
+<!-- 7. 試し方（実データ） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>試し方（実データ）</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> 梁＋通り芯ブロックのあるモデルで</span>
+      <p class="sample-desc">専用サンプルはありませんが、単一版と同じ入力（梁と通り芯ブロック）で動くため、<span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> をそのまま流用できます。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">7ノードを並べる</span><span class="step-body">[1]〜[7] をノード化して数珠つなぎに配線（クラスター化しておくと再利用しやすい）。</span></li>
+        <li><span class="step-title">[1] に入力</span><span class="step-body">通り芯ブロックを <span class="port" style="color:var(--accent)">Base_Ref</span>、梁を <span class="port" style="color:var(--accent)">Beam_Obj</span> に接続。<span class="port" style="color:var(--accent)">Log</span> でFL取得元を確認。</span></li>
+        <li><span class="step-title">[5] まで流す</span><span class="step-body">ソリッド（Steel_Breps）が出るところまで確認。分割処理を試すなら [5]/[6] 間に挟む。</span></li>
+        <li><span class="step-title">[7] でベイク</span><span class="step-body">最初は材質・断面が正しくUDAに入っているか [6]/[7] の <span class="port" style="color:var(--accent)">Log</span> で確認してからベイク。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 再スタンプ [6] が肝。分割は必ず [5] と [6] の間へ</div>
+        <p>Split／Boolean を通すと子形状は親のUserString（材質・断面）を失います。[6] で<strong>親から子へUDAを継ぎ直さないと属性が消えます</strong>。分割・カット処理は必ず [5] のあと、[6] の前に挟んでください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 断面カタログは単一版と共有</div>
+        <p>断面辞書・FL取得ロジックは <a href="kasage-steel.html">kasage_steel</a> と共通です。どちらが最新の正本かはコードに明記がないため、両者の断面定義がずれていないかは念のため確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> ブロックはGHの端子を「型」として渡せない</div>
+        <p>[1] の <span class="port" style="color:var(--accent)">Base_Ref</span> にはブロックをそのまま型で運べません。GUID／ジオメトリで渡し、受け側が展開します。参照モデルの通り芯を拾えないときはここを疑ってください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> GH Python3 ノードとして使う</div>
+        <p>7ノードはRhino 8のPython3コンポーネント前提です。クラシックなIronPython 2.7コンポーネントでは動かない場合があります。<a href="nodegen.html">NodeGen</a> で取り込むとPython3ノードとして生成されます。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル（7分割・[1]の先頭ファイル）</span>
+      C:\Python1\kasage_nodes\<span class="fp-accent">1_beam_data.py</span> 〜 <span class="fp-accent">7_bake.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-steel">鉄骨モデリング支援の一覧</a>
+      <a href="kasage-steel.html">単一ファイル版 kasage_steel</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

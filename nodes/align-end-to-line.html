@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>ライン整列 GH_AlignEndToLine — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス ael- で衝突回避
+   ①端がバラバラ → ②ラインをクリックで拾う → ③端を面一に一括整列
+   ============================================================ */
+.ael-svg text { font-family: var(--font); }
+
+/* 部材（アンバー） */
+.ael-mem { fill: #1b1707; stroke: var(--accent); stroke-width: 2.4; }
+.ael-end { fill: var(--accent); }
+
+/* 基準ライン（既定=グレー / 拾うとアンバーで発光） */
+.ael-line    { stroke: #5b678f; stroke-width: 2.4; stroke-dasharray: 8 5; }
+.ael-linehot { stroke: var(--accent); stroke-width: 3.4;
+               filter: drop-shadow(0 0 6px var(--accent)); }
+
+/* クリックのカーソル＆リップル */
+.ael-cursor  { fill: none; stroke: #e6ecff; stroke-width: 2; }
+.ael-ripple  { fill: none; stroke: var(--accent); stroke-width: 2.4;
+               transform-box: fill-box; transform-origin: center; }
+
+/* テキスト */
+.ael-cap    { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.ael-small  { fill: #9aa7cc; font-size: 12.5px; font-weight: 600; }
+.ael-hot    { fill: var(--accent); font-size: 13px; font-weight: 800; }
+
+/* 進捗バー */
+.ael-prog-tr { fill: #2a2410; }
+.ael-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+/* 各部材は自分の --dx だけ横移動（ライン直交方向の平行移動） */
+.ael-beam    { animation: aelSlide 10s cubic-bezier(.3,.7,.3,1) infinite; }
+.ael-linehot { animation: aelLineHot 10s infinite; }
+.ael-cur     { animation: aelCursor 10s infinite; }
+.ael-rip     { animation: aelRipple 10s infinite; }
+.ael-endd    { animation: aelEnd    10s infinite; }
+.ael-l1      { animation: aelL1     10s infinite; }
+.ael-l2      { animation: aelL2     10s infinite; }
+.ael-l3      { animation: aelL3     10s infinite; }
+.ael-prog    { animation: aelProg   10s linear infinite; }
+
+/* 端をラインへそろえる横移動（各部材の --dx を使用） */
+@keyframes aelSlide {
+  0%,50%  { transform: translateX(0); }
+  74%     { transform: translateX(var(--dx)); }
+  100%    { transform: translateX(var(--dx)); }
+}
+/* ラインを拾って発光 */
+@keyframes aelLineHot {
+  0%,30%  { opacity: 0; }
+  40%     { opacity: 1; }
+  100%    { opacity: 1; }
+}
+/* カーソルがラインへ寄ってクリック */
+@keyframes aelCursor {
+  0%,26%  { opacity: 0; transform: translate(-40px,60px); }
+  33%     { opacity: 1; transform: translate(-40px,60px); }
+  40%     { opacity: 1; transform: translate(0,0); }
+  50%     { opacity: 1; transform: translate(0,0); }
+  56%,100%{ opacity: 0; transform: translate(0,0); }
+}
+/* クリックのリップル */
+@keyframes aelRipple {
+  0%,38%  { opacity: 0; transform: scale(.3); }
+  42%     { opacity: .9; transform: scale(.4); }
+  50%     { opacity: 0; transform: scale(1.6); }
+  100%    { opacity: 0; transform: scale(1.6); }
+}
+/* 整列後の端の点 */
+@keyframes aelEnd {
+  0%,70%  { opacity: 0; }
+  78%     { opacity: 1; }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes aelL1 { 0%{opacity:0} 5%{opacity:1} 24%{opacity:1} 29%{opacity:0} 100%{opacity:0} }
+@keyframes aelL2 { 0%,29%{opacity:0} 34%{opacity:1} 49%{opacity:1} 54%{opacity:0} 100%{opacity:0} }
+@keyframes aelL3 { 0%,54%{opacity:0} 60%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes aelProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="steel">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">鉄骨モデリング支援</span>
+    <h1 class="node-title">ライン整列 <span style="opacity:.75;font-weight:700">GH_AlignEndToLine</span></h1>
+    <p class="catch">基準ラインを<span class="em">クリックで拾う</span>だけ。バラバラな部材の端が<span class="em">スッと面一</span>にそろう。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">Grasshopper Pythonノード</span>
+      <span class="badge st-ver">Run立上りで実移動</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg ael-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="基準ラインをクリックで拾い部材の端を一括で面一にそろえるアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="ael-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="ael-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== 基準ライン（グレー→拾うと発光） ===== -->
+        <line class="ael-line"    x1="556" y1="96" x2="556" y2="372"></line>
+        <line class="ael-linehot" x1="556" y1="96" x2="556" y2="372"></line>
+        <text class="ael-hot ael-l3" x="600" y="238">基準ライン</text>
+
+        <!-- ===== 部材群（端がバラバラ → 各自の --dx で整列） ===== -->
+        <!-- beam1: 右端 470 → +86 -->
+        <g class="ael-beam" style="--dx:86px">
+          <rect class="ael-mem" x="170" y="112" width="300" height="34" rx="2"></rect>
+          <circle class="ael-end ael-endd" cx="470" cy="129" r="5"></circle>
+        </g>
+        <!-- beam2: 右端 510 → +46 -->
+        <g class="ael-beam" style="--dx:46px">
+          <rect class="ael-mem" x="150" y="176" width="360" height="34" rx="2"></rect>
+          <circle class="ael-end ael-endd" cx="510" cy="193" r="5"></circle>
+        </g>
+        <!-- beam3: 右端 440 → +116 -->
+        <g class="ael-beam" style="--dx:116px">
+          <rect class="ael-mem" x="190" y="240" width="250" height="34" rx="2"></rect>
+          <circle class="ael-end ael-endd" cx="440" cy="257" r="5"></circle>
+        </g>
+        <!-- beam4: 右端 490 → +66 -->
+        <g class="ael-beam" style="--dx:66px">
+          <rect class="ael-mem" x="160" y="304" width="330" height="34" rx="2"></rect>
+          <circle class="ael-end ael-endd" cx="490" cy="321" r="5"></circle>
+        </g>
+
+        <!-- ===== クリックのカーソル＋リップル ===== -->
+        <g class="ael-cur">
+          <circle class="ael-ripple ael-rip" cx="556" cy="234" r="18"></circle>
+          <path class="ael-cursor" d="M556,234 l0,26 l7,-7 l10,1 z"></path>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="ael-cap ael-l1" x="400" y="430" text-anchor="middle">① 端の位置がそろっていない部材群</text>
+        <text class="ael-cap ael-l2" x="400" y="430" text-anchor="middle">② 基準ラインをクリックで拾う（参照モデルの線もOK）</text>
+        <text class="ael-cap ael-l3" x="400" y="430" text-anchor="middle">③ 端をラインへ一括で面一（±Offsetでアウト/イン）</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">端がバラバラの部材群 → 基準ラインをクリックで拾う → それぞれの端がラインへ平行移動して面一にそろう、という流れを10秒ループで再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>選んだ部材の<strong>端を1本の基準ラインへ、まとめて面一（つらいち）にそろえる</strong>ノードです。基準ラインは <span class="port" style="color:var(--accent)">Pick</span> ボタンでRhino上のライン・エッジ・ブロック・ソリッドをクリックして拾うだけ。あとは部材群が<strong>ライン直交方向へ平行移動</strong>して、端がラインの位置にピタッとそろいます。ワークセッションの参照モデルにある線やエッジも基準として拾えます。</p>
+    <p><span class="port" style="color:var(--accent)">Offset</span> で「ラインからどれだけ出す／引くか」を符号付きで指定できます。<strong>0で面一</strong>、プラスでラインを越えて出す（アウトセット）、マイナスで手前に止める（インセット）。姉妹ツールの <a href="drop-on-ref.html">GH_DropOnRef</a>（参照天端への0タッチ）と同じ「端を基準へ突き合わせる」発想を、こちらは<strong>ライン基準</strong>にしたオフセット特化版です。操作感（Preview→Run立上り→Ctrl+Zで取消）も共通です。</p>
+    <p class="lead">※ 面一＝複数部材の端を同じ面にそろえること。／ ライン直交方向＝基準ラインに対して垂直な水平方向。部材はこの向きに平行移動します。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Ids</td><td>オフセットする部材のGUIDリスト（ブロックインスタンス可）。</td></tr>
+          <tr><td class="port">Pick</td><td>★Button。クリックでRhino上のライン／エッジ／ブロック／ソリッドを選び、基準ラインに設定。参照モデルの線も選べる。再クリックで選び直し。</td></tr>
+          <tr><td class="port">Line</td><td>任意。基準ラインを直接渡す場合に使う（曲線／Lineジオメトリ、または曲線オブジェクトのGUID）。接続時はPickより優先。</td></tr>
+          <tr><td class="port">Offset</td><td>符号付きオフセットmm（既定 0.0）。0で面一／＋でアウトセット／−でインセット。</td></tr>
+          <tr><td class="port">FarEnd</td><td>ラインから遠い端を基準にする（既定 False＝近い端）。</td></tr>
+          <tr><td class="port">Rotate90</td><td>移動方向を平面内で90°切替（既定 False＝ライン直交／True＝ライン沿い）。方向がずれて見えるときの救済。</td></tr>
+          <tr><td class="port">GroupAsUnit</td><td>同一Rhinoグループを剛体として一括移動（既定 True）。</td></tr>
+          <tr><td class="port">Run / Preview / Zoom</td><td>Runの<strong>立上り</strong>で実移動（Button推奨）／緑ゴーストで移動先プレビュー／対象へズーム。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Moved</td><td>移動を適用した部材のGUID（Transform後の新ID）。</td></tr>
+          <tr><td class="port">Dist</td><td>各部材のオフセット移動量[mm]（Ids順。未処理は None）。</td></tr>
+          <tr><td class="port">TargetLine</td><td>拾った基準ライン（確認・下流用）。</td></tr>
+          <tr><td class="port">Ghost</td><td>移動先の表示用ジオメトリ。</td></tr>
+          <tr><td class="port">Log</td><td>部材ごとの状態テキスト。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">部材を渡す</span><span class="step-body">端をそろえたい部材のGUIDを <span class="port" style="color:var(--accent)">Ids</span> に接続。</span></li>
+      <li><span class="step-title">基準ラインを拾う</span><span class="step-body"><span class="port" style="color:var(--accent)">Pick</span> ボタンを押し、Rhino上の基準にしたいライン／エッジをクリック。参照モデルの線でもOK。直接渡すなら <span class="port" style="color:var(--accent)">Line</span> 端子に曲線を接続（そちらが優先）。</span></li>
+      <li><span class="step-title">出し引きを決める</span><span class="step-body"><span class="port" style="color:var(--accent)">Offset</span> で面一(0)／アウト(＋)／イン(−)を指定。逆側の端を基準にしたいときは <span class="port" style="color:var(--accent)">FarEnd</span> をオン。</span></li>
+      <li><span class="step-title">プレビューで確認</span><span class="step-body"><span class="port" style="color:var(--accent)">Preview</span> をオンにすると、緑ゴースト＋橙の基準ライン＋移動後の端位置と移動量が表示される。方向が90°ずれて見えたら <span class="port" style="color:var(--accent)">Rotate90</span> で補正。</span></li>
+      <li><span class="step-title">Runで実行</span><span class="step-body"><span class="port" style="color:var(--accent)">Run</span> を<strong>押して離す（立上りエッジ）</strong>と実際に平行移動。ずれても <kbd>Ctrl+Z</kbd> で取消可。冪等なので適用後の移動量は≒0。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <p class="flow-solo"><b>単独で使えます。</b> 他のノードにつながず単体で完結する整列補助ツールです。参照モデルの天端へ底面をそろえたいときは、同じ操作感の姉妹ツール <a href="drop-on-ref.html">GH_DropOnRef</a>（0タッチ着地）が使えます。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\04_落下整列.3dm</span>
+      <p class="sample-desc">梁の上に浮いた部材＋基準ライン。GH_DropOnRef着地とGH_AlignEndToLine整列のデモ用。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\04_落下整列.3dm</span> を開く。端がそろっていない部材群と基準ラインが入っている。</span></li>
+        <li><span class="step-title">部材を選ぶ</span><span class="step-body">端をそろえたい部材のGUIDを <span class="port" style="color:var(--accent)">Ids</span> に渡す。</span></li>
+        <li><span class="step-title">ラインを拾う</span><span class="step-body"><span class="port" style="color:var(--accent)">Pick</span> でモデル内の基準ラインをクリック。<span class="port" style="color:var(--accent)">Preview</span> で端がそろう位置を確認。</span></li>
+        <li><span class="step-title">Offsetを変えてみる</span><span class="step-body"><span class="port" style="color:var(--accent)">Offset</span> を＋／−に振ると、アウトセット／インセットの違いがゴーストで分かる。<span class="port" style="color:var(--accent)">Run</span> で確定。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Runは「立上りエッジ」でのみ実移動。まずPreview</div>
+        <p>実際の移動は <span class="port" style="color:var(--accent)">Run</span> が False→True になった瞬間だけ起きます（Button推奨）。冪等設計なので適用後の移動量は≒0。押す前に <span class="port" style="color:var(--accent)">Preview</span> の緑ゴーストと橙の基準ラインで仕上がりを確認してください。ずれても <kbd>Ctrl+Z</kbd> で戻せます。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 移動方向が90°ずれて見えたら Rotate90</div>
+        <p>部材はライン直交方向へ平行移動します。短いエッジなどを拾って向きが90°違って見えるときは <span class="port" style="color:var(--accent)">Rotate90</span> をオンにすると、ライン沿い方向へ切り替わって補正できます。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 基準にする端は「近い端」が既定</div>
+        <p>そろえる基準は、ラインに近いほうの端が既定です。部材の反対側の端をラインに合わせたいときは <span class="port" style="color:var(--accent)">FarEnd</span> をオンにしてください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Line端子を接続するとPickより優先</div>
+        <p><span class="port" style="color:var(--accent)">Line</span> 端子に曲線を接続すると、そちらが基準として優先されます。クリックで拾った線を使いたいときは Line 端子を空にしておいてください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\<span class="fp-accent">GH_AlignEndToLine.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-steel">鉄骨モデリング支援の一覧</a>
+      <a href="drop-on-ref.html">姉妹ツール：GH_DropOnRef</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

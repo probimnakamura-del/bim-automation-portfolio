@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>通り芯交点抽出 GH_GridIntersect — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス gix- ／ keyframes は gi- で衝突回避
+   ①(0-3s) 通り芯の一点鎖線が伸び、X/Y符号が順にポップ
+   ②(3-7s) 走査サークル（レンズ光）が交点を1つずつ巡回→十字＋□＋名前タグが出現
+   ③(7-10s) 全交点が一斉にパルス発光→出力チップが点灯
+   全要素は opacity:0 から始まり animation-fill-mode:both で状態を保持
+   ============================================================ */
+.gix-svg text { font-family: var(--font); }
+
+/* 通り芯（一点鎖線） */
+.gix-vline, .gix-hline { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 12 4 2 4; }
+.gix-vline { transform-box: fill-box; transform-origin: top center; }
+.gix-hline { transform-box: fill-box; transform-origin: left center; }
+
+/* 通り芯符号（丸ラベル） */
+.gix-gcircle { fill: #0f1a30; stroke: var(--accent); stroke-width: 1.8; }
+.gix-glabel  { transform-box: fill-box; transform-origin: center; }
+.gix-gtxt    { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 走査サークル（レンズ風の光） */
+.gix-scan      { transform-box: view-box; }
+.gix-lens-a    { fill: var(--accent); }
+.gix-lens-ring { fill: none; stroke: var(--accent); stroke-width: 2; }
+.gix-lens-core { fill: #ffffff; }
+
+/* 交点：十字マーク＋□＋中心ドット */
+.gix-node  { transform-box: fill-box; transform-origin: center; }
+.gix-cross { fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round; }
+.gix-sq    { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+.gix-cdot  { fill: var(--accent); }
+/* ③で一斉に広がるパルス発光リング */
+.gix-glow  { fill: none; stroke: var(--accent); stroke-width: 2.4; transform-box: fill-box; transform-origin: center; }
+
+/* 交点名タグ */
+.gix-tagg   { transform-box: fill-box; transform-origin: center; }
+.gix-tag    { fill: #0b1428; stroke: var(--accent); stroke-width: 1.2; }
+.gix-tagtxt { fill: #e6ecff; font-size: 11.5px; font-weight: 700; }
+
+/* 出力チップ（Pts / Names → Make2Dプランナーへ） */
+.gix-chip      { transform-box: fill-box; transform-origin: center; }
+.gix-chip-bg   { fill: #0c1428; stroke: var(--accent); stroke-width: 1.8; }
+.gix-chip-glow { fill: none; stroke: var(--accent); stroke-width: 2.4; }
+.gix-chip-key  { fill: var(--accent); font-size: 15px; font-weight: 800; }
+.gix-chip-dim  { fill: #9aa7cc; font-size: 14px; font-weight: 700; }
+.gix-chip-arw  { fill: var(--accent); font-size: 17px; font-weight: 800; }
+.gix-chip-to   { fill: #e6ecff; font-size: 13.5px; font-weight: 700; }
+
+/* 見出しキャプション */
+.gix-cap { fill: #e6ecff; font-size: 16.5px; font-weight: 700; }
+
+/* 進捗バー */
+.gix-prog-tr { fill: #223052; }
+.gix-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション割り当て（全て10秒周期・infinite・fill both） ---- */
+.gix-prog      { animation: gi-prog 10s linear infinite both; }
+.gix-vline     { animation: gi-grid-v 10s infinite both; }
+.gix-hline     { animation: gi-grid-h 10s infinite both; }
+.gix-glabel    { animation: gi-label 10s infinite both; }
+.gix-scan      { animation: gi-scan 10s infinite both; }
+.gix-glow      { animation: gi-glow 10s infinite both; }
+.gix-chip      { animation: gi-chip 10s infinite both; }
+.gix-chip-glow { animation: gi-chipglow 10s infinite both; }
+.gi-n1 { animation: gi-n1 10s infinite both; }
+.gi-n2 { animation: gi-n2 10s infinite both; }
+.gi-n3 { animation: gi-n3 10s infinite both; }
+.gi-n4 { animation: gi-n4 10s infinite both; }
+.gi-n5 { animation: gi-n5 10s infinite both; }
+.gi-n6 { animation: gi-n6 10s infinite both; }
+.gix-cap1 { animation: gi-cap1 10s infinite both; }
+.gix-cap2 { animation: gi-cap2 10s infinite both; }
+.gix-cap3 { animation: gi-cap3 10s infinite both; }
+
+/* ① 通り芯が伸びて描かれる（一点鎖線パターンのまま scale で伸長） */
+@keyframes gi-grid-v {
+  0%   { opacity: 0;   transform: scaleY(0); }
+  1%   { opacity: .85; transform: scaleY(0); }
+  9%   { opacity: .85; transform: scaleY(1); }
+  97%  { opacity: .85; transform: scaleY(1); }
+  100% { opacity: 0;   transform: scaleY(1); }
+}
+@keyframes gi-grid-h {
+  0%   { opacity: 0;   transform: scaleX(0); }
+  1%   { opacity: .85; transform: scaleX(0); }
+  9%   { opacity: .85; transform: scaleX(1); }
+  97%  { opacity: .85; transform: scaleX(1); }
+  100% { opacity: 0;   transform: scaleX(1); }
+}
+/* 符号ラベルがバウンドしてポップ */
+@keyframes gi-label {
+  0%   { opacity: 0; transform: scale(0); }
+  4%   { opacity: 1; transform: scale(1.3); }
+  8%   { opacity: 1; transform: scale(1); }
+  97%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+/* ② 走査サークルが6交点を順に巡回（view-box 座標へ translate） */
+@keyframes gi-scan {
+  0%,27%   { opacity: 0; transform: translate(170px,175px); }
+  30%      { opacity: 1; transform: translate(170px,175px); }
+  38%      { opacity: 1; transform: translate(270px,175px); }
+  45%      { opacity: 1; transform: translate(370px,175px); }
+  52%      { opacity: 1; transform: translate(170px,285px); }
+  59%      { opacity: 1; transform: translate(270px,285px); }
+  66%      { opacity: 1; transform: translate(370px,285px); }
+  69%      { opacity: 1; transform: translate(370px,285px); }
+  72%,100% { opacity: 0; transform: translate(370px,285px); }
+}
+/* ③ 全交点で一斉に広がるパルス発光 */
+@keyframes gi-glow {
+  0%,70% { opacity: 0;  transform: scale(.4); }
+  74%    { opacity: .6; transform: scale(1); }
+  84%    { opacity: 0;  transform: scale(2.2); }
+  100%   { opacity: 0;  transform: scale(2.2); }
+}
+/* ③ 出力チップが下からせり上がって点灯 */
+@keyframes gi-chip {
+  0%,67% { opacity: 0; transform: translateY(10px); }
+  73%    { opacity: 1; transform: translateY(0); }
+  97%    { opacity: 1; transform: translateY(0); }
+  100%   { opacity: 0; transform: translateY(0); }
+}
+@keyframes gi-chipglow {
+  0%,70% { opacity: 0; }
+  76%    { opacity: .9; }
+  88%    { opacity: .2; }
+  96%    { opacity: .7; }
+  100%   { opacity: 0; }
+}
+/* 交点ノード（十字＋□＋名前タグ）: 走査に同期して1つずつ pop → ③で一斉パルス */
+@keyframes gi-n1 { 0%,29%{opacity:0; transform:scale(.2)} 31%{opacity:1; transform:scale(1.35)} 34%{opacity:1; transform:scale(1)} 73%{opacity:1; transform:scale(1)} 77%{transform:scale(1.18)} 82%{transform:scale(1)} 97%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(1)} }
+@keyframes gi-n2 { 0%,36%{opacity:0; transform:scale(.2)} 38%{opacity:1; transform:scale(1.35)} 41%{opacity:1; transform:scale(1)} 73%{opacity:1; transform:scale(1)} 77%{transform:scale(1.18)} 82%{transform:scale(1)} 97%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(1)} }
+@keyframes gi-n3 { 0%,43%{opacity:0; transform:scale(.2)} 45%{opacity:1; transform:scale(1.35)} 48%{opacity:1; transform:scale(1)} 73%{opacity:1; transform:scale(1)} 77%{transform:scale(1.18)} 82%{transform:scale(1)} 97%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(1)} }
+@keyframes gi-n4 { 0%,50%{opacity:0; transform:scale(.2)} 52%{opacity:1; transform:scale(1.35)} 55%{opacity:1; transform:scale(1)} 73%{opacity:1; transform:scale(1)} 77%{transform:scale(1.18)} 82%{transform:scale(1)} 97%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(1)} }
+@keyframes gi-n5 { 0%,57%{opacity:0; transform:scale(.2)} 59%{opacity:1; transform:scale(1.35)} 62%{opacity:1; transform:scale(1)} 73%{opacity:1; transform:scale(1)} 77%{transform:scale(1.18)} 82%{transform:scale(1)} 97%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(1)} }
+@keyframes gi-n6 { 0%,64%{opacity:0; transform:scale(.2)} 66%{opacity:1; transform:scale(1.35)} 69%{opacity:1; transform:scale(1)} 73%{opacity:1; transform:scale(1)} 77%{transform:scale(1.18)} 82%{transform:scale(1)} 97%{opacity:1; transform:scale(1)} 100%{opacity:0; transform:scale(1)} }
+/* 3拍のキャプション（タイミング同期でフェード切替） */
+@keyframes gi-cap1 { 0%{opacity:0} 3%{opacity:1} 27%{opacity:1} 31%{opacity:0} 100%{opacity:0} }
+@keyframes gi-cap2 { 0%,31%{opacity:0} 35%{opacity:1} 66%{opacity:1} 70%{opacity:0} 100%{opacity:0} }
+@keyframes gi-cap3 { 0%,70%{opacity:0} 74%{opacity:1} 97%{opacity:1} 100%{opacity:0} }
+@keyframes gi-prog { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">通り芯交点抽出 <span style="opacity:.75;font-weight:700">GH_GridIntersect</span></h1>
+    <p class="catch">3Dモデル上の通り芯の交わりを<span class="em">「X1-Y3」の名前付き</span>でひとつずつ拾い上げる。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">v2.0（設定ポップアップ＋永続化）</span>
+      <span class="badge st-ver">GH Python ノード</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg gix-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="通り芯を描き、走査サークルで交点を1つずつ検出して名前付きで出力するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="gix-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="gix-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① 通り芯グリッドが伸びて描かれる ＋ 符号が順にポップ ===== -->
+        <!-- 縦通り芯 X1 X2 X3（上端から伸長・delayで順に） -->
+        <line class="gix-vline" x1="170" y1="110" x2="170" y2="332"></line>
+        <line class="gix-vline" style="animation-delay:.25s" x1="270" y1="110" x2="270" y2="332"></line>
+        <line class="gix-vline" style="animation-delay:.5s"  x1="370" y1="110" x2="370" y2="332"></line>
+        <!-- 横通り芯 Y1 Y2（左端から伸長） -->
+        <line class="gix-hline" style="animation-delay:.75s" x1="128" y1="175" x2="412" y2="175"></line>
+        <line class="gix-hline" style="animation-delay:1s"   x1="128" y1="285" x2="412" y2="285"></line>
+
+        <!-- 符号（丸ラベル・順にバウンドポップ） -->
+        <g class="gix-glabel" style="animation-delay:.2s"><circle class="gix-gcircle" cx="170" cy="100" r="12"></circle><text class="gix-gtxt" x="170" y="104" text-anchor="middle">X1</text></g>
+        <g class="gix-glabel" style="animation-delay:.45s"><circle class="gix-gcircle" cx="270" cy="100" r="12"></circle><text class="gix-gtxt" x="270" y="104" text-anchor="middle">X2</text></g>
+        <g class="gix-glabel" style="animation-delay:.7s"><circle class="gix-gcircle" cx="370" cy="100" r="12"></circle><text class="gix-gtxt" x="370" y="104" text-anchor="middle">X3</text></g>
+        <g class="gix-glabel" style="animation-delay:.95s"><circle class="gix-gcircle" cx="112" cy="175" r="12"></circle><text class="gix-gtxt" x="112" y="179" text-anchor="middle">Y1</text></g>
+        <g class="gix-glabel" style="animation-delay:1.2s"><circle class="gix-gcircle" cx="112" cy="285" r="12"></circle><text class="gix-gtxt" x="112" y="289" text-anchor="middle">Y2</text></g>
+
+        <!-- ===== ③ 一斉パルス発光リング（6交点・同時） ===== -->
+        <circle class="gix-glow" cx="170" cy="175" r="12"></circle>
+        <circle class="gix-glow" cx="270" cy="175" r="12"></circle>
+        <circle class="gix-glow" cx="370" cy="175" r="12"></circle>
+        <circle class="gix-glow" cx="170" cy="285" r="12"></circle>
+        <circle class="gix-glow" cx="270" cy="285" r="12"></circle>
+        <circle class="gix-glow" cx="370" cy="285" r="12"></circle>
+
+        <!-- ===== ② 交点の十字＋□（走査に同期して1つずつ pop） ===== -->
+        <g class="gix-node gi-n1"><rect class="gix-sq" x="161" y="166" width="18" height="18" rx="2"></rect><line class="gix-cross" x1="159" y1="175" x2="181" y2="175"></line><line class="gix-cross" x1="170" y1="164" x2="170" y2="186"></line><circle class="gix-cdot" cx="170" cy="175" r="2.4"></circle></g>
+        <g class="gix-node gi-n2"><rect class="gix-sq" x="261" y="166" width="18" height="18" rx="2"></rect><line class="gix-cross" x1="259" y1="175" x2="281" y2="175"></line><line class="gix-cross" x1="270" y1="164" x2="270" y2="186"></line><circle class="gix-cdot" cx="270" cy="175" r="2.4"></circle></g>
+        <g class="gix-node gi-n3"><rect class="gix-sq" x="361" y="166" width="18" height="18" rx="2"></rect><line class="gix-cross" x1="359" y1="175" x2="381" y2="175"></line><line class="gix-cross" x1="370" y1="164" x2="370" y2="186"></line><circle class="gix-cdot" cx="370" cy="175" r="2.4"></circle></g>
+        <g class="gix-node gi-n4"><rect class="gix-sq" x="161" y="276" width="18" height="18" rx="2"></rect><line class="gix-cross" x1="159" y1="285" x2="181" y2="285"></line><line class="gix-cross" x1="170" y1="274" x2="170" y2="296"></line><circle class="gix-cdot" cx="170" cy="285" r="2.4"></circle></g>
+        <g class="gix-node gi-n5"><rect class="gix-sq" x="261" y="276" width="18" height="18" rx="2"></rect><line class="gix-cross" x1="259" y1="285" x2="281" y2="285"></line><line class="gix-cross" x1="270" y1="274" x2="270" y2="296"></line><circle class="gix-cdot" cx="270" cy="285" r="2.4"></circle></g>
+        <g class="gix-node gi-n6"><rect class="gix-sq" x="361" y="276" width="18" height="18" rx="2"></rect><line class="gix-cross" x1="359" y1="285" x2="381" y2="285"></line><line class="gix-cross" x1="370" y1="274" x2="370" y2="296"></line><circle class="gix-cdot" cx="370" cy="285" r="2.4"></circle></g>
+
+        <!-- ===== 交点名タグ（十字と同時に1つずつフェードイン） ===== -->
+        <g class="gix-tagg gi-n1"><rect class="gix-tag" x="144" y="143" width="52" height="18" rx="9"></rect><text class="gix-tagtxt" x="170" y="156" text-anchor="middle">X1-Y1</text></g>
+        <g class="gix-tagg gi-n2"><rect class="gix-tag" x="244" y="143" width="52" height="18" rx="9"></rect><text class="gix-tagtxt" x="270" y="156" text-anchor="middle">X2-Y1</text></g>
+        <g class="gix-tagg gi-n3"><rect class="gix-tag" x="344" y="143" width="52" height="18" rx="9"></rect><text class="gix-tagtxt" x="370" y="156" text-anchor="middle">X3-Y1</text></g>
+        <g class="gix-tagg gi-n4"><rect class="gix-tag" x="144" y="299" width="52" height="18" rx="9"></rect><text class="gix-tagtxt" x="170" y="312" text-anchor="middle">X1-Y2</text></g>
+        <g class="gix-tagg gi-n5"><rect class="gix-tag" x="244" y="299" width="52" height="18" rx="9"></rect><text class="gix-tagtxt" x="270" y="312" text-anchor="middle">X2-Y2</text></g>
+        <g class="gix-tagg gi-n6"><rect class="gix-tag" x="344" y="299" width="52" height="18" rx="9"></rect><text class="gix-tagtxt" x="370" y="312" text-anchor="middle">X3-Y2</text></g>
+
+        <!-- ===== ② 走査サークル（レンズ風の光・6交点を巡回） ===== -->
+        <g class="gix-scan">
+          <circle class="gix-lens-a"    r="24" opacity=".12"></circle>
+          <circle class="gix-lens-a"    r="16" opacity=".18"></circle>
+          <circle class="gix-lens-a"    r="10" opacity=".28"></circle>
+          <circle class="gix-lens-ring" r="13"></circle>
+          <circle class="gix-lens-core" r="3"></circle>
+        </g>
+
+        <!-- ===== ③ 出力チップ（Pts / Names → Make2Dプランナーへ） ===== -->
+        <g class="gix-chip">
+          <rect class="gix-chip-glow" x="236" y="347" width="330" height="50" rx="25"></rect>
+          <rect class="gix-chip-bg"   x="240" y="350" width="322" height="44" rx="22"></rect>
+          <text class="gix-chip-key" x="266" y="378">Pts</text>
+          <text class="gix-chip-dim" x="301" y="378">／</text>
+          <text class="gix-chip-key" x="319" y="378">Names</text>
+          <text class="gix-chip-arw" x="393" y="378">→</text>
+          <text class="gix-chip-to"  x="420" y="378">Make2Dプランナーへ</text>
+        </g>
+
+        <!-- ===== 3拍の見出しキャプション（同期フェード切替） ===== -->
+        <text class="gix-cap gix-cap1" x="400" y="430" text-anchor="middle">① 参照モデルの通り芯レイヤーを一点鎖線で描画</text>
+        <text class="gix-cap gix-cap2" x="400" y="430" text-anchor="middle">② 走査サークルが交点を1つずつ検出（十字＋□＋名前）</text>
+        <text class="gix-cap gix-cap3" x="400" y="430" text-anchor="middle">③ 全交点を一斉に名前付きで出力 → Make2Dプランナーへ</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">3Dモデルの通り芯レイヤーから交点を1つずつ十字マークで検出し、「X1-Y1」のように名前を付けて出力する流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>3Dモデル側にある<strong>通り芯どうしの交わり（交点）を、名前付きで拾い出す</strong>ノードです。「X1」と「Y3」の通り芯が交わる所を <code>X1-Y3</code>、フロアも付ければ <code>1FL_X1-Y3</code> という名前で出力します。この名前付き交点が、あとで<strong>2D図面と3Dモデルの位置をぴったり合わせるための「目印」</strong>になります。</p>
+    <p>読み取り元は、主に<strong>ワークセッションで参照している3Dモデル</strong>の「フロアごとに仕分けられた通り芯レイヤー」です。<code>Pick</code> ボタンを押すと<strong>「モデル → レイヤー → フロア」の3段ポップアップ</strong>が開き、どのモデルのどのレイヤーを対象にするかを設定できます。設定は <code>C:\Python1\gridx_settings.json</code> へ<strong>コンポーネントごとに保存</strong>されるので、Rhinoを再起動しても選び直す必要はありません。<code>GH_ModelPicker</code>・<code>GH_LayerPicker</code> も同じ働きの姉妹ノードです。</p>
+    <p class="lead">※ 通り芯＝建物の基準線（X1, Y1…）。／ ワークセッション＝複数の.3dmを参照として重ねて扱うRhinoの仕組み。他ファイルのモデルを下敷きにできます。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>主な入力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Pick / ClearSel</td><td><strong>「モデル→レイヤー→フロア」の3段ポップアップ設定</strong>を開くボタン／選択のクリア。</td></tr>
+          <tr><td class="port">FloorKey /<br>ModelKw / SelLayers</td><td>フロアのキー／対象モデルの名前（キーワード）／通り芯レイヤーの選択。</td></tr>
+          <tr><td class="port">Run / Reset /<br>Highlight / Bake</td><td>実行トリガ／設定リセット／交点のハイライト表示／結果のベイク。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>主な出力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Pts / PtsFlat</td><td>交点（ツリー構造／フラットな一覧）。</td></tr>
+          <tr><td class="port">FullNames / Names</td><td><code>1FL_X1-Y3</code>（フル）と <code>X1-Y3</code>（短縮）の<strong>名前</strong>。下流の位置合わせに使う。</td></tr>
+          <tr><td class="port">GridCrvs / Floors</td><td>使った通り芯カーブと、対象フロアの一覧。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">参照モデルを開く</span><span class="step-body">通り芯がフロアごとにレイヤー分けされた3Dモデルを、ワークセッションで参照するかRhinoに開く。</span></li>
+      <li><span class="step-title">Pickで対象を選ぶ</span><span class="step-body"><span class="port" style="color:var(--accent)">Pick</span> を押して開く3段ポップアップで、<strong>モデル → 通り芯レイヤー → フロア</strong>を選ぶ。選択は自動で保存される。</span></li>
+      <li><span class="step-title">実行して交点を出す</span><span class="step-body"><span class="port" style="color:var(--accent)">Run</span> を押すと、通り芯どうしの交点が計算され <span class="port" style="color:var(--accent)">Pts</span> に、名前が <span class="port" style="color:var(--accent)">FullNames</span> に出る。</span></li>
+      <li><span class="step-title">ハイライトで確認</span><span class="step-body"><span class="port" style="color:var(--accent)">Highlight</span> をオンにすると、交点に名前タグが浮かぶ。狙った交点が拾えているか目視。</span></li>
+      <li><span class="step-title">プランナーへ渡す</span><span class="step-body">名前付き交点を <a href="make2d-planner.html">GH_Make2DPlanner</a> へ。図面とモデルの位置合わせの基準として使われる。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <span class="flow-solo">なし — <b>パイプラインの入口</b>（3Dモデル側の起点。単独でも交点抽出に使えます）</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">通り芯交点抽出 GH_GridIntersect（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="make2d-planner.html">Make2Dプランナー GH_Make2DPlanner</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">2D図面側の通り芯は <a href="grid-extractor-v2.html">grid_extractor_v2</a> が拾います。両者の交点名を突き合わせて図面とモデルを合わせます。全体像は <a href="../pipeline.html">パイプライン詳細図</a> で。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\01_柱梁フレーム.3dm</span>
+      <p class="sample-desc">2×1スパンの柱梁フレーム＋通り芯線入り。通り芯交点抽出・接触検出・Make2D・部材記号のデモ用。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> を開く（またはワークセッションで参照）。通り芯線のレイヤーを確認。</span></li>
+        <li><span class="step-title">Pickで通り芯レイヤーを選ぶ</span><span class="step-body">本ノードを置き <span class="port" style="color:var(--accent)">Pick</span> → モデル → 通り芯レイヤー → フロアを選択。</span></li>
+        <li><span class="step-title">Runで交点を出す</span><span class="step-body"><span class="port" style="color:var(--accent)">Run</span> を押し、<span class="port" style="color:var(--accent)">FullNames</span> に <code>X1-Y1</code> などが並ぶのを確認。</span></li>
+        <li><span class="step-title">ハイライトで目視</span><span class="step-body"><span class="port" style="color:var(--accent)">Highlight</span> をオンにして、交点に名前タグが正しく乗るかを見る。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 交点判定は2D投影。高さ違いの線でも交わりを拾う</div>
+        <p>交点は<strong>すべて2Dに投影してから</strong>取ります。フロアごとに正しくレイヤー分けされていれば問題ありませんが、別フロアの通り芯を混ぜて対象にすると、投影上は交わって見えて<strong>意図しない交点</strong>を拾うことがあります。フロアの仕分けを確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 設定はコンポーネントIDごとに gridx_settings.json へ保存</div>
+        <p>Pickで選んだ設定は <code>C:\Python1\gridx_settings.json</code> に<strong>コンポーネント単位</strong>で保存され、Rhino再起動後も保持されます。裏を返すと、<strong>ノードを作り直すと別IDになり設定が引き継がれない</strong>ことがあります。その場合は Pick からもう一度選び直してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 参照モデルのレイヤーが選択肢に出ないとき</div>
+        <p>ワークセッション参照モデルのレイヤーは、状況によって列挙に出てこないことがあります。対象モデルがきちんと参照アタッチされているか、通り芯レイヤーがそのモデル側にあるかを確認してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\図面整理\<span class="fp-accent">GH_GridIntersect.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

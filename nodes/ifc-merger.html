@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>IFC統合 IFCMerger（結合＋範囲抽出） — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス im- で衝突回避
+   ①2つのIFC（片方に原点キューブ）がドロップ → ②キューブが重なり位置補正・
+   Teklaの色がもう片方へ流れ込む → ③1つのIFCへ合体＋整合性レポート（不一致1件を赤マーク）
+   ============================================================ */
+.im-svg text { font-family: var(--font); }
+
+/* IFCファイルカード */
+.im-cardbg  { fill: #10193a; stroke: var(--accent); stroke-width: 2; }
+.im-tag     { fill: var(--accent); opacity: .92; }
+.im-tagtxt  { fill: #0b1020; font-size: 10px; font-weight: 800; }
+
+/* 部材（Tekla由来の3色 / 非Tekla＝グレー） */
+.im-mA   { fill: #fbbf24; }   /* アンバー */
+.im-mB   { fill: #22d3ee; }   /* シアン */
+.im-mC   { fill: #34d399; }   /* エメラルド */
+.im-gray { fill: #5b678f; }   /* 色なし・グレー */
+
+/* 原点キューブ */
+.im-cube   { fill: var(--accent); stroke: var(--accent); stroke-width: 1.4; }
+.im-cube-o { fill: none; stroke: #f0b3ff; stroke-width: 2.2; }
+
+/* ラベル */
+.im-lbl { fill: #e6ecff; font-size: 13px; font-weight: 700; }
+.im-sub { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 位置補正＋転写バッジ */
+.im-badge-box { fill: color-mix(in srgb, var(--accent) 18%, #10193a); stroke: var(--accent); stroke-width: 1.6; }
+.im-badge-txt { fill: var(--accent); font-size: 12.5px; font-weight: 800; }
+
+/* 色マップの流れドット */
+.im-dot { stroke: #0b1020; stroke-width: 1; }
+
+/* 統合後モデル */
+.im-merged    { fill: #10193a; stroke: var(--accent); stroke-width: 2; }
+.im-merged-lb { fill: var(--accent); font-size: 12.5px; font-weight: 800; }
+
+/* HTML整合性レポート */
+.im-rep     { fill: #0a1122; stroke: #34406a; stroke-width: 1.4; }
+.im-rephead { fill: color-mix(in srgb, var(--accent) 20%, #0a1122); }
+.im-row     { fill: #141d38; }
+.im-rowbad  { fill: color-mix(in srgb, #f87171 22%, #141d38); }
+.im-reptxt  { fill: #9aa7cc; font-size: 10px; font-weight: 600; }
+.im-reptxt.head { fill: var(--accent); font-weight: 800; }
+.im-reptxt.bad  { fill: #fca5a5; }
+.im-bad     { fill: none; stroke: #f87171; stroke-width: 2.4; }
+
+/* テキスト */
+.im-cap { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+
+/* 進捗バー */
+.im-prog-tr { fill: #223052; }
+.im-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.im-cardA { animation: imCardA 10s infinite; }
+.im-cardB { animation: imCardB 10s infinite; }
+.im-b2    { animation: imB2 10s infinite; }
+.im-flow  { animation: imFlow 10s infinite; }
+.im-b3    { animation: imB3 10s infinite; }
+.im-rep-a { animation: imRep 10s infinite; }
+.im-bad-a { animation: imBad 10s infinite; }
+.im-l1    { animation: imL1 10s infinite; }
+.im-l2    { animation: imL2 10s infinite; }
+.im-l3    { animation: imL3 10s infinite; }
+.im-prog  { animation: imProg 10s linear infinite; }
+
+@keyframes imCardA {
+  0%,2%   { opacity:0; transform: translate(-60px,-24px); }
+  10%     { opacity:1; transform: translate(0,0); }
+  30%     { opacity:1; transform: translate(0,0); }
+  36%     { opacity:0; transform: translate(0,0); }
+  100%    { opacity:0; }
+}
+@keyframes imCardB {
+  0%,6%   { opacity:0; transform: translate(-60px,30px); }
+  15%     { opacity:1; transform: translate(0,0); }
+  30%     { opacity:1; transform: translate(0,0); }
+  36%     { opacity:0; transform: translate(0,0); }
+  100%    { opacity:0; }
+}
+@keyframes imB2 { 0%,33%{opacity:0} 40%{opacity:1} 60%{opacity:1} 64%,100%{opacity:0} }
+@keyframes imFlow {
+  0%,40%   { opacity:0; transform: translateX(0); }
+  45%      { opacity:1; transform: translateX(0); }
+  57%      { opacity:1; transform: translateX(180px); }
+  61%,100% { opacity:0; transform: translateX(180px); }
+}
+@keyframes imB3 { 0%,64%{opacity:0} 72%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes imRep {
+  0%,66%  { opacity:0; transform: translateX(24px); }
+  74%     { opacity:1; transform: translateX(0); }
+  96%     { opacity:1; }
+  100%    { opacity:0; }
+}
+@keyframes imBad { 0%,74%{opacity:0} 79%{opacity:1} 84%{opacity:.3} 89%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes imL1 { 0%{opacity:0} 4%{opacity:1} 30%{opacity:1} 34%{opacity:0} 100%{opacity:0} }
+@keyframes imL2 { 0%,34%{opacity:0} 38%{opacity:1} 60%{opacity:1} 64%{opacity:0} 100%{opacity:0} }
+@keyframes imL3 { 0%,64%{opacity:0} 68%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes imProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ifc">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">IFC・データ連携</span>
+    <h1 class="node-title">IFC統合 IFCMerger <span style="opacity:.75;font-weight:700">結合＋範囲抽出</span></h1>
+    <p class="catch">3系統の結合ツールを、<span class="em">Web UI で一本化</span>。結合も、<span class="em">範囲抽出</span>も、レポートも。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">v1.0（2026-07-12 実装）</span>
+      <span class="badge st-ver">Web UI + CLI（Flask・完全ローカル）</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg im-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="2つのIFCを原点キューブで位置合わせし、Teklaの色を転写して1つに統合、整合性レポートを出すアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="im-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="im-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① 2つのIFCカードがドロップされる ===== -->
+        <!-- カードA：Tekla（色つき・原点キューブ入り） -->
+        <g class="im-cardA">
+          <rect class="im-cardbg" x="150" y="96" width="180" height="100" rx="6"></rect>
+          <rect class="im-tag" x="150" y="96" width="46" height="18" rx="4"></rect>
+          <text class="im-tagtxt" x="157" y="109">.ifc</text>
+          <rect class="im-mA" x="182" y="126" width="13" height="58" rx="1"></rect>
+          <rect class="im-mB" x="206" y="126" width="13" height="58" rx="1"></rect>
+          <rect class="im-mC" x="230" y="126" width="13" height="58" rx="1"></rect>
+          <rect class="im-mA" x="182" y="126" width="61" height="9" rx="1"></rect>
+          <!-- 原点キューブ（左下） -->
+          <rect class="im-cube" x="144" y="188" width="13" height="13"></rect>
+          <text class="im-sub" x="246" y="216" text-anchor="middle">構造.ifc（Tekla・色つき）</text>
+        </g>
+        <!-- カードB：非Tekla（色なし・原点キューブがズレて登場） -->
+        <g class="im-cardB">
+          <rect class="im-cardbg" x="150" y="250" width="180" height="100" rx="6"></rect>
+          <rect class="im-tag" x="150" y="250" width="46" height="18" rx="4"></rect>
+          <text class="im-tagtxt" x="157" y="263">.ifc</text>
+          <rect class="im-gray" x="182" y="280" width="13" height="58" rx="1"></rect>
+          <rect class="im-gray" x="206" y="280" width="13" height="58" rx="1"></rect>
+          <rect class="im-gray" x="230" y="280" width="13" height="58" rx="1"></rect>
+          <rect class="im-gray" x="182" y="280" width="61" height="9" rx="1"></rect>
+          <!-- 原点キューブ（Aとズレた位置） -->
+          <rect class="im-cube-o" x="178" y="342" width="13" height="13"></rect>
+          <text class="im-sub" x="246" y="370" text-anchor="middle">建築.ifc（意匠・色なし）</text>
+        </g>
+
+        <!-- ===== ② 原点キューブで位置補正 ＋ Tekla色を転写 ===== -->
+        <g class="im-b2">
+          <!-- 位置補正＋転写バッジ -->
+          <rect class="im-badge-box" x="238" y="66" width="324" height="30" rx="15"></rect>
+          <text class="im-badge-txt" x="400" y="86" text-anchor="middle">キューブ一致で位置補正 → Tekla色を転写</text>
+
+          <!-- 左：Tekla（色マップ源） -->
+          <rect class="im-cardbg" x="110" y="150" width="160" height="120" rx="6"></rect>
+          <rect class="im-mA" x="150" y="175" width="13" height="70" rx="1"></rect>
+          <rect class="im-mB" x="180" y="175" width="13" height="70" rx="1"></rect>
+          <rect class="im-mC" x="210" y="175" width="13" height="70" rx="1"></rect>
+          <rect class="im-mA" x="150" y="175" width="73" height="9" rx="1"></rect>
+          <rect class="im-cube" x="104" y="264" width="13" height="13"></rect>
+          <text class="im-sub" x="190" y="292" text-anchor="middle">Tekla（色マップ源）</text>
+
+          <!-- 右：非Tekla（色を受け取る） -->
+          <rect class="im-cardbg" x="460" y="150" width="160" height="120" rx="6"></rect>
+          <rect class="im-gray" x="490" y="175" width="13" height="70" rx="1"></rect>
+          <rect class="im-gray" x="520" y="175" width="13" height="70" rx="1"></rect>
+          <rect class="im-gray" x="550" y="175" width="13" height="70" rx="1"></rect>
+          <rect class="im-gray" x="490" y="175" width="73" height="9" rx="1"></rect>
+          <rect class="im-cube-o" x="454" y="264" width="13" height="13"></rect>
+          <text class="im-sub" x="540" y="292" text-anchor="middle">非Tekla（色を受け取る）</text>
+
+          <!-- 色が流れ込むドット -->
+          <g class="im-flow">
+            <circle class="im-dot im-mA" cx="292" cy="192" r="6"></circle>
+            <circle class="im-dot im-mB" cx="292" cy="212" r="6"></circle>
+            <circle class="im-dot im-mC" cx="292" cy="232" r="6"></circle>
+          </g>
+        </g>
+
+        <!-- ===== ③ 1つのIFCへ合体＋整合性レポート ===== -->
+        <g class="im-b3">
+          <!-- 統合後モデル -->
+          <rect class="im-merged" x="90" y="120" width="230" height="160" rx="6"></rect>
+          <rect class="im-tag" x="90" y="120" width="80" height="20" rx="4"></rect>
+          <text class="im-tagtxt" x="98" y="134">統合.ifc</text>
+          <rect class="im-mA" x="120" y="155" width="14" height="100" rx="1"></rect>
+          <rect class="im-mB" x="150" y="155" width="14" height="100" rx="1"></rect>
+          <rect class="im-mC" x="180" y="155" width="14" height="100" rx="1"></rect>
+          <rect class="im-mA" x="210" y="155" width="14" height="100" rx="1"></rect>
+          <rect class="im-mB" x="240" y="155" width="14" height="100" rx="1"></rect>
+          <rect class="im-mC" x="270" y="155" width="14" height="100" rx="1"></rect>
+          <rect class="im-mA" x="120" y="155" width="164" height="11" rx="1"></rect>
+          <rect class="im-mC" x="120" y="230" width="164" height="9" rx="1"></rect>
+          <text class="im-merged-lb" x="205" y="302" text-anchor="middle">統合.ifc に合体（色・座標そろい）</text>
+
+          <!-- 整合性レポート -->
+          <g class="im-rep-a">
+            <rect class="im-rep" x="470" y="110" width="220" height="212" rx="6"></rect>
+            <rect class="im-rephead" x="470" y="110" width="220" height="26" rx="6"></rect>
+            <text class="im-reptxt head" x="482" y="127">整合性レポート</text>
+            <rect class="im-row" x="482" y="146" width="196" height="20" rx="3"></rect>
+            <text class="im-reptxt" x="490" y="160">GUID 一致 … 128 件 ✓</text>
+            <rect class="im-rowbad" x="482" y="172" width="196" height="20" rx="3"></rect>
+            <text class="im-reptxt bad" x="490" y="186">GUID-0048 … 体積差 12% ⚠</text>
+            <rect class="im-row" x="482" y="198" width="196" height="20" rx="3"></rect>
+            <text class="im-reptxt" x="490" y="212">原点キューブで自動整列 ✓</text>
+            <rect class="im-row" x="482" y="224" width="196" height="20" rx="3"></rect>
+            <text class="im-reptxt" x="490" y="238">Tekla 色を転写 … 96 件 ✓</text>
+            <rect class="im-row" x="482" y="250" width="196" height="20" rx="3"></rect>
+            <text class="im-reptxt" x="490" y="264">単位・スキーマ 一致 ✓</text>
+            <!-- 不一致を赤くマーク -->
+            <rect class="im-bad im-bad-a" x="478" y="170" width="204" height="24" rx="4"></rect>
+          </g>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="im-cap im-l1" x="400" y="428" text-anchor="middle">① 2つのIFC（片方に原点キューブ）をドロップ</text>
+        <text class="im-cap im-l2" x="400" y="428" text-anchor="middle">② キューブで位置補正 → Teklaの色を転写</text>
+        <text class="im-cap im-l3" x="400" y="428" text-anchor="middle">③ 1つのIFCへ合体＋整合性レポート</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">2つのIFCをブラウザにドロップ → 原点キューブの差で位置補正しTeklaの色を転写 → 1つに統合して整合性レポート（体積差など不一致を赤マーク）を出す流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>社内に散らばっていた <strong>3系統の IFC 結合ツール（Join_IFC_model / Join_IF_model / IFC編集ツール）</strong>の機能を、<strong>ひとつの Web UI（ブラウザ画面）にまとめた統合版</strong>です。ブラウザで <code>start.bat</code> を起動すると <strong>http://localhost:8620</strong> が開き、<strong>結合・範囲抽出・レポート履歴</strong>の3タブを行き来できます。CLI（<code>ifc_merger.py</code>）でも同じ処理を回せます。外部通信なしの<strong>完全ローカル</strong>動作です。</p>
+    <p><strong>① 結合</strong>：基準1ファイル＋追加を複数まとめて、基準の座標系にそろえて1つに統合します。各追加ファイルの<strong>原点キューブを自動検出（スコアリング）</strong>して基準キューブとの差からオフセットを自動算出し、<strong>Tekla を自動判定</strong>して色・レイヤーを非Tekla側へ転写。同じ <strong>GUID</strong> が衝突したときは<strong>体積と重心を比較</strong>して形の食い違いを検出し、方針（基準を残す／新規を残す／両方を GUID 再発行で残す）を選べます。</p>
+    <p><strong>② 範囲抽出</strong>：1つの IFC から <strong>直方体（bbox）と交差する要素だけ</strong>を、Pset・材料・Assembly・空間構造を保ったまま新しい IFC に取り出します。数値 bbox 入力が主で、フットプリント（平面配置の SVG）から矩形ドラッグでも指定できます。<strong>③ レポート</strong>：結合・抽出ごとに、ファイル別統計・オフセット・転写件数・GUID 衝突表・整合性検査をまとめた <strong>HTML レポート</strong>を残します。</p>
+    <p class="lead">※ IFC＝建物の3Dモデルを部材属性ごとやり取りする業界標準ファイル。／ GUID＝各要素に振られる一意のID。同じGUIDが両ファイルにあると「同一要素」とみなして形状を照合できる。／ 原点キューブ＝各モデルの基準位置を示す小さな立方体で、その座標差がモデルのズレになる。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（操作 → 結果）</h2>
+    <p class="lead" style="margin:-6px 0 16px">GHノードではなく、Web UI（Flask）とCLIで動く統合ツールです。結合と範囲抽出の2モードがあります。</p>
+    <div class="io-scroll"><table class="io-table">
+      <caption>操作と結果</caption>
+      <thead><tr><th>操作 / 入力</th><th>結果 / 説明</th></tr></thead>
+      <tbody>
+        <tr><td class="port"><span class="io-dir in">入</span>結合：基準IFC＋追加IFC（複数）</td><td>基準の座標系にそろえて<strong>1ファイルへ統合</strong>。各要素は絶対配置として焼き込む。</td></tr>
+        <tr><td class="port">原点キューブ自動検出</td><td>追加ファイルのキューブを検出し、<strong>基準キューブとの差でオフセット自動算出</strong>。未検出時は候補一覧から選択、または手動オフセット。</td></tr>
+        <tr><td class="port">Tekla判定・色/レイヤー転写</td><td>Teklaファイルを<strong>色マップ源</strong>とし、非Tekla側のコピー要素にクラス→色を適用。</td></tr>
+        <tr><td class="port">GUID衝突の照合</td><td><strong>体積・重心を比較</strong>し、形状不一致をレポートに記録。方針（基準/新規/両方GUID再発行）を選択。</td></tr>
+        <tr><td class="port"><span class="io-dir in">入</span>範囲抽出：対象IFC＋bbox(mm)</td><td>bboxと交差する要素だけを、<strong>Pset・材料・Assembly・空間構造を維持</strong>して抽出。</td></tr>
+        <tr><td class="port"><span class="io-dir out">出</span>統合IFC / 抽出IFC</td><td>1つにまとめた統合IFC、または範囲内だけの抽出IFC。</td></tr>
+        <tr><td class="port"><span class="io-dir out">出</span>HTMLレポート</td><td>ファイル別統計・モード・オフセット・転写件数・<strong>GUID衝突表・整合性検査</strong>をまとめたダークテック調レポート。</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">Web UI を起動する</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">IFCMerger\start.bat</span> をダブルクリック。ブラウザで <strong>http://localhost:8620</strong> が開く（完全ローカル）。CLI派は <kbd>venv\Scripts\python.exe ifc_merger.py base.ifc add1.ifc -o out.ifc</kbd>。</span></li>
+      <li><span class="step-title">結合：IFCをドラッグ＆ドロップ</span><span class="step-body">結合タブに複数のIFCを投入。ファイルごとに<strong>スキーマ・単位・要素数・Tekla判定・原点キューブ検出結果</strong>が表示される。</span></li>
+      <li><span class="step-title">基準を選び、必要なら上書き</span><span class="step-body"><strong>基準ファイル</strong>を1つ選択。ファイル別に「原点キューブ自動」ON/OFF・手動オフセット・Z回転を上書きできる。GUID衝突の方針を選んで<strong>「結合を実行」</strong>。</span></li>
+      <li><span class="step-title">結果とレポートを確認</span><span class="step-body">完了後、<strong>統合IFCのダウンロード</strong>と<strong>HTMLレポート表示</strong>。形状不一致があればレポートの衝突表で確認する。</span></li>
+      <li><span class="step-title">範囲抽出：bboxで切り出す</span><span class="step-body">範囲抽出タブで対象を選び、<strong>数値 bbox(mm)</strong> を入力（フットプリントSVGで矩形ドラッグ指定も可）。<strong>「抽出を実行」</strong>で交差要素だけの新IFCを書き出す。</span></li>
+      <li><span class="step-title">後工程へ渡す</span><span class="step-body">出力IFCを <a href="ifc2rhino.html">ifc2rhino</a> や <a href="rhino-henkan.html">ライノセラスに変換</a> へ渡して .3dm 化する。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">統合元</span>
+        <a class="chip chip-up" href="join-ifc-model.html">Join_IFC_model（原点キューブ結合）</a>
+        <a class="chip chip-up" href="join-if-model.html">Join_IF_model（Tekla色転写結合）</a>
+        <a class="chip chip-up" href="ifc-clipper.html">IFC編集ツール（範囲抽出）</a>
+        <a class="chip chip-up" href="ifc-converter.html">IFC_Converter（スキーマ変換）</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">IFCMerger（このツール）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="ifc2rhino.html">IFC⇔Rhino変換 ifc2rhino</a>
+        <a class="chip chip-down" href="rhino-henkan.html">IFC自動変換パイプライン（ライノセラスに変換）</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px"><strong>これらの機能を統合したのが本ツール</strong>です。移植元の Join_IFC_model / Join_IF_model / IFC編集ツールは<strong>無改変で温存</strong>されており、<strong>単体版も引き続き使えます</strong>。スキーマ（IFC2X3/IFC4）がそろっていないファイルは、先に <a href="ifc-converter.html">IFC_Converter</a> でIFC4化してから結合してください。どれを使うか迷ったら <a href="ifc-guide.html">IFCツール使い分けガイド</a> をどうぞ。</p>
+  </div>
+</section>
+
+<!-- 7. 実データでためす -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実データでためす</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> 原点キューブ入りの IFC 2〜3本（Tekla ＋ 意匠など）</span>
+      <p class="sample-desc">専用サンプルはありません。同じ原点キューブを仕込んだ実案件のIFCを数本用意すると、位置合わせと色転写の効果が一目でわかります。テスト22件＋回帰スイートは緑で通っています。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">基準＋追加を用意</span><span class="step-body">原点キューブ入りのIFCを、基準1本＋追加1〜2本。Tekla側（色つき）を混ぜると転写の効果が見える。</span></li>
+        <li><span class="step-title">結合してレポートを見る</span><span class="step-body">start.bat で起動し結合を実行。HTMLレポートで<strong>オフセット・転写件数・GUID衝突</strong>を確認する。</span></li>
+        <li><span class="step-title">範囲抽出も試す</span><span class="step-body">統合IFCに対し bbox を指定して1フロア分だけ抽出し、Pset や材料が残っているかビューアで確認する。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> mm前提・スキーマ一致必須（不一致はハードエラー）</div>
+        <p>オフセット・許容差はすべて <strong>mm 前提</strong>です。<strong>LengthUnit が食い違う／schema（IFC2X3・IFC4等）がそろっていない</strong>ファイル同士は結合を中断します（換算機能はありません）。そろえるには先に <a href="ifc-converter.html">IFC_Converter</a> でIFC4化してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> モードC（非Tekla同士）はGUID再発行で両方保持</div>
+        <p>非Tekla同士の結合ではGUIDの信頼性が低い前提のため、<strong>体積比較を行わず</strong>、衝突GUIDは<strong>再発行して両方保持</strong>します（色マップも無し・警告表示）。同一要素の重複が残ることがあります。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 壁開口（IfcRelVoidsElement）は再構築しない</div>
+        <p>結合コピーでは <code>IfcOpeningElement</code> を対象外とし、開口の関係も再構築しません（移植元のJoin系と同じ挙動）。Tekla構造モデルは部材形状自体に孔が焼き込まれているため影響しませんが、<strong>意匠系IFCの壁開口は結合後に失われる可能性</strong>があります。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> フットプリントSVGは「部分表示」になり得る</div>
+        <p>範囲抽出のフットプリントは<strong>要素数上限（3000）とタイムアウト付き</strong>です。上限・タイムアウト時は計算済み分だけを描画して「部分表示」を警告します。<strong>厳密な範囲指定は数値bbox入力</strong>で行ってください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 起動は同梱venvのpythonで（storeスタブに注意）</div>
+        <p>CLIは <code>python ifc_merger.py</code> ではなく <strong><code>venv\Scripts\python.exe</code></strong> を直接指定します（Windowsのストア版Pythonスタブに当たって失敗するため）。ポートは 8620 固定。<strong>venv は再作成しないでください</strong>（Python 3.14 用のビルド済み ifcopenshell が入っており再取得が困難）。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\IFCMerger\<span class="fp-accent">app_ui.py</span>（CLIは ifc_merger.py・結合コア merge_engine.py・範囲抽出 clip_engine.py／起動は start.bat）
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ifc">IFC・データ連携の一覧</a>
+      <a href="ifc-guide.html">IFCツール使い分けガイド</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>DWG図面チェック — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス dc- で衝突回避
+   ①DWGフォルダを丸ごと読む → ②一括3dm変換＋ファイル名[]と図面タイトル[]を照合
+   → ③OK緑・NG赤で検図表(Excel)を自動出力
+   ============================================================ */
+.dc-svg text { font-family: var(--font); }
+
+/* ファイル札 */
+.dc-file-bg   { fill: #0e1730; stroke: var(--accent); stroke-width: 1.6; }
+.dc-file-tab  { fill: var(--accent); opacity: .55; }
+.dc-file-txt  { fill: #cdd7f5; font-size: 11px; font-weight: 700; }
+.dc-ext       { fill: var(--accent); font-size: 11px; font-weight: 800; }
+.dc-ext3dm    { fill: var(--ok); font-size: 11px; font-weight: 800; }
+
+/* 変換の矢印＋データドット */
+.dc-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.4; opacity: .85; }
+.dc-arrow-head  { fill: var(--accent); }
+.dc-flowdot     { fill: #ffffff; }
+
+/* 照合パネル（ファイル名[]↔タイトル[]） */
+.dc-cmp-bg   { fill: #0b1428; stroke: #34406a; stroke-width: 1.4; }
+.dc-tag      { fill: #0e1730; stroke: var(--accent); stroke-width: 1.4; }
+.dc-tag-ng   { fill: #0e1730; stroke: #f87171; stroke-width: 1.4; }
+.dc-tagtxt   { fill: #e6ecff; font-size: 12px; font-weight: 800; font-family: "Cascadia Code", Consolas, monospace; }
+.dc-cmplabel { fill: #9aa7cc; font-size: 11px; font-weight: 700; }
+.dc-link-ok  { fill: none; stroke: var(--ok); stroke-width: 2.4; stroke-dasharray: 100; }
+.dc-link-ng  { fill: none; stroke: #f87171; stroke-width: 2.4; stroke-dasharray: 5 4; }
+.dc-okmark   { fill: none; stroke: var(--ok); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.dc-ngmark   { fill: none; stroke: #f87171; stroke-width: 3; stroke-linecap: round; }
+
+/* Excel検図表 */
+.dc-xls-bg    { fill: #0c1428; stroke: var(--accent); stroke-width: 1.4; }
+.dc-xls-head  { fill: color-mix(in srgb, var(--ok) 26%, #0b1428); }
+.dc-xls-line  { stroke: #2a3352; stroke-width: 1; }
+.dc-row-ok    { fill: color-mix(in srgb, var(--ok) 12%, transparent); }
+.dc-row-ng    { fill: color-mix(in srgb, #f87171 14%, transparent); }
+.dc-xlstxt    { fill: #e6ecff; font-size: 11.5px; font-weight: 700; }
+.dc-xlssub    { fill: #9aa7cc; font-size: 11px; font-weight: 600; font-family: "Cascadia Code", Consolas, monospace; }
+.dc-badge-ok  { fill: var(--ok); }
+.dc-badge-ng  { fill: #f87171; }
+.dc-badgetxt  { fill: #0b1020; font-size: 10.5px; font-weight: 800; }
+
+/* テキスト */
+.dc-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.dc-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.dc-prog-tr { fill: #223052; }
+.dc-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.dc-files  { animation: dcFiles 10s infinite; }
+.dc-conv   { animation: dcConv  10s infinite; }
+.dc-arrow  { animation: dcArrow 10s infinite; }
+.dc-flow   { animation: dcFlow  10s infinite; }
+.dc-cmp    { animation: dcCmp   10s infinite; }
+.dc-link1  { animation: dcLink  10s infinite; }
+.dc-link2  { animation: dcLink  10s infinite; }
+.dc-okA    { animation: dcMark  10s infinite; }
+.dc-ngA    { animation: dcMark  10s infinite; }
+.dc-xls    { animation: dcXls   10s infinite; }
+.dc-r1     { animation: dcRow   10s infinite; }
+.dc-r2     { animation: dcRow2  10s infinite; }
+.dc-r3     { animation: dcRow3  10s infinite; }
+.dc-l1     { animation: dcL1 10s infinite; }
+.dc-l2     { animation: dcL2 10s infinite; }
+.dc-l3     { animation: dcL3 10s infinite; }
+.dc-prog   { animation: dcProg 10s linear infinite; }
+
+@keyframes dcFiles {
+  0%,2%   { opacity: 0; transform: translateY(10px); }
+  8%      { opacity: 1; transform: translateY(0); }
+  62%     { opacity: 1; }
+  70%,100%{ opacity: .35; }
+}
+@keyframes dcConv {
+  0%,28%  { opacity: 0; }
+  36%     { opacity: 1; }
+  62%     { opacity: 1; }
+  70%,100%{ opacity: 0; }
+}
+@keyframes dcArrow {
+  0%,26%  { opacity: 0; }
+  32%     { opacity: 1; }
+  63%     { opacity: 1; }
+  70%,100%{ opacity: 0; }
+}
+@keyframes dcFlow {
+  0%,27%   { opacity: 0; transform: translateX(0); }
+  31%      { opacity: 1; transform: translateX(0); }
+  44%      { opacity: 1; transform: translateX(120px); }
+  48%,100% { opacity: 0; transform: translateX(120px); }
+}
+@keyframes dcCmp {
+  0%,30%  { opacity: 0; transform: translateY(6px); }
+  38%     { opacity: 1; transform: translateY(0); }
+  63%     { opacity: 1; }
+  70%,100%{ opacity: 0; }
+}
+@keyframes dcLink {
+  0%,40%  { stroke-dashoffset: 100; }
+  50%     { stroke-dashoffset: 0; }
+  63%     { stroke-dashoffset: 0; }
+  70%,100%{ stroke-dashoffset: 0; }
+}
+@keyframes dcMark {
+  0%,48%  { opacity: 0; }
+  54%     { opacity: 1; }
+  63%     { opacity: 1; }
+  70%,100%{ opacity: 0; }
+}
+@keyframes dcXls {
+  0%,66%  { opacity: 0; transform: translateY(8px); }
+  74%     { opacity: 1; transform: translateY(0); }
+  100%    { opacity: 1; }
+}
+@keyframes dcRow  { 0%,74%{opacity:0} 79%{opacity:1} 100%{opacity:1} }
+@keyframes dcRow2 { 0%,79%{opacity:0} 84%{opacity:1} 100%{opacity:1} }
+@keyframes dcRow3 { 0%,84%{opacity:0} 89%{opacity:1} 100%{opacity:1} }
+@keyframes dcL1 { 0%{opacity:0} 4%{opacity:1} 26%{opacity:1} 31%{opacity:0} 100%{opacity:0} }
+@keyframes dcL2 { 0%,31%{opacity:0} 35%{opacity:1} 63%{opacity:1} 68%{opacity:0} 100%{opacity:0} }
+@keyframes dcL3 { 0%,68%{opacity:0} 72%{opacity:1} 97%{opacity:1} 100%{opacity:0} }
+@keyframes dcProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="rhino">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">Rhinoコマンド・配布ツール</span>
+    <h1 class="node-title">DWG図面チェック</h1>
+    <p class="catch">DWGを<span class="em">まとめて3dm化</span>して、<span class="em">ファイル名とタイトルの食い違い</span>を自動検図——目視チェックの負担をゼロに近づける。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中（手動実行）</span>
+      <span class="badge st-ver">スタンドアロン2本立て</span>
+      <span class="badge st-ver">Rhino（ヘッドレス）利用</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg dc-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="DWGフォルダを一括で3dm変換し、ファイル名とタイトルを照合してOK・NGをExcelに出力するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="dc-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="dc-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① DWGフォルダ（複数ファイル札） ===== -->
+        <g class="dc-files">
+          <g transform="translate(44,120)">
+            <rect class="dc-file-bg" x="16" y="16" width="120" height="150" rx="6"></rect>
+            <rect class="dc-file-bg" x="8"  y="8"  width="120" height="150" rx="6"></rect>
+            <rect class="dc-file-bg" x="0"  y="0"  width="120" height="150" rx="6"></rect>
+            <rect class="dc-file-tab" x="0" y="0" width="120" height="22" rx="6"></rect>
+            <text class="dc-file-txt" x="10" y="15">📁 DWGフォルダ</text>
+            <text class="dc-ext" x="12" y="52">S31C-X11.dwg</text>
+            <text class="dc-ext" x="12" y="78">S31C-X12.dwg</text>
+            <text class="dc-ext" x="12" y="104">Y8-1.dwg</text>
+            <text class="dc-small" x="12" y="134">… n 枚をまとめて</text>
+          </g>
+        </g>
+
+        <!-- 矢印＋データドット -->
+        <g class="dc-arrow">
+          <line class="dc-arrow-shaft" x1="222" y1="205" x2="272" y2="205"></line>
+          <polygon class="dc-arrow-head" points="272,205 258,197 258,213"></polygon>
+        </g>
+        <circle class="dc-flow dc-flowdot" cx="222" cy="205" r="5"></circle>
+
+        <!-- ===== ② 変換（.dwg→.3dm）＋ 照合パネル ===== -->
+        <!-- 変換の様子 -->
+        <g class="dc-conv">
+          <rect class="dc-file-bg" x="290" y="86" width="96" height="52" rx="6"></rect>
+          <text class="dc-ext" x="302" y="108">.dwg</text>
+          <text class="dc-small" x="302" y="126">図面</text>
+          <polygon class="dc-arrow-head" points="404,112 392,105 392,119"></polygon>
+          <line class="dc-arrow-shaft" x1="388" y1="112" x2="398" y2="112"></line>
+          <rect class="dc-file-bg" x="410" y="86" width="96" height="52" rx="6" stroke="var(--ok)"></rect>
+          <text class="dc-ext3dm" x="422" y="108">.3dm</text>
+          <text class="dc-small" x="422" y="126">Rhino用</text>
+        </g>
+
+        <!-- 照合パネル -->
+        <g class="dc-cmp">
+          <rect class="dc-cmp-bg" x="284" y="158" width="230" height="150" rx="8"></rect>
+          <text class="dc-cmplabel" x="298" y="180">ファイル名の [ ]</text>
+          <text class="dc-cmplabel" x="298" y="266">図面タイトルの [ ]</text>
+
+          <!-- 行1: 一致（OK） -->
+          <rect class="dc-tag" x="298" y="188" width="86" height="26" rx="5"></rect>
+          <text class="dc-tagtxt" x="308" y="205">[X11]</text>
+          <rect class="dc-tag" x="298" y="230" width="86" height="26" rx="5"></rect>
+          <text class="dc-tagtxt" x="308" y="247">[X11]</text>
+          <line class="dc-link-ok dc-link1" x1="341" y1="214" x2="341" y2="230" pathLength="100"></line>
+          <path class="dc-okmark dc-okA" d="M410,214 l7,8 l13,-16" fill="none"></path>
+          <text class="dc-cmplabel dc-okA" x="436" y="216" fill="var(--ok)">一致</text>
+
+          <!-- 行2: 不一致（NG） -->
+          <rect class="dc-tag-ng" x="298" y="188" width="0" height="0"></rect>
+          <!-- (視覚単純化のため2行目は右側のNGバッジで表現) -->
+          <g class="dc-ngA">
+            <rect class="dc-tag-ng" x="410" y="252" width="86" height="26" rx="5"></rect>
+            <text class="dc-tagtxt" x="420" y="269" fill="#f87171">[X12]≠</text>
+            <path class="dc-ngmark" d="M470,258 l14,14 M484,258 l-14,14"></path>
+          </g>
+        </g>
+
+        <!-- ===== ③ Excel検図表 ===== -->
+        <g class="dc-xls">
+          <rect class="dc-xls-bg"   x="540" y="96" width="230" height="238" rx="8"></rect>
+          <rect class="dc-xls-head" x="540" y="96" width="230" height="30" rx="8"></rect>
+          <text class="dc-xlstxt" x="554" y="116">📊 _check_result.xlsx</text>
+
+          <!-- 列見出し -->
+          <text class="dc-small" x="554" y="146">ファイル</text>
+          <text class="dc-small" x="712" y="146" text-anchor="end">判定</text>
+          <line class="dc-xls-line" x1="548" y1="152" x2="762" y2="152"></line>
+
+          <!-- 行 -->
+          <g class="dc-r1">
+            <rect class="dc-row-ok" x="548" y="158" width="214" height="34"></rect>
+            <text class="dc-xlssub" x="556" y="179">S31C-X11</text>
+            <rect class="dc-badge-ok" x="704" y="166" width="50" height="20" rx="10"></rect>
+            <text class="dc-badgetxt" x="729" y="180" text-anchor="middle">OK</text>
+          </g>
+          <g class="dc-r2">
+            <rect class="dc-row-ng" x="548" y="196" width="214" height="34"></rect>
+            <text class="dc-xlssub" x="556" y="217">S31C-X12</text>
+            <rect class="dc-badge-ng" x="704" y="204" width="50" height="20" rx="10"></rect>
+            <text class="dc-badgetxt" x="729" y="218" text-anchor="middle">NG</text>
+          </g>
+          <g class="dc-r3">
+            <rect class="dc-row-ok" x="548" y="234" width="214" height="34"></rect>
+            <text class="dc-xlssub" x="556" y="255">Y8-1</text>
+            <rect class="dc-badge-ok" x="704" y="242" width="50" height="20" rx="10"></rect>
+            <text class="dc-badgetxt" x="729" y="256" text-anchor="middle">OK</text>
+          </g>
+          <text class="dc-small" x="554" y="296">NGだけ拾って修正すればOK</text>
+          <text class="dc-small" x="554" y="316" fill="#f87171">▲ 1件 要確認</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="dc-cap dc-l1" x="400" y="430" text-anchor="middle">① DWGフォルダを丸ごと読み込む</text>
+        <text class="dc-cap dc-l2" x="400" y="430" text-anchor="middle">② 一括で3dm変換 ＋ ファイル名[ ]と図面タイトル[ ]を照合</text>
+        <text class="dc-cap dc-l3" x="400" y="430" text-anchor="middle">③ OK緑・NG赤で検図表(Excel)を自動出力</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">DWGフォルダを一括で3dmに変換しつつ、ファイル名の[ ]表記と図面内タイトルの[ ]表記を突き合わせ、一致=OK・不一致=NGをExcelに一覧出力する流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>DWG図面をまとめて扱う<strong>独立した2本のスクリプト</strong>をセットにしたものです。どちらもフォルダを指定して手動で走らせる、シンプルな一括処理ツールです。</p>
+    <p><strong>① DWG一括3dm変換スクリプト</strong>——指定フォルダ内の全DWGを順に開き、同じ名前の<strong>.3dmとして一括保存</strong>します。DWG納品物をRhino作業用の3dmに戻す「下ごしらえ」用です。</p>
+    <p><strong>② タイトル×記号 検図（batch_check_rhino.py）</strong>——DWG図面の中のテキスト（ブロックの中まで再帰的に拾います）を集め、<strong>「ファイル名の[ ]表記」と「図面内タイトルの[ ]表記」が一致しているか</strong>、さらに指定した座標エリア（右上・左下）のテキスト同士が一致しているかを OK / NG で判定し、<strong>Excel（またはCSV）に一覧出力</strong>します。「ファイル名と図面の見出しがちゃんと合っているか」を目でひとつずつ確認する手間を自動化する検図ツールです。</p>
+    <p class="lead">※ 検図＝図面の記載が正しいか、食い違いがないかを点検する作業。／ [ ]表記＝図番や部材符号を角カッコで囲んで示す社内ルール（例: <span style="font-family:Consolas,monospace">S31C-X11Y3a</span>）。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力（操作／結果） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>2本のツール — 操作と結果</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>① DWG一括3dm変換</caption>
+        <thead><tr><th>操作 / 結果</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">入力：フォルダ</td><td>変換したいDWGが入ったフォルダを指定。</td></tr>
+          <tr><td class="port">処理</td><td>中の全DWGを順にRhinoで開き、同名で保存し直す。</td></tr>
+          <tr><td class="port">出力：&lt;名前&gt;.3dm</td><td>元と同じ名前のRhino用3dmファイル群。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>② タイトル×記号 検図</caption>
+        <thead><tr><th>操作 / 結果</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">入力：DWGファイル群</td><td>検図したい図面を指定。ブロック内のテキストも再帰収集。</td></tr>
+          <tr><td class="port">照合①</td><td><strong>ファイル名の[ ]</strong> と <strong>図面内タイトルの[ ]</strong> が一致するか。</td></tr>
+          <tr><td class="port">照合②</td><td>指定座標エリア（右上・左下）のテキスト同士が一致するか。</td></tr>
+          <tr><td class="port">出力：_check_result</td><td>OK / NG の判定一覧（<strong>.xlsx / .csv</strong>）。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">対象フォルダを用意する</span><span class="step-body">検図したいDWG図面を1つのフォルダにまとめておく。</span></li>
+      <li><span class="step-title">（必要なら）先に3dm化する</span><span class="step-body">Rhino作業用に3dmが要る場合は <kbd>01_DWG一括3dm変換スクリプト.py</kbd> を走らせて一括変換。検図だけなら省略可。</span></li>
+      <li><span class="step-title">照合エリアを設定する</span><span class="step-body">座標照合を使う案件では、<span class="port" style="color:var(--accent)">SYMBOL_AREA</span>（右上）と <span class="port" style="color:var(--accent)">MARK_AREA</span>（左下）の座標をコード内で案件に合わせて指定する。</span></li>
+      <li><span class="step-title">検図を走らせる</span><span class="step-body"><kbd>batch_check_rhino.py</kbd> を実行。各DWGを開いてテキストを集め、[ ]表記と座標エリアを突き合わせる。</span></li>
+      <li><span class="step-title">結果Excelを確認する</span><span class="step-body">出力された <span class="port" style="color:var(--accent)">_check_result.xlsx</span> を開き、<strong>NGの行だけ</strong>を拾って図面を直す。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <p class="flow-solo">この2本は<b>単独で使えます</b>。他ノードへの自動連携はなく、DWGフォルダを渡すだけで完結する手動実行ツールです。目的の近い <a href="section-symbol-title.html">断面符号＆タイトル抽出</a> や <a href="houi-shusei.html">方位文字一括修正</a> とは<b>別実装</b>で、直接のデータ受け渡しはありません。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 7. 実際に試す -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実際に試すには</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🗂️</span> 検図したいDWGフォルダをそのまま使う</span>
+      <p class="sample-desc">DWG図面を扱うツールのため専用サンプルモデルはありません。[ ]表記のファイル名が付いたDWGフォルダで試すのが手軽です。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">テスト用フォルダを複製</span><span class="step-body">対象DWGを<strong>コピーしたフォルダ</strong>で試す（原本は残す）。</span></li>
+        <li><span class="step-title">まず[ ]照合だけで走らせる</span><span class="step-body">座標照合を使わないなら、ファイル名と図面タイトルの[ ]一致だけでも十分に効果あり。</span></li>
+        <li><span class="step-title">結果Excelを開く</span><span class="step-body">NG行が正しく拾えているか、実ファイルと突き合わせて確認する。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 照合座標が既定で全て0＝そのままだとデバッグモード</div>
+        <p>検図スクリプトの座標エリア（<span class="port" style="color:var(--warn)">SYMBOL_AREA</span> / <span class="port" style="color:var(--warn)">MARK_AREA</span>）は初期値が全て0のため、そのままだと<strong>デバッグモードで動きます</strong>。座標照合を本番で使う場合は、案件ごとに<strong>コード内の数値を手で編集</strong>する運用が前提です。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> テキスト収集にRhinoを使う</div>
+        <p>ブロック内まで含めた図面テキストの収集にRhino（ヘッドレス）を使います。Rhinoが入った環境で実行してください。純粋な事務PCでは動きません。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 手動実行のスタンドアロン2本立て</div>
+        <p>2本のスクリプトは<strong>それぞれ独立</strong>していて、自動連携はありません。必要な方を手で走らせてください（3dmが要らなければ変換スクリプトは不要）。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> フォルダに紛れ込んだJSONは無関係</div>
+        <p>作業フォルダにMake2D統合JSON形式のファイルが紛れ込んでいることがありますが、この検図スクリプトとは<strong>直接の連携はありません</strong>（迷い込みサンプルの可能性）。判定結果に影響はしません。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\DWG図面チェック\<span class="fp-accent">batch_check_rhino.py</span> ／ 01_DWG一括3dm変換スクリプト.py
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-rhino">Rhinoコマンド・配布ツールの一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

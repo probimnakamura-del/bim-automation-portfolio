@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>方位文字一括修正ツール — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス hz- で衝突回避
+   ①図面の中の方位記号を探す → ②原点近傍の単独1文字だけ狙い撃ち
+   → ③「東→西」に安全置換＋確認資料PDFを自動出力
+   ============================================================ */
+.hz-svg text { font-family: var(--font); }
+.hz-mark { --mark: #f472b6; }   /* 検出マーカー＝マゼンタ（ツール実挙動に忠実） */
+
+/* 図面シート */
+.hz-sheet-bg    { fill: #0c1428; }
+.hz-sheet-frame { fill: none; stroke: #34406a; stroke-width: 1.6; }
+.hz-plan        { fill: none; stroke: var(--accent); stroke-width: 1.6; opacity: .5; }
+.hz-planfill    { fill: var(--accent); opacity: .06; }
+.hz-origin      { stroke: #6f7db0; stroke-width: 1.8; }
+/* 図面内の文字 */
+.hz-word   { fill: #9aa7cc; font-size: 13px; font-weight: 600; }   /* 熟語＝対象外 */
+.hz-target { fill: #e6ecff; font-size: 30px; font-weight: 800; }   /* 単独1文字＝対象 */
+
+/* 検出マーカー（マゼンタの丸＋番号） */
+.hz-ring    { fill: none; stroke: #f472b6; stroke-width: 3; }
+.hz-ringnum { fill: #f472b6; }
+.hz-numtxt  { fill: #0b1020; font-size: 12px; font-weight: 800; }
+.hz-skip    { fill: none; stroke: #64748b; stroke-width: 1.6; stroke-dasharray: 4 3; }
+.hz-skiptxt { fill: #64748b; font-size: 11px; font-weight: 700; }
+
+/* 矢印＋データドット */
+.hz-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.6; opacity: .85; }
+.hz-arrow-head  { fill: var(--accent); }
+.hz-flowdot     { fill: #f472b6; }
+
+/* 確認資料カード（PDF/レポート） */
+.hz-card-bg    { fill: #0b1428; stroke: var(--accent); stroke-width: 1.4; }
+.hz-card-head  { fill: color-mix(in srgb, var(--accent) 22%, #0b1428); }
+.hz-row-ok     { fill: color-mix(in srgb, var(--ok) 14%, transparent); stroke: color-mix(in srgb, var(--ok) 45%, transparent); stroke-width: 1; }
+.hz-row-zero   { fill: #0e1730; stroke: #34406a; stroke-width: 1; }
+.hz-cardtxt    { fill: #e6ecff; font-size: 13px; font-weight: 700; }
+.hz-cardsub    { fill: #9aa7cc; font-size: 11.5px; font-weight: 600; }
+.hz-okmark     { fill: var(--ok); }
+
+/* テキスト */
+.hz-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.hz-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.hz-prog-tr { fill: #223052; }
+.hz-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.hz-sheet   { animation: hzSheet 10s infinite; }
+.hz-ringA   { animation: hzRing  10s infinite; }
+.hz-numA    { animation: hzRing  10s infinite; }
+.hz-skipA   { animation: hzSkip  10s infinite; }
+.hz-old     { animation: hzOld   10s infinite; }
+.hz-new     { animation: hzNew   10s infinite; }
+.hz-arrow   { animation: hzArrow 10s infinite; }
+.hz-flow    { animation: hzFlow  10s infinite; }
+.hz-card    { animation: hzCard  10s infinite; }
+.hz-l1      { animation: hzL1 10s infinite; }
+.hz-l2      { animation: hzL2 10s infinite; }
+.hz-l3      { animation: hzL3 10s infinite; }
+.hz-prog    { animation: hzProg 10s linear infinite; }
+
+@keyframes hzSheet {
+  0%,2%   { opacity: 0; }
+  7%      { opacity: 1; }
+  100%    { opacity: 1; }
+}
+@keyframes hzRing {
+  0%,30%  { opacity: 0; transform: scale(1.6); transform-box: fill-box; transform-origin: center; }
+  38%     { opacity: 1; transform: scale(1);   transform-box: fill-box; transform-origin: center; }
+  100%    { opacity: 1; }
+}
+@keyframes hzSkip {
+  0%,34%  { opacity: 0; }
+  42%     { opacity: 1; }
+  100%    { opacity: 1; }
+}
+@keyframes hzOld {
+  0%      { opacity: 1; }
+  62%     { opacity: 1; }
+  70%     { opacity: 0; }
+  100%    { opacity: 0; }
+}
+@keyframes hzNew {
+  0%,63%  { opacity: 0; }
+  72%     { opacity: 1; }
+  100%    { opacity: 1; }
+}
+@keyframes hzArrow {
+  0%,60%  { opacity: 0; }
+  67%     { opacity: 1; }
+  100%    { opacity: 1; }
+}
+@keyframes hzFlow {
+  0%,62%   { opacity: 0; transform: translateX(0); }
+  66%      { opacity: 1; transform: translateX(0); }
+  76%      { opacity: 1; transform: translateX(150px); }
+  80%,100% { opacity: 0; transform: translateX(150px); }
+}
+@keyframes hzCard {
+  0%,66%  { opacity: 0; transform: translateY(8px); }
+  76%     { opacity: 1; transform: translateY(0); }
+  100%    { opacity: 1; }
+}
+@keyframes hzL1 { 0%{opacity:0} 4%{opacity:1} 30%{opacity:1} 35%{opacity:0} 100%{opacity:0} }
+@keyframes hzL2 { 0%,35%{opacity:0} 39%{opacity:1} 60%{opacity:1} 65%{opacity:0} 100%{opacity:0} }
+@keyframes hzL3 { 0%,65%{opacity:0} 69%{opacity:1} 97%{opacity:1} 100%{opacity:0} }
+@keyframes hzProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="rhino">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">Rhinoコマンド・配布ツール</span>
+    <h1 class="node-title">方位文字一括修正ツール</h1>
+    <p class="catch">図面の中の<span class="em">方位記号だけ</span>を狙い撃ちで書き換える——他の文字はビタ一文字も動かさない<span class="em">サージカル置換</span>。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中（EXE配布・実運用中）</span>
+      <span class="badge st-dist">EXE配布（PyInstaller onedir）</span>
+      <span class="badge st-ver">DXF / DWG / PDF 対応</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg hz-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="図面の中の方位記号だけを検出して東から西へ安全に置換するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="hz-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="hz-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== 図面シート ===== -->
+        <g class="hz-sheet">
+          <rect class="hz-sheet-bg"    x="60" y="62" width="330" height="300" rx="6"></rect>
+          <rect class="hz-sheet-frame" x="60" y="62" width="330" height="300" rx="6"></rect>
+          <rect class="hz-sheet-frame" x="72" y="74" width="306" height="276"></rect>
+
+          <!-- 建物の平面図っぽい線 -->
+          <rect class="hz-planfill" x="196" y="120" width="150" height="150"></rect>
+          <rect class="hz-plan"     x="196" y="120" width="150" height="150"></rect>
+          <line class="hz-plan" x1="196" y1="195" x2="346" y2="195"></line>
+          <line class="hz-plan" x1="271" y1="120" x2="271" y2="270"></line>
+
+          <!-- 熟語（＝対象外の文字） -->
+          <text class="hz-word" x="200" y="108">東立面図</text>
+          <text class="hz-word" x="300" y="300">南側配置</text>
+
+          <!-- 原点マーク（左下）＋ 単独の方位1文字＝対象 -->
+          <line class="hz-origin" x1="96" y1="322" x2="128" y2="322"></line>
+          <line class="hz-origin" x1="112" y1="306" x2="112" y2="338"></line>
+          <text class="hz-small" x="86" y="346">原点(0,0)</text>
+          <!-- 東（旧）→ 西（新） 同じ位置でクロスフェード -->
+          <text class="hz-target hz-old" x="132" y="332">東</text>
+          <text class="hz-target hz-new" x="132" y="332" fill="#f472b6">西</text>
+        </g>
+
+        <!-- 熟語の「東」は対象外の合図 -->
+        <g class="hz-skipA">
+          <rect class="hz-skip" x="196" y="94" width="20" height="20" rx="3"></rect>
+          <text class="hz-skiptxt" x="222" y="90">対象外（熟語の中）</text>
+        </g>
+
+        <!-- 検出マーカー（マゼンタの丸＋番号）＝原点近傍の単独1文字だけ -->
+        <g class="hz-ringA">
+          <circle class="hz-ring" cx="140" cy="324" r="24"></circle>
+        </g>
+        <g class="hz-numA">
+          <circle class="hz-ringnum" cx="162" cy="304" r="10"></circle>
+          <text class="hz-numtxt" x="162" y="308" text-anchor="middle">1</text>
+        </g>
+
+        <!-- 矢印＋データドット -->
+        <g class="hz-arrow">
+          <line class="hz-arrow-shaft" x1="404" y1="210" x2="452" y2="210"></line>
+          <polygon class="hz-arrow-head" points="452,210 438,202 438,218"></polygon>
+        </g>
+        <circle class="hz-flow hz-flowdot" cx="404" cy="210" r="5"></circle>
+
+        <!-- ===== 確認資料カード（自動出力） ===== -->
+        <g class="hz-card">
+          <rect class="hz-card-bg"   x="470" y="86" width="292" height="256" rx="8"></rect>
+          <rect class="hz-card-head" x="470" y="86" width="292" height="34" rx="8"></rect>
+          <text class="hz-cardtxt" x="486" y="108">📄 確認資料.pdf ＋ 変更レポート</text>
+
+          <!-- 変更1件（東→西） -->
+          <rect class="hz-row-ok" x="486" y="136" width="260" height="46" rx="6"></rect>
+          <text class="hz-cardtxt" x="500" y="158">東 → 西</text>
+          <text class="hz-cardsub" x="500" y="174">原点近傍・単独1文字 ／ 置換 1 件</text>
+          <path class="hz-okmark" d="M712,150 l6,7 l12,-15" fill="none" stroke="var(--ok)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+
+          <!-- 予定外変更 0件 -->
+          <rect class="hz-row-zero" x="486" y="192" width="260" height="42" rx="6"></rect>
+          <text class="hz-cardtxt" x="500" y="212">予定外の変更</text>
+          <text class="hz-cardsub" x="500" y="228">元データと自動照合 ／ 差分</text>
+          <text class="hz-cardtxt" x="730" y="217" text-anchor="end" fill="var(--ok)">0 件</text>
+
+          <!-- 変更箇所マーキング済みのミニ図面 -->
+          <rect class="hz-row-zero" x="486" y="244" width="260" height="80" rx="6"></rect>
+          <text class="hz-cardsub" x="500" y="262">変更箇所をマーキングしたPDFを同時出力</text>
+          <circle class="hz-ring" cx="516" cy="296" r="14"></circle>
+          <text class="hz-target" x="516" y="306" text-anchor="middle" fill="#f472b6" font-size="20">西</text>
+          <text class="hz-cardsub" x="544" y="300">← ここだけ変わりました</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="hz-cap hz-l1" x="400" y="430" text-anchor="middle">① 図面の中から方位記号を探す</text>
+        <text class="hz-cap hz-l2" x="400" y="430" text-anchor="middle">② 原点近傍の「単独1文字」だけを狙い撃ち（熟語は無視）</text>
+        <text class="hz-cap hz-l3" x="400" y="430" text-anchor="middle">③ 東→西に安全置換 ＋ 確認資料・変更レポートを自動出力</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">図面全体から方位記号を探し、原点近傍にある「単独1文字」だけにマゼンタの丸を付けて置換、変更した箇所と予定外変更ゼロを確認資料として自動出力する流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>図面（DXF / DWG / PDF）の中にある<strong>「東・西・南・北」の方位を示す1文字だけ</strong>を、まとめて別の方位へ書き換えるツールです。たとえば「東」を全部「西」に、「南」を「北」に——といった方位反転を、フォルダ内の図面に対して一括でかけられます。</p>
+    <p>いちばんの特徴は<strong>“サージカル（外科手術的）置換”</strong>。原点の近く（PDFの場合は用紙の左下エリア）にある<strong>単独の1文字だけ</strong>を対象にし、それ以外の文字・線・図形には一切手を触れません。だから「<span style="color:var(--sub)">東</span>立面図」のような<strong>熟語の中の「東」は書き換わりません</strong>。誤爆が命取りになる図面作業でも安心して使えるよう、置換後は<strong>元データと自動で差分照合</strong>し、「予定外の変更が起きていないか」のチェック結果と、変更箇所をマーキングした<strong>確認PDFを自動で出力</strong>します。</p>
+    <p class="lead">※ 方位反転が必要になる場面＝図面の向き（見上げ／見下ろし・鏡像配置）が変わったときなど。／ サージカル置換＝狙った1文字だけをバイト単位で差し替え、ファイル全体は極力そのまま保つやり方。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力（操作／結果） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>指定するもの・出てくるもの</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>指定する（入力）</caption>
+        <thead><tr><th>項目</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">対象の選択</td><td>フォルダまるごと、または個別ファイルを選ぶ。フォルダを選べば中の図面をまとめて処理。</td></tr>
+          <tr><td class="port">変換ルール</td><td>「東→西」「南→北」など、<strong>どの方位をどの方位へ</strong>変えるかを4つのチェックで指定。</td></tr>
+          <tr><td class="port">実行モード</td><td>下見だけ（プレビュー）か、実際に書き換えるかを選択。</td></tr>
+          <tr><td class="port">原点近傍の半径</td><td>「原点からどれくらいの範囲を方位記号とみなすか」の許容距離。狭めれば狙いがより厳密に。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>得られる（出力）</caption>
+        <thead><tr><th>成果物</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">修正済みファイル</td><td>方位1文字だけ書き換わった図面一式。他は元のまま。</td></tr>
+          <tr><td class="port">修正レポート</td><td>どのファイルの何を「東→西」に変えたかの一覧（CSV / TXT）。</td></tr>
+          <tr><td class="port">確認資料PDF</td><td>変更箇所をマーキングしたPDFと、<strong>予定外変更チェック</strong>の結果。目視確認用。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">ツールを起動する</span><span class="step-body">配布された <kbd>方位修正ツール.exe</kbd> を起動する（EXE版なのでPython環境は不要）。</span></li>
+      <li><span class="step-title">図面を選ぶ</span><span class="step-body">方位を直したい図面フォルダ、または個別のDXF / DWG / PDFを選択する。</span></li>
+      <li><span class="step-title">変換ルールを決める</span><span class="step-body">「東→西」「南→北」など、変えたい方位の組み合わせにチェックを入れる。</span></li>
+      <li><span class="step-title">まずプレビューで下見</span><span class="step-body">実行モードを下見にして走らせ、<strong>どの1文字が検出されたか</strong>を確認資料PDFで確認。狙いがずれていれば原点近傍の半径を調整。</span></li>
+      <li><span class="step-title">本実行する</span><span class="step-body">問題なければ本実行。修正済みファイルとレポート、確認PDFが出力される。</span></li>
+      <li><span class="step-title">予定外変更チェックを見る</span><span class="step-body">最後に<strong>「予定外の変更 0 件」</strong>になっているかを必ず確認。方位以外が動いていないことを担保する安全弁。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <p class="flow-solo">このツールは<b>単独で使えます</b>。図面ファイルを渡すだけで完結する、独立したユーティリティです（DWGを扱う際だけ、下記のODA File Converterが別途必要）。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 7. 実際に試す -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実際に試すには</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧭</span> 手元のDXF / PDF図面で試すのが手軽</span>
+      <p class="sample-desc">このツールは3Dモデル（.3dm）ではなく2Dの図面ファイルを扱うため、専用サンプルモデルはありません。方位記号の入ったDXFやPDFで試すのがおすすめです。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">テスト用にコピーを用意</span><span class="step-body">まず対象図面を<strong>別フォルダにコピー</strong>し、そのコピーで試す（原本はそのまま残す）。</span></li>
+        <li><span class="step-title">下見モードで検出を確認</span><span class="step-body">プレビューで走らせ、確認PDFで「原点近傍の1文字だけ」に丸が付いているかチェック。</span></li>
+        <li><span class="step-title">本実行して差分を確認</span><span class="step-body">本実行後、<strong>予定外変更チェック</strong>とマーキングPDFで、方位だけが変わったことを目視確認する。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> DWGを扱うには ODA File Converter が必要</div>
+        <p>DWGは直接編集できず、ODA File Converter を経由して変換します（EXEと同じ場所の <span class="port" style="color:var(--warn)">oda_path.txt</span> でパスを指定）。<strong>AutoCADのライセンス切れ環境やTrueViewでは保存不可</strong>のため、DWGを直したい場合はODAの導入を確認してください。DXF / PDFはそのまま扱えます。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 対象は「原点近傍・単独1文字」だけ</div>
+        <p>安全のため、<strong>原点の近くにある単独の1文字だけ</strong>を書き換えます。「東立面図」のような熟語内の「東」は<strong>意図的に無視</strong>されます（誤爆防止）。逆に、原点から離れた場所や複数文字と繋がった方位記号は<strong>拾われない</strong>ので、検出されなかったときはまず配置と原点近傍半径を疑ってください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> PDFは左下エリアの最近傍1件のみ</div>
+        <p>PDFの場合は用紙の<strong>左下エリアで最も原点に近い1件</strong>だけを対象にします。1枚のPDFに複数の方位記号があるレイアウトでは取りこぼしが出るので、確認PDFで検出箇所を必ずチェックしてください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 本実行の前に原本のバックアップを</div>
+        <p>予定外変更チェックという安全弁はありますが、書き換えは元ファイルに対して行われます。大事な納品図は<strong>実行前に別フォルダへ原本をコピー</strong>し、下見モードで検出を確認してから本実行するのが安全です。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\方位修正\<span class="fp-accent">translate_directions.py</span>（配布EXE＝方位修正\dist\方位修正ツール\方位修正ツール.exe）
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-rhino">Rhinoコマンド・配布ツールの一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

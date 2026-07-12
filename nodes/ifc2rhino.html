@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>IFC⇔Rhino変換 ifc2rhino — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス if2- で衝突回避
+   ①Teklaの.ifc（孔あき鉄骨）→ ②ifcopenshellで孔を壊さず変換＋属性焼込 → ③Rhino .3dm＋往復書戻し
+   ============================================================ */
+.if2-svg text { font-family: var(--font); }
+.if2-mono { font-family: "Cascadia Code", Consolas, monospace; }
+
+/* IFC書類 */
+.if2-doc   { fill: #14102a; stroke: var(--accent); stroke-width: 1.8; }
+.if2-fold  { fill: #241a45; stroke: var(--accent); stroke-width: 1.4; }
+.if2-doclbl{ fill: var(--accent); font-size: 14px; font-weight: 800; }
+
+/* 鉄骨部材（側面）＋ボルト孔 */
+.if2-beam  { fill: #0f1a30; stroke: var(--accent); stroke-width: 2; }
+.if2-flg   { stroke: var(--accent); stroke-width: 1.4; opacity: .7; }
+.if2-hole  { fill: #0a0e1c; stroke: var(--accent); stroke-width: 2; }
+.if2-holering { fill: none; stroke: var(--accent); stroke-width: 2; }
+
+/* 変換エンジン */
+.if2-eng   { fill: #120d26; stroke: var(--accent); stroke-width: 2.4; }
+.if2-englbl{ fill: #e6ecff; font-size: 13px; font-weight: 800; }
+.if2-engsub{ fill: #9aa7cc; font-size: 10.5px; font-weight: 600; }
+
+/* 結果（Rhinoモデル） */
+.if2-sheet { fill: #0c1428; stroke: var(--accent); stroke-width: 1.6; }
+.if2-beam2 { fill: #24406e; stroke: #7fb2ff; stroke-width: 1.8; }
+.if2-attr  { fill: #0b1428; stroke: var(--accent); stroke-width: 1.3; }
+.if2-attrtxt { fill: #e6ecff; font-size: 11px; font-weight: 700; }
+.if2-qc    { fill: color-mix(in srgb, var(--ok) 18%, #0b1428); stroke: var(--ok); stroke-width: 1.3; }
+.if2-qctxt { fill: var(--ok); font-size: 11px; font-weight: 800; }
+
+/* 矢印＋データドット */
+.if2-shaft { fill: none; stroke: var(--accent); stroke-width: 2.4; opacity: .82; }
+.if2-head  { fill: var(--accent); }
+.if2-dot   { fill: #ffffff; }
+
+/* 往復（書き戻し）アーク */
+.if2-ret   { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 7 5; opacity: .9; }
+.if2-retbox{ fill: #0b1020; stroke: var(--accent); stroke-width: 1.2; }
+.if2-rettxt{ fill: var(--accent); font-size: 11.5px; font-weight: 700; }
+
+/* テキスト */
+.if2-cap   { fill: #e6ecff; font-size: 16px; font-weight: 700; }
+.if2-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+.if2-note  { fill: var(--ok); font-size: 12px; font-weight: 800; }
+
+/* 進捗バー */
+.if2-prog-tr { fill: #223052; }
+.if2-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.if2-doc-g   { animation: if2Doc 10s infinite; }
+.if2-arr1    { animation: if2Arr1 10s infinite; }
+.if2-flow1   { animation: if2Flow1 10s infinite; }
+.if2-eng-g   { animation: if2Eng 10s infinite; }
+.if2-pulse   { animation: if2Pulse 10s infinite; }
+.if2-arr2    { animation: if2Arr2 10s infinite; }
+.if2-flow2   { animation: if2Flow2 10s infinite; }
+.if2-res-g   { animation: if2Res 10s infinite; }
+.if2-ret-g   { animation: if2Ret 10s infinite; }
+.if2-l1      { animation: if2L1 10s infinite; }
+.if2-l2      { animation: if2L2 10s infinite; }
+.if2-l3      { animation: if2L3 10s infinite; }
+.if2-prog    { animation: if2Prog 10s linear infinite; }
+
+@keyframes if2Doc {
+  0%,2%  { opacity: 0; transform: translateY(6px); }
+  8%     { opacity: 1; transform: translateY(0); }
+  100%   { opacity: 1; transform: translateY(0); }
+}
+@keyframes if2Arr1 { 0%,22%{opacity:0} 28%{opacity:1} 100%{opacity:1} }
+@keyframes if2Flow1 {
+  0%,23%   { opacity: 0; transform: translateX(0); }
+  27%      { opacity: 1; transform: translateX(0); }
+  37%      { opacity: 1; transform: translateX(78px); }
+  40%,100% { opacity: 0; transform: translateX(78px); }
+}
+@keyframes if2Eng { 0%,30%{opacity:0} 40%{opacity:1} 100%{opacity:1} }
+@keyframes if2Pulse {
+  0%,38%   { opacity: 0; transform: scale(1); }
+  46%      { opacity: .9; transform: scale(1); }
+  54%      { opacity: 0; transform: scale(1.9); }
+  100%     { opacity: 0; transform: scale(1.9); }
+}
+@keyframes if2Arr2 { 0%,52%{opacity:0} 58%{opacity:1} 100%{opacity:1} }
+@keyframes if2Flow2 {
+  0%,53%   { opacity: 0; transform: translateX(0); }
+  57%      { opacity: 1; transform: translateX(0); }
+  67%      { opacity: 1; transform: translateX(78px); }
+  70%,100% { opacity: 0; transform: translateX(78px); }
+}
+@keyframes if2Res {
+  0%,58%  { opacity: 0; transform: translateY(6px); }
+  70%     { opacity: 1; transform: translateY(0); }
+  100%    { opacity: 1; transform: translateY(0); }
+}
+@keyframes if2Ret {
+  0%,80%  { opacity: 0; }
+  88%     { opacity: 1; }
+  97%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes if2L1 { 0%{opacity:0} 4%{opacity:1} 26%{opacity:1} 31%{opacity:0} 100%{opacity:0} }
+@keyframes if2L2 { 0%,31%{opacity:0} 35%{opacity:1} 55%{opacity:1} 59%{opacity:0} 100%{opacity:0} }
+@keyframes if2L3 { 0%,59%{opacity:0} 63%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes if2Prog { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ifc">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">IFC・データ連携</span>
+    <h1 class="node-title">IFC⇔Rhino変換 <span style="opacity:.75;font-weight:700">ifc2rhino</span></h1>
+    <p class="catch">Teklaの<span class="em">孔を壊さず</span>Rhinoへ丸ごと持ち込み、<span class="em">属性ごとIFCへ書き戻す</span>——IFC変換の本命。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-dist">チーム配布済</span>
+      <span class="badge st-ver">Rhino8 / ifcopenshell</span>
+      <span class="badge st-ver">IFCIMP・IFCINFO・IFCEXPORT</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg if2-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="孔あきIFCを孔を壊さずRhinoへ変換し属性を焼き込みIFCへ書き戻すアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="if2-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="if2-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① Tekla の .ifc（孔あき鉄骨） ===== -->
+        <g class="if2-doc-g">
+          <rect class="if2-doc" x="66" y="150" width="150" height="176" rx="8"></rect>
+          <polygon class="if2-fold" points="192,150 216,174 192,174"></polygon>
+          <text class="if2-mono if2-doclbl" x="86" y="182">.ifc</text>
+          <!-- 部材（側面）＋ボルト孔 -->
+          <rect class="if2-beam" x="86" y="238" width="110" height="40" rx="3"></rect>
+          <line class="if2-flg" x1="86" y1="246" x2="196" y2="246"></line>
+          <line class="if2-flg" x1="86" y1="270" x2="196" y2="270"></line>
+          <circle class="if2-holering" cx="116" cy="258" r="8"></circle>
+          <circle class="if2-holering" cx="166" cy="258" r="8"></circle>
+          <text class="if2-small" x="141" y="308" text-anchor="middle">孔あき鉄骨</text>
+        </g>
+
+        <!-- 矢印①→② -->
+        <g class="if2-arr1">
+          <line class="if2-shaft" x1="222" y1="256" x2="298" y2="256"></line>
+          <polygon class="if2-head" points="300,256 288,249 288,263"></polygon>
+        </g>
+        <circle class="if2-flow1 if2-dot" cx="222" cy="256" r="5"></circle>
+
+        <!-- ===== ② 変換エンジン（ifcopenshell / OCC） ===== -->
+        <g class="if2-eng-g">
+          <text class="if2-note" x="396" y="164" text-anchor="middle">孔 無破綻 ✓</text>
+          <rect class="if2-eng" x="322" y="176" width="148" height="112" rx="16"></rect>
+          <text class="if2-englbl" x="396" y="216" text-anchor="middle">ifcopenshell</text>
+          <text class="if2-engsub" x="396" y="234" text-anchor="middle">OpenCASCADE カーネル</text>
+          <!-- 通過する部材＋孔（孔が保持される） -->
+          <rect class="if2-beam" x="336" y="248" width="120" height="26" rx="3"></rect>
+          <circle class="if2-hole" cx="368" cy="261" r="7"></circle>
+          <circle class="if2-hole" cx="424" cy="261" r="7"></circle>
+          <!-- 孔を保持していることを強調するパルス -->
+          <circle class="if2-holering if2-pulse" cx="368" cy="261" r="7" style="transform-box:fill-box;transform-origin:center"></circle>
+          <circle class="if2-holering if2-pulse" cx="424" cy="261" r="7" style="transform-box:fill-box;transform-origin:center"></circle>
+        </g>
+
+        <!-- 矢印②→③ -->
+        <g class="if2-arr2">
+          <line class="if2-shaft" x1="474" y1="256" x2="550" y2="256"></line>
+          <polygon class="if2-head" points="552,256 540,249 540,263"></polygon>
+        </g>
+        <circle class="if2-flow2 if2-dot" cx="474" cy="256" r="5"></circle>
+
+        <!-- ===== ③ Rhino .3dm（属性＋QC） ===== -->
+        <g class="if2-res-g">
+          <rect class="if2-sheet" x="556" y="150" width="184" height="176" rx="8"></rect>
+          <!-- 属性チップ -->
+          <rect class="if2-attr" x="566" y="160" width="164" height="24" rx="12"></rect>
+          <text class="if2-mono if2-attrtxt" x="648" y="176" text-anchor="middle">GlobalId · Pset · 数量</text>
+          <!-- 色分け部材＋孔 -->
+          <rect class="if2-beam2" x="578" y="234" width="140" height="40" rx="3"></rect>
+          <circle class="if2-hole" cx="612" cy="254" r="8"></circle>
+          <circle class="if2-hole" cx="684" cy="254" r="8"></circle>
+          <!-- QCバッジ -->
+          <rect class="if2-qc" x="596" y="290" width="108" height="24" rx="12"></rect>
+          <text class="if2-qctxt" x="650" y="306" text-anchor="middle">QC ✓ 重量一致</text>
+        </g>
+
+        <!-- ===== 往復（IFCEXPORT: .3dm → .ifc） ===== -->
+        <g class="if2-ret-g">
+          <path class="if2-ret" d="M632,322 C560,392 300,396 152,326"></path>
+          <polygon class="if2-head" points="150,326 162,320 165,334"></polygon>
+          <rect class="if2-retbox" x="326" y="382" width="150" height="22" rx="11"></rect>
+          <text class="if2-mono if2-rettxt" x="401" y="397" text-anchor="middle">IFCEXPORT  .3dm→.ifc</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="if2-cap if2-l1" x="400" y="428" text-anchor="middle">① Tekla等の .ifc（孔あき鉄骨）を読む</text>
+        <text class="if2-cap if2-l2" x="400" y="428" text-anchor="middle">② 孔を壊さず変換 ＋ IFC属性を焼き込む</text>
+        <text class="if2-cap if2-l3" x="400" y="428" text-anchor="middle">③ Rhino .3dm へ／IFCへ往復書き戻し</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">孔あきのIFCを孔を壊さず変換 → 属性を焼き込んでRhinoへ → 編集後はIFCへ往復書き戻し、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>Tekla等が書き出したIFCファイルを、<strong>ボルト孔や切欠きを壊さずにRhino8へ取り込む「IFC→3dm変換の本命」</strong>です。ifcopenshell（OpenCASCADEカーネル）でIFCのブーリアン演算を直接解くので、Rhino標準の取込プラグインで起きがちな「孔がふさがる／形が破綻する」が起きません。</p>
+    <p>取り込んだ部材は<strong>メッシュ＋ブロック（Teklaアセンブリ）＋IFC属性（GlobalId・Pset・数量など）付き</strong>でベイクされます。属性は <span class="port" style="color:var(--accent)">IFCINFO</span> で部材をクリックするだけで一覧表示。編集後は <span class="port" style="color:var(--accent)">IFCEXPORT</span> で.3dmを再びIFC（IFC2X3/IFC4）へ書き戻せて、<strong>IFC→3dm→IFCの往復でも情報が保持</strong>されます。変換のたびにQCレポート（HTML）が自動生成され、孔破綻や重量照合を確認できます。</p>
+    <p class="lead">※ <strong>IFCIMP</strong>＝取込／<strong>IFCINFO</strong>＝属性ビューア／<strong>IFCEXPORT</strong>＝書き戻し の3コマンド一式（Rhino8専用・Rhino7では動きません）。焼き込んだ属性はそのまま <a href="ifc-attr-search-v2.html">ifc_attr_search_v2</a> の検索対象になり、Make2Dパイプラインへつながります。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>コマンドと入出力</h2>
+    <div class="io-scroll"><table class="io-table" style="margin-bottom:20px">
+      <caption>3つのコマンド（＋無人バッチ）</caption>
+      <thead><tr><th>コマンド</th><th>はたらき</th></tr></thead>
+      <tbody>
+        <tr><td class="port">IFCIMP</td><td>.ifc を選んで現在のRhinoドキュメントへ取込。<strong>孔無破綻・ブロック化・属性焼込</strong>、QCレポートを自動表示。</td></tr>
+        <tr><td class="port">IFCINFO</td><td>変換済みの部材をクリックして<strong>全IFC属性を一覧表示</strong>（フィルタ・TSVコピー対応）。</td></tr>
+        <tr><td class="port">IFCEXPORT</td><td>.3dm を IFC（IFC2X3/IFC4）へ<strong>逆変換</strong>。スキーマ・出力レイヤーを選び、属性を書き戻す。</td></tr>
+        <tr><td class="port">IFC変換_ドロップ.bat</td><td>.ifc をドラッグ → ヘッドレスRhinoで<strong>無人変換</strong> → 同名.3dmを保存。</td></tr>
+        <tr><td class="port">IFC変換_CLI.bat</td><td>Rhino不要のCLI変換（同梱venv312・rhino3dm）。※こちらは<strong>ブロック化なし</strong>のフラット出力。</td></tr>
+      </tbody>
+    </table></div>
+    <div class="io-scroll"><table class="io-table">
+      <caption>ファイルの入出力</caption>
+      <thead><tr><th>入力</th><th>出力</th></tr></thead>
+      <tbody>
+        <tr><td class="port">.ifc（Tekla等）</td><td>.3dm（メッシュ＋ブロック＋属性UserText）＋ <span class="port" style="color:var(--accent)">&lt;名前&gt;_QC.html</span></td></tr>
+        <tr><td class="port">.3dm（属性UserText付き）</td><td>.ifc（IFC2X3 / IFC4）— 逆変換で属性を復元</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">初回セットアップ</span><span class="step-body"><span class="if2-mono">setup_aliases.py</span> をRhino8にドラッグ&ドロップ実行。<kbd>IFCIMP</kbd>/<kbd>IFCINFO</kbd>/<kbd>IFCEXPORT</kbd> のエイリアスとツールバーが登録されます（冪等・配置場所を自動検出）。</span></li>
+      <li><span class="step-title">取り込む</span><span class="step-body">Rhinoで <kbd>IFCIMP</kbd> → .ifc選択 → 現在ドキュメントへベイク。QCレポートが自動で開きます。大量なら .ifc を <span class="if2-mono">IFC変換_ドロップ.bat</span> にドラッグして無人変換。</span></li>
+      <li><span class="step-title">中身を確認する</span><span class="step-body"><kbd>IFCINFO</kbd> で部材クリック → GlobalId/Pset/数量などを一覧。QCレポートで孔破綻や<strong>重量照合（誤差5%閾値）</strong>をチェック。</span></li>
+      <li><span class="step-title">パイプラインへ</span><span class="step-body">焼き込まれた属性は <a href="ifc-attr-search-v2.html">ifc_attr_search_v2</a> の検索対象。本体／附帯を仕分けてMake2Dへ渡せます。</span></li>
+      <li><span class="step-title">IFCへ書き戻す</span><span class="step-body">編集後 <kbd>IFCEXPORT</kbd> → スキーマ（IFC4推奨）・出力レイヤーを選んで .ifc 出力。<strong>往復で属性が保持</strong>されます。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="chip chip-self">ifc2rhino（このツール）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="ifc-attr-search-v2.html">IFC属性検索 ifc_attr_search_v2</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">前段にIFCの結合・スキーマ変換（<a href="join-ifc-model.html">Join_IFC_model</a> / <a href="ifc-converter.html">IFC_Converter</a> 等）を置くこともできます。取り込んだ属性はMake2Dパイプライン全体で活用されます。</p>
+  </div>
+</section>
+
+<!-- 7. 実データでの使いどころ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実データでの使いどころ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧱</span> Tekla IFC → Rhinoで検図・製作図化</span>
+      <p class="sample-desc">TeklaのIFC（Bolts:Off想定）をRhinoへ取り込み、属性ごと検図してMake2Dで製作図に落とす、という実運用の流れです。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">IFCを書き出す</span><span class="step-body">TeklaからIFC（IFC2X3/IFC4）を書き出します。</span></li>
+        <li><span class="step-title">.3dm化して確認</span><span class="step-body"><kbd>IFCIMP</kbd> または ドロップ.bat で.3dm化。QCレポートで孔・重量照合を確認。</span></li>
+        <li><span class="step-title">仕分けて製作図へ</span><span class="step-body"><kbd>IFCINFO</kbd>で属性確認 → <a href="ifc-attr-search-v2.html">ifc_attr_search_v2</a> で本体/附帯を仕分け → Make2Dで製作図化。</span></li>
+        <li><span class="step-title">IFCへ往復</span><span class="step-body">修正が出たら <kbd>IFCEXPORT</kbd> でIFCへ書き戻し、上流と往復します。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> CLI版はブロック化できない（rhino3dmのバグ）</div>
+        <p>CLI版は rhino3dm の <span class="if2-mono">InstanceDefinitionTable.Add</span> に<strong>ヒープ破壊バグ</strong>があるため、ブロック化なしのフラット出力専用です。ブロック（アセンブリ）が要るときは<strong>必ずRhino8内の <kbd>IFCIMP</kbd></strong> を使ってください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Rhino8専用（Rhino7非対応）</div>
+        <p>Rhino7では動きません。フォルダ内の <span class="if2-mono">IFC.7.rui</span> は出所不明の副生成物の疑いで、どのスクリプトからも参照されていません（削除前に一応確認を）。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 属性抽出ロジックが3ファイルに重複</div>
+        <p><span class="if2-mono">ifc_import_rhino.py / ifc2rhino.py / ifc_export_core.py</span> にほぼ同じ属性抽出ロジックが重複実装されています。仕様を直すときは<strong>3ファイル横断</strong>で確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> venv312 は依存一式で4000ファイル超</div>
+        <p>同梱の <span class="if2-mono">venv312</span> はifcopenshell等の依存で非常に多数のファイルを含みます。フォルダ移動やバックアップは重くなるので、扱うときは直下の.pyだけを対象にするのがコツです。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\ifc2rhino\<span class="fp-accent">ifc_import_rhino.py</span>（IFCIMP／ほか ifc_info_inspector.py・ifc_export_core.py・ifc2rhino.py）
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ifc">IFC・データ連携の一覧</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

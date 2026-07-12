@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>通り芯一括抽出 grid_extractor_v2 — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス gex- で衝突回避
+   ①2D図面の通り芯記号 → ②Runで自動抽出（緑ハイライト） → ③手動追加を橙で補完
+   ============================================================ */
+.gex-svg text { font-family: var(--font); }
+
+/* 図面シート */
+.gex-sheet-bg    { fill: #0c1428; }
+.gex-sheet-frame { fill: none; stroke: #34406a; stroke-width: 1.6; }
+/* 図面のノイズ（部材線・図枠）＝拾ってはいけない線 */
+.gex-noise       { fill: none; stroke: #46527e; stroke-width: 1.4; opacity: .55; }
+.gex-noise-box   { fill: #0f1830; stroke: #46527e; stroke-width: 1.2; opacity: .5; }
+
+/* 通り芯（一点鎖線）＋符号円＋名称 */
+.gex-grid    { fill: none; stroke: #7f8dbe; stroke-width: 1.5;
+               stroke-dasharray: 12 4 3 4; opacity: .85; }
+.gex-sym     { fill: #0c1428; stroke: #8291c0; stroke-width: 1.8; }
+.gex-symtxt  { fill: #cfd7f2; font-size: 13px; font-weight: 800; }
+
+/* 自動抽出ハイライト（緑） */
+.gex-hit-ring { fill: none; stroke: var(--ok); stroke-width: 3.2; }
+.gex-hit-line { fill: none; stroke: var(--ok); stroke-width: 2.6; opacity: .9;
+                stroke-dasharray: 200; }
+/* 手動追加ハイライト（橙） */
+.gex-add-ring { fill: none; stroke: #fb923c; stroke-width: 3.2; }
+.gex-add-line { fill: none; stroke: #fb923c; stroke-width: 2.6; stroke-dasharray: 200; }
+.gex-add-badge{ fill: #fb923c; }
+.gex-add-btxt { fill: #241203; font-size: 10px; font-weight: 800; }
+
+/* Runボタン */
+.gex-btn      { fill: var(--accent); }
+.gex-btn-txt  { fill: #06202a; font-size: 13px; font-weight: 800; }
+
+/* テキスト */
+.gex-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.gex-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.gex-prog-tr { fill: #223052; }
+.gex-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.gex-btn-g  { animation: gexBtn 10s infinite; }
+.gex-h1 { animation: gexHit 10s infinite; }
+.gex-h2 { animation: gexHit 10s infinite; animation-delay: .2s; }
+.gex-h3 { animation: gexHit 10s infinite; animation-delay: .4s; }
+.gex-h4 { animation: gexHit 10s infinite; animation-delay: .6s; }
+.gex-hline { animation: gexHitLine 10s infinite; }
+.gex-add-g { animation: gexAdd 10s infinite; }
+.gex-addline { animation: gexAddLine 10s infinite; }
+.gex-prog  { animation: gexProg 10s linear infinite; }
+.gex-l1 { animation: gexL1 10s infinite; }
+.gex-l2 { animation: gexL2 10s infinite; }
+.gex-l3 { animation: gexL3 10s infinite; }
+
+/* Runボタン: 前半で押される */
+@keyframes gexBtn {
+  0%,3%   { opacity: 0; }
+  8%      { opacity: 1; }
+  30%     { opacity: 1; transform: scale(1); }
+  33%     { transform: scale(.9); }
+  36%     { transform: scale(1); }
+  48%,100%{ opacity: .35; }
+}
+/* 符号円が緑にポップハイライト */
+@keyframes gexHit {
+  0%,33%  { opacity: 0; transform: scale(.5); }
+  40%     { opacity: 1; transform: scale(1.25); }
+  46%     { transform: scale(1); }
+  100%    { opacity: 1; transform: scale(1); }
+}
+/* 通り芯線が緑に染まって伸びる */
+@keyframes gexHitLine {
+  0%,36%  { opacity: 0; stroke-dashoffset: 200; }
+  44%     { opacity: .9; }
+  56%     { opacity: .9; stroke-dashoffset: 0; }
+  100%    { opacity: .9; stroke-dashoffset: 0; }
+}
+/* 手動追加（橙）が後半に登場 */
+@keyframes gexAdd {
+  0%,64%  { opacity: 0; transform: scale(.5); }
+  72%     { opacity: 1; transform: scale(1.25); }
+  77%     { transform: scale(1); }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes gexAddLine {
+  0%,66%  { opacity: 0; stroke-dashoffset: 200; }
+  78%     { opacity: .9; stroke-dashoffset: 0; }
+  96%     { opacity: .9; }
+  100%    { opacity: 0; }
+}
+@keyframes gexProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+@keyframes gexL1 { 0%{opacity:0} 5%{opacity:1} 28%{opacity:1} 33%{opacity:0} 100%{opacity:0} }
+@keyframes gexL2 { 0%,33%{opacity:0} 40%{opacity:1} 60%{opacity:1} 64%{opacity:0} 100%{opacity:0} }
+@keyframes gexL3 { 0%,64%{opacity:0} 71%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">通り芯一括抽出 <span style="opacity:.75;font-weight:700">grid_extractor_v2</span></h1>
+    <p class="catch">図面の<span class="em">通り芯（X1・Y3…）</span>を、ブロックの内も外も<span class="em">まとめて自動で拾う</span>。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">v2（手動追加・除外対応）</span>
+      <span class="badge st-ver">GH Python ノード</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg gex-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="図面の通り芯記号を自動抽出し手動追加を橙で補うアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="gex-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="gex-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- 図面シート -->
+        <rect class="gex-sheet-bg"    x="70" y="60" width="660" height="320" rx="6"></rect>
+        <rect class="gex-sheet-frame" x="70" y="60" width="660" height="320" rx="6"></rect>
+        <rect class="gex-sheet-frame" x="82" y="72" width="636" height="296"></rect>
+
+        <!-- 拾ってはいけないノイズ（図枠・部材線・表） -->
+        <rect class="gex-noise-box" x="560" y="300" width="150" height="58"></rect>
+        <line class="gex-noise" x1="560" y1="322" x2="710" y2="322"></line>
+        <line class="gex-noise" x1="150" y1="330" x2="470" y2="330"></line>
+        <line class="gex-noise" x1="150" y1="345" x2="470" y2="345"></line>
+
+        <!-- 通り芯（縦3本 X1 X2 X3・横2本 Y1 Y2）＝一点鎖線 -->
+        <line class="gex-grid" x1="180" y1="96" x2="180" y2="300"></line>
+        <line class="gex-grid" x1="320" y1="96" x2="320" y2="300"></line>
+        <line class="gex-grid" x1="460" y1="96" x2="460" y2="300"></line>
+        <line class="gex-grid" x1="150" y1="150" x2="520" y2="150"></line>
+        <line class="gex-grid" x1="150" y1="240" x2="520" y2="240"></line>
+
+        <!-- 緑ハイライトになる通り芯線（自動抽出の可視化） -->
+        <g class="gex-hline">
+          <line class="gex-hit-line" pathLength="200" x1="180" y1="96" x2="180" y2="300"></line>
+          <line class="gex-hit-line" pathLength="200" x1="320" y1="96" x2="320" y2="300"></line>
+          <line class="gex-hit-line" pathLength="200" x1="150" y1="150" x2="520" y2="150"></line>
+          <line class="gex-hit-line" pathLength="200" x1="150" y1="240" x2="520" y2="240"></line>
+        </g>
+
+        <!-- 符号円＋名称（常時表示） -->
+        <g><circle class="gex-sym" cx="180" cy="96" r="15"></circle><text class="gex-symtxt" x="180" y="101" text-anchor="middle">X1</text></g>
+        <g><circle class="gex-sym" cx="320" cy="96" r="15"></circle><text class="gex-symtxt" x="320" y="101" text-anchor="middle">X2</text></g>
+        <g><circle class="gex-sym" cx="460" cy="96" r="15"></circle><text class="gex-symtxt" x="460" y="101" text-anchor="middle">X3</text></g>
+        <g><circle class="gex-sym" cx="132" cy="150" r="15"></circle><text class="gex-symtxt" x="132" y="155" text-anchor="middle">Y1</text></g>
+        <g><circle class="gex-sym" cx="132" cy="240" r="15"></circle><text class="gex-symtxt" x="132" y="245" text-anchor="middle">Y2</text></g>
+
+        <!-- 自動抽出の緑リング（4本ぶん・X3は手動追加のため対象外） -->
+        <g class="gex-h1"  style="transform-box:fill-box;transform-origin:center"><circle class="gex-hit-ring" cx="180" cy="96" r="18"></circle></g>
+        <g class="gex-h2"  style="transform-box:fill-box;transform-origin:center"><circle class="gex-hit-ring" cx="320" cy="96" r="18"></circle></g>
+        <g class="gex-h3"  style="transform-box:fill-box;transform-origin:center"><circle class="gex-hit-ring" cx="132" cy="150" r="18"></circle></g>
+        <g class="gex-h4"  style="transform-box:fill-box;transform-origin:center"><circle class="gex-hit-ring" cx="132" cy="240" r="18"></circle></g>
+
+        <!-- Runボタン -->
+        <g class="gex-btn-g" style="transform-box:fill-box;transform-origin:center">
+          <rect class="gex-btn" x="612" y="96" width="96" height="34" rx="8"></rect>
+          <text class="gex-btn-txt" x="660" y="118" text-anchor="middle">Run ▶</text>
+        </g>
+
+        <!-- 手動追加（橙）: X3は自動で拾い漏れた想定 → AddIdsで橙追加 -->
+        <g class="gex-addline">
+          <line class="gex-add-line" pathLength="200" x1="460" y1="96" x2="460" y2="300"></line>
+        </g>
+        <g class="gex-add-g" style="transform-box:fill-box;transform-origin:center">
+          <circle class="gex-add-ring" cx="460" cy="96" r="18"></circle>
+          <rect class="gex-add-badge" x="486" y="84" width="120" height="22" rx="11"></rect>
+          <text class="gex-add-btxt" x="496" y="99">＋ AddIds で手動追加</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="gex-cap gex-l1" x="400" y="428" text-anchor="middle">① 通り芯記号が散らばった2D図面</text>
+        <text class="gex-cap gex-l2" x="400" y="428" text-anchor="middle">② Runで通り芯を自動抽出（緑でハイライト）</text>
+        <text class="gex-cap gex-l3" x="400" y="428" text-anchor="middle">③ 拾い漏れは AddIds で橙に手動追加</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">図面上の通り芯記号（X1・X2…）をRunで一括抽出して緑でハイライトし、自動で拾い漏れた通り芯だけを手動追加で橙に補う、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>2D図面から<strong>通り芯（X1・Y3などの基準線）を一気に拾い出す</strong>ツールです。通り芯の「名称（記号円の中の文字）」「基準点」「符号を囲む円」「一点鎖線」をセットで抽出します。図面のなかで通り芯が<strong>ブロックの中に入っていても、ブロックの外に生テキストで置かれていても、どちらも拾える</strong>のが強みです。</p>
+    <p>自動抽出は賢いルール（記号円は「文字を含む最小の閉曲線」、通り芯線は「端点が記号のそばにある最長の直線」）で誤検知を防ぎますが、図面によっては取りこぼしや誤りが出ます。そこで <span class="port" style="color:var(--accent)">AddIds</span>（手動追加）と <span class="port" style="color:var(--accent)">DelIds</span>（手動除外）の端子を用意し、<strong>最終結果 ＝ (自動抽出 ∪ 手動追加) − 手動除外</strong> という形で人が仕上げられます。ここで拾った通り芯は、下流の <a href="section-data-json.html">統合JSON生成</a> に渡って、Make2Dの位置合わせの基準になります。</p>
+    <p class="lead">※ 通り芯＝建物の基準となる縦横のライン（X1, X2… / Y1, Y2…）。図面の位置合わせの「座標の目盛り」に当たります。／ ブロック＝図形をひとかたまりにまとめた部品。中に文字や線が入っていると通常の抽出では拾いにくくなります。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Run</td><td>自動抽出を実行する。押した時だけスキャンし、結果はstickyに保持（Run=Falseでも前回結果を出し続ける）。重い再スキャンを避けるため <kbd>Button</kbd> 推奨。</td></tr>
+          <tr><td class="port">AddIds</td><td>手動で追加したい通り芯のGUID。判定フィルタを通さず<strong>強制追加</strong>する。自動で拾えなかった通り芯のレスキュー用。<a href="touch-finder.html">touch_picker</a> の出力を接続するのが定番。</td></tr>
+          <tr><td class="port">DelIds</td><td>手動で除外したい通り芯のGUID。構成要素（ブロック／文字／円／線）のどれを選んでも、一致するエントリごと除外される。</td></tr>
+          <tr><td class="port">Reset</td><td>任意。保持している自動結果とキャッシュを破棄する（<kbd>Button</kbd>）。</td></tr>
+          <tr><td class="port">Highlight</td><td>任意。未接続＝ノード選択中だけ光る（GH標準プレビュー感覚）／True＝常時表示／False＝非表示。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">grid_names</td><td>通り芯の名称（"X1" "Y3" など）。</td></tr>
+          <tr><td class="port">grid_points</td><td>各通り芯の基準点（記号円の中心）。</td></tr>
+          <tr><td class="port">grid_lines</td><td>通り芯の一点鎖線（円・直線）。DataTreeで明示リスト化され、下流でそのまま使える。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <p class="lead" style="margin-top:14px">抽出結果はRhinoのビューポートにもハイライト表示されます（自動＝緑・手動追加＝橙。円と直線は太線、基準点は丸マーカー）。</p>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">図面を開いてノードを置く</span><span class="step-body">通り芯記号が入った2D図面をRhinoで開き、GHにこのノードを配置する。</span></li>
+      <li><span class="step-title">Runで自動抽出</span><span class="step-body"><span class="port" style="color:var(--accent)">Run</span> に <kbd>Button</kbd> を付けて押す。通り芯が緑でハイライトされ、名称・基準点・線が出力される。</span></li>
+      <li><span class="step-title">結果を目で確認</span><span class="step-body">ビューポートの緑ハイライトを見て、拾い漏れ・誤検知がないかチェックする。</span></li>
+      <li><span class="step-title">取りこぼしを手動追加</span><span class="step-body">拾えなかった通り芯があれば、<a href="touch-finder.html">touch_picker</a> でGUIDを拾って <span class="port" style="color:var(--accent)">AddIds</span> へ流す（橙で追加表示）。誤った関連付けも、正しい線を選んでAddIdsに入れると上書きできる。</span></li>
+      <li><span class="step-title">余計なものを手動除外</span><span class="step-body">通り芯でないものを拾っていたら、2個目のピッカーで選んで <span class="port" style="color:var(--accent)">DelIds</span> へ。除外が最優先で効く。</span></li>
+      <li><span class="step-title">統合JSONへ渡す</span><span class="step-body">仕上がった通り芯を <a href="section-data-json.html">GH_SectionDataJSON</a> に接続し、断面符号・レベル線と束ねて統合JSONにする。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <span class="flow-solo">なし（<b>2D図面から直接</b>抽出する起点ノード）</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">grid_extractor_v2（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="section-data-json.html">統合JSON生成 GH_SectionDataJSON</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">通り芯・断面符号・レベル線が <a href="section-data-json.html">統合JSON</a> に集まり、そこから <a href="make2d-planner.html">プランナー</a> が切断計画を作ります。全体像は <a href="../pipeline.html">Make2Dパイプライン詳細図</a> へ。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">📐</span> サンプルモデル\02_2D図面.3dm</span>
+      <p class="sample-desc">通り芯記号（X1, X2, Y1…）・断面符号（A-A）・タイトル文字入りの2D図面。通り芯抽出・断面符号抽出・統合JSONのデモ用。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">図面を開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\02_2D図面.3dm</span> を開く。</span></li>
+        <li><span class="step-title">ノードを置いてRun</span><span class="step-body">GHにこのノードを置き、<span class="port" style="color:var(--accent)">Run</span> のボタンを押す。X1・X2・Y1などが緑でハイライトされる。</span></li>
+        <li><span class="step-title">出力を確認</span><span class="step-body"><span class="port" style="color:var(--accent)">grid_names</span> にX1/X2/Y1…が並び、<span class="port" style="color:var(--accent)">grid_points</span> に各基準点が出ることを確認。</span></li>
+        <li><span class="step-title">手動追加を試す</span><span class="step-body">わざと1本を除外→AddIdsで戻す、を試すと「自動∪追加−除外」の効き方が体感できる。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Runは必ずButtonで（solve中のモーダル選択はフリーズの元）</div>
+        <p>自動スキャンは重いので <span class="port" style="color:var(--accent)">Run</span> は<strong>Button</strong>にして、押した時だけ走らせます。選択UI（ピック）は本体に持たせず、<a href="touch-finder.html">touch_picker</a> を別に置いて <span class="port" style="color:var(--accent)">AddIds</span>/<span class="port" style="color:var(--accent)">DelIds</span> に接続する構成が推奨。solve中のモーダル選択はフリーズの原因になります。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> ブロック内の長い横線を通り芯と誤認しやすい</div>
+        <p>断面詳細が丸ごとブロック化されたリスト図などでは、ブロック内の長い横線を通り芯線と誤認して交点が全滅することがありました。v2では「線＝端点が記号のそばにある最長の直線」というルールで対策済みですが、変な線を拾ったら <span class="port" style="color:var(--accent)">DelIds</span> で外し、正しい線を <span class="port" style="color:var(--accent)">AddIds</span> で差し替えてください（手動が自動を上書きします）。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 結果はドキュメント単位で保持</div>
+        <p>抽出結果は「このコンポーネント × このドキュメント」ごとに保持されます。図面を開き直すと「未計算」に戻るので、もう一度 <span class="port" style="color:var(--accent)">Run</span> を押してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\図面整理\<span class="fp-accent">grid_extractor_v2.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>切断プレプロセッサ GH_Make2DPreCut — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス m2dpc- で衝突回避
+   ①モデルを直接わたす（統合JSON不要）
+   → ②半透明の切断面をスッと差し込む
+   → ③矢視方向に断面線＋背景＋CutInfo を出力
+   ============================================================ */
+.m2dpc-svg text { font-family: var(--font); }
+
+/* モデル（柱梁フレーム） */
+.m2dpc-mem   { fill: #0f1a30; stroke: var(--accent); stroke-width: 2.2; }
+.m2dpc-back  { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: .28; }
+.m2dpc-depth { fill: none; stroke: var(--accent); stroke-width: 1.2; opacity: .35; }
+.m2dpc-base  { stroke: #6f7db0; stroke-width: 2; }
+
+/* 差し込む切断面 */
+.m2dpc-cutface { fill: var(--accent); opacity: .15; }
+.m2dpc-cutedge { fill: none; stroke: var(--accent); stroke-width: 3; }
+
+/* 生成される断面線（太線） */
+.m2dpc-sec { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round;
+             stroke-dasharray: 100; }
+.m2dpc-hatch { stroke: var(--accent); stroke-width: 1.8; }
+
+/* 背景ジオメトリ（薄く残る） */
+.m2dpc-bg { fill: none; stroke: #9aa7cc; stroke-width: 1.6; opacity: .45; }
+
+/* 矢視の矢印 */
+.m2dpc-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.6; }
+.m2dpc-arrow-head  { fill: var(--accent); }
+
+/* タグ */
+.m2dpc-tag-box { fill: #0b1428; stroke: var(--accent); stroke-width: 1.4; }
+.m2dpc-tagtxt  { fill: #e6ecff; font-size: 12.5px; font-weight: 700; }
+.m2dpc-chip    { fill: var(--accent); }
+
+/* テキスト */
+.m2dpc-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.m2dpc-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.m2dpc-prog-tr { fill: #223052; }
+.m2dpc-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.m2dpc-model { animation: m2dpcModel 10s infinite; }
+.m2dpc-cut   { animation: m2dpcCut   10s infinite; }
+.m2dpc-sec   { animation: m2dpcSec   10s infinite; }
+.m2dpc-bg    { animation: m2dpcBg    10s infinite; }
+.m2dpc-arrow { animation: m2dpcArrow 10s infinite; }
+.m2dpc-tag   { animation: m2dpcTag   10s infinite; }
+.m2dpc-l1    { animation: m2dpcL1 10s infinite; }
+.m2dpc-l2    { animation: m2dpcL2 10s infinite; }
+.m2dpc-l3    { animation: m2dpcL3 10s infinite; }
+.m2dpc-prog  { animation: m2dpcProg 10s linear infinite; }
+
+@keyframes m2dpcModel {
+  0%,3%    { opacity: 0; }
+  9%       { opacity: 1; }
+  55%      { opacity: 1; }
+  66%      { opacity: .5; }   /* 切断後は背景として薄れる */
+  96%      { opacity: .5; }
+  100%     { opacity: 0; }
+}
+@keyframes m2dpcCut {
+  0%,26%   { opacity: 0; transform: translateX(-230px); }
+  32%      { opacity: 1; transform: translateX(-230px); }
+  52%      { opacity: 1; transform: translateX(0); }   /* 切断位置へ差し込み完了 */
+  62%      { opacity: .8; transform: translateX(0); }
+  90%      { opacity: .55; transform: translateX(0); }
+  100%     { opacity: 0; transform: translateX(0); }
+}
+@keyframes m2dpcSec {
+  0%,54%   { opacity: 0; stroke-dashoffset: 100; }
+  60%      { opacity: 1; stroke-dashoffset: 100; }
+  74%      { opacity: 1; stroke-dashoffset: 0; }
+  94%      { opacity: 1; stroke-dashoffset: 0; }
+  100%     { opacity: 0; stroke-dashoffset: 0; }
+}
+@keyframes m2dpcBg {
+  0%,58%   { opacity: 0; }
+  66%      { opacity: .45; }
+  94%      { opacity: .45; }
+  100%     { opacity: 0; }
+}
+@keyframes m2dpcArrow {
+  0%,56%   { opacity: 0; transform: translateX(-8px); }
+  64%      { opacity: 1; transform: translateX(0); }
+  94%      { opacity: 1; }
+  100%     { opacity: 0; }
+}
+@keyframes m2dpcTag {
+  0%,64%   { opacity: 0; transform: translateY(-8px); }
+  70%      { opacity: 1; transform: translateY(0); }
+  95%      { opacity: 1; }
+  100%     { opacity: 0; }
+}
+@keyframes m2dpcL1 { 0%{opacity:0} 5%{opacity:1} 25%{opacity:1} 30%{opacity:0} 100%{opacity:0} }
+@keyframes m2dpcL2 { 0%,30%{opacity:0} 35%{opacity:1} 54%{opacity:1} 59%{opacity:0} 100%{opacity:0} }
+@keyframes m2dpcL3 { 0%,59%{opacity:0} 64%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes m2dpcProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">切断プレプロセッサ <span style="opacity:.75;font-weight:700">GH_Make2DPreCut</span></h1>
+    <p class="catch">統合JSONがなくても、<span class="em">モデルを直接わたすだけ</span>で断面をひとつ切れる<span class="em">単体の簡易カッター</span>。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">v2 相当</span>
+      <span class="badge st-ver">GH Python ノード</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg m2dpc-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="モデルに切断面を差し込み、矢視方向に断面線と背景を残すアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="m2dpc-prog-tr" x="300" y="20" width="200" height="6" rx="3"></rect>
+        <rect class="m2dpc-prog"    x="300" y="20" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① モデル（柱梁フレーム・統合JSON不要） ===== -->
+        <g class="m2dpc-model">
+          <!-- 奥フレーム -->
+          <g transform="translate(30,-18)">
+            <rect class="m2dpc-back" x="250" y="150" width="16" height="184"></rect>
+            <rect class="m2dpc-back" x="420" y="150" width="16" height="184"></rect>
+            <rect class="m2dpc-back" x="250" y="150" width="186" height="16"></rect>
+          </g>
+          <!-- 奥行きエッジ -->
+          <line class="m2dpc-depth" x1="250" y1="150" x2="280" y2="132"></line>
+          <line class="m2dpc-depth" x1="436" y1="150" x2="466" y2="132"></line>
+          <line class="m2dpc-depth" x1="436" y1="334" x2="466" y2="316"></line>
+          <!-- 手前フレーム（柱2・梁2） -->
+          <rect class="m2dpc-mem" x="250" y="150" width="16" height="184" rx="1"></rect>
+          <rect class="m2dpc-mem" x="420" y="150" width="16" height="184" rx="1"></rect>
+          <rect class="m2dpc-mem" x="250" y="150" width="186" height="16" rx="1"></rect>
+          <rect class="m2dpc-mem" x="250" y="238" width="186" height="13" rx="1"></rect>
+          <line class="m2dpc-base" x1="236" y1="334" x2="452" y2="334"></line>
+        </g>
+
+        <!-- 背景ジオメトリ（切断後に薄く残る奥の輪郭） -->
+        <g class="m2dpc-bg">
+          <rect x="356" y="150" width="16" height="184" rx="1"></rect>
+          <line x1="372" y1="158" x2="452" y2="158"></line>
+          <line x1="372" y1="244" x2="452" y2="244"></line>
+        </g>
+
+        <!-- ===== ② 切断面をスッと差し込む（左から右へスライド） ===== -->
+        <g class="m2dpc-cut">
+          <polygon class="m2dpc-cutface" points="342,120 372,102 372,352 342,370"></polygon>
+          <line class="m2dpc-cutedge" x1="342" y1="120" x2="342" y2="370"></line>
+          <line class="m2dpc-cutedge" x1="372" y1="102" x2="372" y2="352"></line>
+        </g>
+
+        <!-- ===== ③ 生成される断面線（太線・切断面の位置に） ===== -->
+        <g class="m2dpc-sec">
+          <path pathLength="100" d="M342,150 L342,334"></path>
+          <path pathLength="100" d="M334,158 L350,158"></path>
+          <path pathLength="100" d="M334,246 L350,246"></path>
+        </g>
+        <!-- 切断ハッチ -->
+        <line class="m2dpc-hatch m2dpc-sec" pathLength="100" x1="330" y1="164" x2="344" y2="150"></line>
+
+        <!-- 矢視方向の矢印 -->
+        <g class="m2dpc-arrow">
+          <line class="m2dpc-arrow-shaft" x1="384" y1="242" x2="440" y2="242"></line>
+          <polygon class="m2dpc-arrow-head" points="440,242 426,234 426,250"></polygon>
+          <text class="m2dpc-small" x="392" y="230">矢視方向</text>
+        </g>
+
+        <!-- CutInfo タグ -->
+        <g class="m2dpc-tag">
+          <rect class="m2dpc-tag-box" x="250" y="34" width="300" height="26" rx="13"></rect>
+          <circle class="m2dpc-chip" cx="268" cy="47" r="6"></circle>
+          <text class="m2dpc-tagtxt" x="282" y="51">CutInfo ＝ Executor の PlanJSON へ直結</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="m2dpc-cap m2dpc-l1" x="400" y="430" text-anchor="middle">① モデルを直接わたす（統合JSON不要）</text>
+        <text class="m2dpc-cap m2dpc-l2" x="400" y="430" text-anchor="middle">② 切断面をスッと差し込む</text>
+        <text class="m2dpc-cap m2dpc-l3" x="400" y="430" text-anchor="middle">③ 断面線・背景・CutInfo を出力（矢視方向に）</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">モデルに半透明の切断面を差し込み、その位置に断面線を起こしつつ矢視方向の背景だけを残す——統合JSONを介さず単体で完結する流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>Make2Dパイプラインの<strong>お手軽ルート</strong>です。本流の <a href="make2d-planner.html">プランナー</a> は「2D図面から起こした統合JSON」を前提にしますが、このノードは<strong>統合JSONなしで、モデルと切断位置を渡すだけ</strong>で断面をひとつ切れます。「今このモデルを、この線でスパッと切って断面図が欲しい」という単発の用途にぴったりです。</p>
+    <p>水平面（平面図・床伏図・天井伏図）でも鉛直面（断面図）でもカットでき、Make2D用のデータ（<strong>断面線・背景ジオメトリ・カメラ平面</strong>）と、<strong>Plan_JSON互換の CutInfo</strong> を単体で生成します。CutInfo はそのまま <a href="make2d-executor.html">GH_Make2DExecutor</a> の PlanJSON 端子へ直結できるので、「単体で切って、そのままExecutorで仕上げる」という短い経路が組めます。</p>
+    <p class="lead">※ 背景ジオメトリ＝切断面より奥に見える部材の輪郭。矢視方向にどちらを残すかで決まる。／ CutInfo＝切断計画をまとめたデータで、プランナーの Plan_JSON と互換。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート（3系統）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">ID / RefGeos</td><td>切る対象。RhinoオブジェクトのID、または参照モデルのジオメトリを直接わたす。</td></tr>
+          <tr><td class="port">Mode / CutPos /<br>CutLine</td><td>切り方の指定。水平／鉛直の<strong>モード</strong>、切断位置（高さ）、または切断ラインを与える。</td></tr>
+          <tr><td class="port">Flip / Depth / Name /<br>DocPath / PerformCut</td><td>矢視の反転・クリップ奥行き・断面名・書き出し先と、<span class="port" style="color:var(--accent)">PerformCut</span>（実行トリガ）。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート（2系統）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">SectionCurves /<br>BackgroundGeos /<br>ViewPlane</td><td>切断面で生成した<strong>断面線</strong>、矢視方向に残る<strong>背景ジオメトリ</strong>、Make2D用の<strong>カメラ平面</strong>。</td></tr>
+          <tr><td class="port">MarkCrvs / RangeBox /<br>CutInfo</td><td>切断記号のマーク線・切り取り範囲ボックスと、<strong>Executorへ直結できる CutInfo</strong>（Plan_JSON互換）。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">対象を渡す</span><span class="step-body">切りたいモデルを <span class="port" style="color:var(--accent)">ID</span>（Rhinoオブジェクト）または <span class="port" style="color:var(--accent)">RefGeos</span>（参照モデルのジオメトリ）で入力する。統合JSONは不要。</span></li>
+      <li><span class="step-title">切り方を決める</span><span class="step-body"><span class="port" style="color:var(--accent)">Mode</span> で水平／鉛直を選び、<span class="port" style="color:var(--accent)">CutPos</span>（高さ）または <span class="port" style="color:var(--accent)">CutLine</span>（切断ライン）で位置を指定する。</span></li>
+      <li><span class="step-title">向きを整える</span><span class="step-body">矢視が逆なら <span class="port" style="color:var(--accent)">Flip</span> で反転、切り取る奥行きは <span class="port" style="color:var(--accent)">Depth</span> で調整、断面には <span class="port" style="color:var(--accent)">Name</span> を付ける。</span></li>
+      <li><span class="step-title">実行する</span><span class="step-body"><span class="port" style="color:var(--accent)">PerformCut</span> をオンにするとカットが走り、<span class="port" style="color:var(--accent)">SectionCurves / BackgroundGeos</span> が生成される。</span></li>
+      <li><span class="step-title">Executorへ直結する</span><span class="step-body"><span class="port" style="color:var(--accent)">CutInfo</span> を <a href="make2d-executor.html">GH_Make2DExecutor</a> の <span class="port" style="color:var(--accent)">PlanJSON</span> へつなげば、そのまま図面化・書き戻しまで進める。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <span class="flow-solo" style="padding:7px 0">統合JSON不要 ― <b>モデルを直接わたして単体で開始</b>できます。</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">GH_Make2DPreCut（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="make2d-executor.html">Make2D実行 GH_Make2DExecutor</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">本流の統合JSON経由ルートは <a href="make2d-planner.html">GH_Make2DPlanner</a> が担当。全体像は <a href="../pipeline.html">Make2Dパイプライン詳細図</a> で確認できます。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\01_柱梁フレーム.3dm</span>
+      <p class="sample-desc">2×1スパンの柱梁フレーム＋通り芯線＋ガセット／浮きピース入り。単体カットの練習にちょうどよい素材です。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> を開く。</span></li>
+        <li><span class="step-title">対象を選ぶ</span><span class="step-body">フレームを <span class="port" style="color:var(--accent)">ID</span> に渡し、<span class="port" style="color:var(--accent)">Mode</span> を鉛直、<span class="port" style="color:var(--accent)">CutLine</span> を柱間の1本に設定する。</span></li>
+        <li><span class="step-title">カットする</span><span class="step-body"><span class="port" style="color:var(--accent)">PerformCut</span> をオンにして、断面線と矢視方向の背景が出るのを確認する。</span></li>
+        <li><span class="step-title">Executorへ流す</span><span class="step-body"><span class="port" style="color:var(--accent)">CutInfo</span> を <a href="make2d-executor.html">Executor</a> へつなぎ、図面座標への配置まで通してみる（練習ではWriteBackはオフのまま）。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 用途を取り違えない ― 本格運用は Planner ルート</div>
+        <p>PreCut は<strong>単発・単体運用向けの簡易ルート</strong>です。図面の統合JSONと連動させて多数の断面を体系的に起こすなら、本流の <a href="make2d-planner.html">GH_Make2DPlanner</a> → <a href="make2d-executor.html">Executor</a> を使ってください。役割を取り違えると二重管理になります。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 見上げ（天井伏図）＋水平の直結は非対応</div>
+        <p>見上げ方向の水平断面など、一部のモード組み合わせは直結に対応していません。想定外の向きで切りたいときは <span class="port" style="color:var(--accent)">Flip</span> や <span class="port" style="color:var(--accent)">Mode</span> の設定を見直し、結果のプレビューを必ず確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> PerformCut がオフだと何も生成されない</div>
+        <p>カットは <span class="port" style="color:var(--accent)">PerformCut</span> がトリガです。設定を変えても出力が空のままなら、まずこのトリガがオンになっているかを確認してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\図面整理\<span class="fp-accent">GH_Make2DPreCut.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

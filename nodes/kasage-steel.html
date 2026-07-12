@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>かさ上げ鋼材オートモデラー kasage_steel — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス ks- で衝突回避
+   ①既存梁＋通り芯ブロック → ②通り芯からFL自動検出＋レール＆断面
+   → ③プロファイルをスイープしてかさ上げ鋼材を生成＋材質ベイク
+   ============================================================ */
+.ks-svg text { font-family: var(--font); }
+
+/* 既存梁（側面） */
+.ks-beam-body { fill: #241d0f; stroke: var(--accent); stroke-width: 2.2; }
+.ks-beam-top  { stroke: var(--accent); stroke-width: 2.4; }
+.ks-beam-web  { stroke: var(--accent); stroke-width: 1.2; opacity: .35; }
+
+/* 通り芯ブロック（キューブ）＋一点鎖線 */
+.ks-cube-face { fill: #1b2338; stroke: var(--accent); stroke-width: 1.8; }
+.ks-cube-top  { fill: #232c46; stroke: var(--accent); stroke-width: 1.6; }
+.ks-cube-side { fill: #10152a; stroke: var(--accent); stroke-width: 1.6; }
+.ks-gridline  { fill: none; stroke: var(--accent); stroke-width: 1.4; opacity: .8;
+                stroke-dasharray: 11 4 2 4; }
+.ks-gridlbl   { fill: #0b1020; stroke: var(--accent); stroke-width: 1.6; }
+
+/* FL レベル線（デッキ目標高さ） */
+.ks-fl-line { stroke: var(--accent); stroke-width: 1.7; opacity: .9; stroke-dasharray: 10 6; }
+.ks-fl-mark { fill: var(--accent); }
+
+/* レール曲線・断面プロファイル */
+.ks-rail          { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round;
+                    stroke-dasharray: 100; }
+.ks-profile-shape { fill: color-mix(in srgb, var(--accent) 22%, transparent);
+                    stroke: var(--accent); stroke-width: 2; }
+
+/* かさ上げ鋼材ソリッド（押し出し風にスイープ） */
+.ks-steel { fill: color-mix(in srgb, var(--accent) 80%, #3a2c05);
+            stroke: var(--accent); stroke-width: 2;
+            transform-box: fill-box; transform-origin: left center; }
+.ks-sweep { fill: #fff7e0; stroke: var(--accent); stroke-width: 1.4; }
+
+/* 材質タグ・ベイクチップ */
+.ks-tag-box  { fill: #0b1428; stroke: var(--accent); stroke-width: 1.4; }
+.ks-bake-box { fill: #0b1428; stroke: var(--accent); stroke-width: 1.4; }
+.ks-disk     { fill: var(--accent); }
+
+/* テキスト */
+.ks-cap    { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.ks-small  { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+.ks-tagtxt { fill: #e6ecff; font-size: 12.5px; font-weight: 700; }
+
+/* 進捗バー */
+.ks-prog-tr { fill: #4a3a12; }
+.ks-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.ks-beam    { animation: ksBeam    10s infinite; }
+.ks-grid    { animation: ksGrid    10s infinite; }
+.ks-fl      { animation: ksFl      10s infinite; }
+.ks-rail    { animation: ksRail    10s infinite; }
+.ks-profile { animation: ksProfile 10s infinite; }
+.ks-steel   { animation: ksSteel   10s infinite; }
+.ks-sweep   { animation: ksSweep   10s infinite; }
+.ks-tag     { animation: ksTag     10s infinite; }
+.ks-bake    { animation: ksBake    10s infinite; }
+.ks-l1      { animation: ksL1      10s infinite; }
+.ks-l2      { animation: ksL2      10s infinite; }
+.ks-l3      { animation: ksL3      10s infinite; }
+.ks-prog    { animation: ksProg    10s linear infinite; }
+
+@keyframes ksBeam { 0%,3%{opacity:0} 8%{opacity:1} 92%{opacity:1} 98%,100%{opacity:0} }
+@keyframes ksGrid { 0%,3%{opacity:0} 9%{opacity:1} 92%{opacity:1} 98%,100%{opacity:0} }
+@keyframes ksFl   { 0%,30%{opacity:0} 38%{opacity:.9} 92%{opacity:.9} 98%,100%{opacity:0} }
+@keyframes ksRail {
+  0%,34%  { stroke-dashoffset: 100; opacity: 0; }
+  37%     { opacity: 1; }
+  52%     { stroke-dashoffset: 0; }
+  92%     { stroke-dashoffset: 0; opacity: 1; }
+  98%,100%{ opacity: 0; }
+}
+@keyframes ksProfile { 0%,40%{opacity:0} 48%{opacity:1} 92%{opacity:1} 98%,100%{opacity:0} }
+@keyframes ksSteel {
+  0%,58%  { opacity: 0; transform: scaleX(0); }
+  62%     { opacity: 1; transform: scaleX(0); }
+  80%     { opacity: 1; transform: scaleX(1); }
+  92%     { opacity: 1; transform: scaleX(1); }
+  98%,100%{ opacity: 0; transform: scaleX(1); }
+}
+@keyframes ksSweep {
+  0%,60%   { opacity: 0; transform: translateX(0); }
+  64%      { opacity: 1; transform: translateX(0); }
+  78%      { opacity: 1; transform: translateX(372px); }
+  82%,100% { opacity: 0; transform: translateX(372px); }
+}
+@keyframes ksTag {
+  0%,80%  { opacity: 0; transform: translateY(6px); }
+  86%     { opacity: 1; transform: translateY(0); }
+  94%     { opacity: 1; }
+  98%,100%{ opacity: 0; }
+}
+@keyframes ksBake {
+  0%,82%  { opacity: 0; transform: translateY(-6px); }
+  88%     { opacity: 1; transform: translateY(0); }
+  94%     { opacity: 1; }
+  98%,100%{ opacity: 0; }
+}
+@keyframes ksL1 { 0%{opacity:0} 4%{opacity:1} 28%{opacity:1} 33%{opacity:0} 100%{opacity:0} }
+@keyframes ksL2 { 0%,33%{opacity:0} 37%{opacity:1} 58%{opacity:1} 63%{opacity:0} 100%{opacity:0} }
+@keyframes ksL3 { 0%,63%{opacity:0} 67%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes ksProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="steel">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">鉄骨モデリング支援</span>
+    <h1 class="node-title">かさ上げ鋼材オートモデラー <span style="opacity:.75;font-weight:700">kasage_steel</span></h1>
+    <p class="catch">梁の上に載せる<span class="em">かさ上げ鋼材</span>を、通り芯から<span class="em">FLを自動で読み取って</span>一気に生成。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">ver7 相当（単一版）</span>
+      <span class="badge st-ver">GH Python3 ノード（A＋B の2ノード）</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg ks-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="通り芯からFLを読み取り梁の上にかさ上げ鋼材を生成するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="ks-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="ks-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ベイクチップ（ノードB） -->
+        <g class="ks-bake">
+          <rect class="ks-bake-box" x="238" y="52" width="336" height="28" rx="14"></rect>
+          <circle class="ks-disk" cx="258" cy="66" r="6"></circle>
+          <text class="ks-tagtxt" x="274" y="70">＋ 材質「SS400」を UDA付きでベイク（ノードB）</text>
+        </g>
+
+        <!-- ===== ① 既存梁（側面） ===== -->
+        <g class="ks-beam">
+          <rect class="ks-beam-body" x="190" y="302" width="432" height="46" rx="2"></rect>
+          <line class="ks-beam-top" x1="190" y1="302" x2="622" y2="302"></line>
+          <line class="ks-beam-web" x1="190" y1="325" x2="622" y2="325"></line>
+          <text class="ks-small" x="406" y="368" text-anchor="middle">既存梁</text>
+        </g>
+
+        <!-- ===== ① 通り芯ブロック（FL基準） ===== -->
+        <g class="ks-grid">
+          <polygon class="ks-cube-top"  points="96,268 112,254 152,254 136,268"></polygon>
+          <polygon class="ks-cube-side" points="136,268 152,254 152,296 136,310"></polygon>
+          <rect    class="ks-cube-face" x="96" y="268" width="40" height="42"></rect>
+          <line class="ks-gridline" x1="116" y1="240" x2="116" y2="322"></line>
+          <circle class="ks-gridlbl" cx="116" cy="232" r="10"></circle>
+          <text class="ks-small" x="116" y="236" text-anchor="middle" style="fill:var(--accent)">Y1</text>
+          <text class="ks-small" x="116" y="336" text-anchor="middle">通り芯ブロック</text>
+        </g>
+
+        <!-- ===== ② FL 自動検出（デッキ目標高さ） ===== -->
+        <g class="ks-fl">
+          <line class="ks-fl-line" x1="116" y1="274" x2="636" y2="274"></line>
+          <polygon class="ks-fl-mark" points="636,274 648,268 648,280"></polygon>
+          <text class="ks-small" x="576" y="268" text-anchor="middle" style="fill:var(--accent)">FL＋デッキ高さ</text>
+        </g>
+
+        <!-- ===== ② レール曲線（梁天端） ===== -->
+        <path class="ks-rail" pathLength="100" d="M214,299 L596,299"></path>
+
+        <!-- ===== ② 断面プロファイル（左端のスタンプ） ===== -->
+        <g class="ks-profile">
+          <path class="ks-profile-shape" d="M206,300 L206,274 L222,274 L222,281 L213,281 L213,300 Z"></path>
+          <text class="ks-small" x="238" y="266">断面プロファイル</text>
+        </g>
+
+        <!-- ===== ③ かさ上げ鋼材ソリッド（スイープで生成） ===== -->
+        <rect class="ks-steel" x="214" y="274" width="382" height="26" rx="2"></rect>
+        <rect class="ks-sweep" x="214" y="274" width="10" height="26" rx="1"></rect>
+
+        <!-- 材質タグ -->
+        <g class="ks-tag">
+          <rect class="ks-tag-box" x="330" y="210" width="212" height="26" rx="13"></rect>
+          <text class="ks-tagtxt" x="436" y="227" text-anchor="middle">SS400 ・ 断面 自動選定</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="ks-cap ks-l1" x="400" y="428" text-anchor="middle">① 既存梁 ＋ 通り芯ブロック（FL基準）</text>
+        <text class="ks-cap ks-l2" x="400" y="428" text-anchor="middle">② 通り芯からFLを自動検出 → 梁上にレール＆断面</text>
+        <text class="ks-cap ks-l3" x="400" y="428" text-anchor="middle">③ スイープしてかさ上げ鋼材を生成（材質UDA付き）</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">既存梁＋通り芯ブロック → 通り芯からFLを自動検出してレールと断面を生成 → プロファイルをスイープしてかさ上げ鋼材を立ち上げ、材質付きでベイク、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>梁の上に載せる<strong>「かさ上げ鋼材」</strong>を自動でモデリングするGrasshopperノードです。ワークセッションの参照モデルにある<strong>通り芯ブロックを <span class="port" style="color:var(--accent)">Base_Ref</span> に渡すと、その中の通り芯からFL（各階の基準高さ）を自動で読み取り</strong>、対象の梁の上に、セットバック・デッキ高さを考慮したかさ上げ鋼材の3D形状（Brep）・レール曲線・断面プロファイルを一気に生成します。</p>
+    <p>主梁／次梁の別（<span class="port" style="color:var(--accent)">Is_Main</span>）で断面ルールを切り替え、断面は自動選定（手動上書きも可）。生成物には<strong>材質・断面名がユーザーテキストで埋め込まれ</strong>、対になるノードB（<code>kasage_material_bake</code>）で材質を付けてドキュメントへベイクします。「デッキ下地の鋼材を、いちいち高さを拾わずにモデルへ流し込む」ための2ノード構成ツールです。</p>
+    <p class="lead">※ FL＝フロアレベル（各階の基準高さ）。かさ上げ鋼材＝デッキ等の仕上げ高さに合わせて梁天端に載せる補助鋼材。UserText/UDA＝オブジェクトに紐づく属性データ（材質・断面名など）。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <p class="lead" style="margin-bottom:16px">幾何生成の<strong>ノードA</strong>と、材質付与＋ベイクの<strong>ノードB</strong>の2つを並べ、AのBrepをBへ渡して使います。</p>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>ノードA ─ kasage_steel（幾何生成）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port"><span class="io-dir in">in</span>Run</td><td>実行フラグ（Trueで動作）。</td></tr>
+          <tr><td class="port"><span class="io-dir in">in</span>Base_Ref</td><td><strong>通り芯ブロックを渡すとFLを自動検出</strong>。点・ジオメトリ・数値でも可。</td></tr>
+          <tr><td class="port"><span class="io-dir in">in</span>Beam_Obj</td><td>かさ上げ対象の既存梁（List推奨）。</td></tr>
+          <tr><td class="port"><span class="io-dir in">in</span>Is_Main</td><td>主梁（True）／次梁（False）で断面ルールを切替。</td></tr>
+          <tr><td class="port"><span class="io-dir in">in</span>Section_List /<br>Material</td><td>断面の手動指定（任意）／材質（未入力はSS400）。</td></tr>
+          <tr><td class="port"><span class="io-dir in">in</span>Dist / Dist_S /<br>Dist_E</td><td>前後のセットバック寸法（既定68・始終点別指定可）。</td></tr>
+          <tr><td class="port"><span class="io-dir in">in</span>Z_Offset_S/E<br>Beam_Start/End_Z</td><td>デッキ高さFLオフセットと梁天端の手動補正。</td></tr>
+          <tr><td class="port"><span class="io-dir out">out</span>Steel_Breps</td><td>生成された<strong>かさ上げ鋼材の3D形状</strong>（材質・断面をUDA内包）。</td></tr>
+          <tr><td class="port"><span class="io-dir out">out</span>Rail_Curves /<br>Profile_Curves</td><td>スイープに使ったレール／2Dプロファイル。</td></tr>
+          <tr><td class="port"><span class="io-dir out">out</span>Section_Name /<br>Log_Info</td><td>選定された断面名／FL基準・かさ上げ寸法などの実行ログ。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>ノードB ─ kasage_material_bake（材質＋ベイク）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port"><span class="io-dir in">in</span>Breps</td><td>ノードAの <span class="port" style="color:var(--accent)">Steel_Breps</span> をつなぐ（List）。</td></tr>
+          <tr><td class="port"><span class="io-dir in">in</span>Material</td><td>材質の上書き（任意）。未入力はBrepのUDA、無ければSS400。</td></tr>
+          <tr><td class="port"><span class="io-dir in">in</span>Section</td><td>断面名の上書き（任意）。未入力はBrepのUDA。</td></tr>
+          <tr><td class="port"><span class="io-dir in">in</span>Bake</td><td>Trueで<strong>ドキュメントへベイク</strong>（属性UDA付き・既定False）。</td></tr>
+          <tr><td class="port"><span class="io-dir in">in</span>Name</td><td>ベイク名の上書き（任意・既定は断面名）。</td></tr>
+          <tr><td class="port"><span class="io-dir out">out</span>Breps_Out</td><td>最終の材質・断面をUDA内包したBrep（下流用）。</td></tr>
+          <tr><td class="port"><span class="io-dir out">out</span>Baked_Ids</td><td>ベイクしたオブジェクトのGUID（属性UDA付き）。</td></tr>
+          <tr><td class="port"><span class="io-dir out">out</span>Log_Info</td><td>実行ログ（属性の読み戻し検証を含む）。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">2ノードを置いてつなぐ</span><span class="step-body">ノードA（<code>kasage_steel</code>）とノードB（<code>kasage_material_bake</code>）を並べ、Aの <span class="port" style="color:var(--accent)">Steel_Breps</span> をBの <span class="port" style="color:var(--accent)">Breps</span> へ配線。</span></li>
+      <li><span class="step-title">FL基準を渡す</span><span class="step-body"><span class="port" style="color:var(--accent)">Base_Ref</span> に<strong>ワークセッション参照モデルの通り芯ブロック</strong>をつなぐ → FLが自動検出される。取得元は <span class="port" style="color:var(--accent)">Log_Info</span> で確認。</span></li>
+      <li><span class="step-title">梁と主／次を指定</span><span class="step-body"><span class="port" style="color:var(--accent)">Beam_Obj</span> に対象梁、<span class="port" style="color:var(--accent)">Is_Main</span> で主梁／次梁ルールを選ぶ。断面は自動選定（<span class="port" style="color:var(--accent)">Section_List</span> で手動上書き可）。</span></li>
+      <li><span class="step-title">寸法を調整</span><span class="step-body"><span class="port" style="color:var(--accent)">Dist</span>（セットバック）や <span class="port" style="color:var(--accent)">Z_Offset</span> でデッキ高さ・前後の逃げを微調整。</span></li>
+      <li><span class="step-title">Runで生成</span><span class="step-body"><span class="port" style="color:var(--accent)">Run</span>=True で鋼材Brep・レール・プロファイルが出る。<span class="port" style="color:var(--accent)">Log_Info</span> でかさ上げ寸法を確認。</span></li>
+      <li><span class="step-title">材質を付けてベイク</span><span class="step-body">ノードBの <span class="port" style="color:var(--accent)">Material/Section</span> で上書き（任意）→ <span class="port" style="color:var(--accent)">Bake</span>=True でベイク（UDA付き・再実行は前回分を置換）。</span></li>
+      <li><span class="step-title">端部を仕上げる</span><span class="step-body">他部材との取り合いは <a href="buzai-cut.html">部材カット自動延長ツール</a> でカット＆延長。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <a class="chip chip-up" href="subpick.html">ブロック内サブ選択 subpick</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">かさ上げ鋼材 kasage_steel（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="buzai-cut.html">部材カット自動延長ツール</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">対象の梁がブロック内パーツのときは <a href="subpick.html">subpick</a> で選び、生成後の端部の取り合いは <a href="buzai-cut.html">部材カット自動延長ツール</a> で処理します。工程を分けて途中に別処理を挟みたい場合は、姉妹実装の <a href="kasage-nodes.html">7分割クラスター版 kasage_nodes</a> をどうぞ。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\01_柱梁フレーム.3dm</span>
+      <p class="sample-desc">2×1スパンの柱梁フレーム＋通り芯線入り。梁と通り芯ブロックがそろっているので、FL自動取得とかさ上げ生成を試せます。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> を開く（またはワークセッションで参照）。</span></li>
+        <li><span class="step-title">2ノードを配置</span><span class="step-body">GHにノードA／ノードBを置き、AのSteel_BrepsをBへ配線。</span></li>
+        <li><span class="step-title">Base_Refに通り芯</span><span class="step-body">通り芯ブロックを <span class="port" style="color:var(--accent)">Base_Ref</span> に、梁を <span class="port" style="color:var(--accent)">Beam_Obj</span> につないでRun → 梁上に鋼材が乗る。</span></li>
+        <li><span class="step-title">まずはベイクせず確認</span><span class="step-body">最初は <span class="port" style="color:var(--accent)">Bake</span>=False のまま形状と <span class="port" style="color:var(--accent)">Log_Info</span> を確認し、良ければBakeします。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Base_Refは通り芯ブロックを渡すのが正道</div>
+        <p>FLは <span class="port" style="color:var(--accent)">Base_Ref</span> の通り芯ブロックから自動取得します。参照モデルは <code>FindId</code> で取りこぼすことがあるため、内部で<strong>参照オブジェクトも全列挙してフォールバック</strong>しています。取得元は必ず <span class="port" style="color:var(--accent)">Log_Info</span> で確認を。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 出力Brepの型ヒントは「汎用(Object)」のまま</div>
+        <p>手動で GH_Brep に包むと二重ラップ（Goo to Geometry）になり逆効果です。コード側が適切にラップするので、<strong>出力端子の型ヒントは触らない</strong>のが正解。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> ノードBの再ベイクは前回分を置換</div>
+        <p>ベイクは重複防止のため、再実行時に前回ベイクした分を削除して置き換えます。<span class="port" style="color:var(--accent)">Name</span> を手動指定するときは名前の衝突に注意してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> ブロックはGHの端子を「型」として渡せない</div>
+        <p>Grasshopperはブロック（インスタンス）をそのまま型として運べません。<span class="port" style="color:var(--accent)">Base_Ref</span> はGUID／ジオメトリの両対応で、受け側が展開する設計です。うまく拾えないときはブロックのGUID渡しを確認してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル（ノードA／ノードB）</span>
+      C:\Python1\<span class="fp-accent">kasage_steel.py</span>　／　C:\Python1\<span class="fp-accent">kasage_material_bake.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-steel">鉄骨モデリング支援の一覧</a>
+      <a href="kasage-nodes.html">7分割クラスター版 kasage_nodes</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

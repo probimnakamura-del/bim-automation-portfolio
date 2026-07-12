@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>NodeGen コード→GHノード一括生成 — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス ng- で衝突回避
+   ①コードフォルダを選んで.pyにチェック → ②[生成]ボタンひとつ
+   → ③GHキャンバスに緑のPython3ノード＋黄色い概要パネルが並んで自動配線
+   ============================================================ */
+.ng-svg text { font-family: var(--font); }
+.ng-green { --gh-green: #34d399; }   /* GH Python3 ノード＝緑（GH実挙動に忠実） */
+.ng-yellow{ --gh-yellow: #fbbf24; }  /* 概要パネル＝黄（GH実挙動に忠実） */
+
+/* NodeGen ダイアログ */
+.ng-dlg-bg    { fill: #0e1730; stroke: var(--accent); stroke-width: 1.6; }
+.ng-dlg-head  { fill: color-mix(in srgb, var(--accent) 30%, #0e1730); }
+.ng-dlgtxt    { fill: #e6ecff; font-size: 13px; font-weight: 800; }
+.ng-folder    { fill: color-mix(in srgb, var(--accent) 16%, #0b1428); stroke: color-mix(in srgb, var(--accent) 45%, transparent); stroke-width: 1.2; }
+.ng-foldertxt { fill: #cdd7f5; font-size: 11.5px; font-weight: 700; font-family: "Cascadia Code", Consolas, monospace; }
+.ng-pyrow     { fill: #0b1428; stroke: #2a3352; stroke-width: 1; }
+.ng-pytxt     { fill: #cdd7f5; font-size: 11.5px; font-weight: 700; font-family: "Cascadia Code", Consolas, monospace; }
+.ng-chk       { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+.ng-chkmark   { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+/* 生成ボタン */
+.ng-btn     { fill: var(--accent); }
+.ng-btntxt  { fill: #0b1020; font-size: 13px; font-weight: 800; }
+
+/* 飛んでいく .py アイコン */
+.ng-pyfly-bg  { fill: #0e1730; stroke: var(--accent); stroke-width: 1.4; }
+.ng-pyfly-txt { fill: var(--accent); font-size: 10px; font-weight: 800; font-family: "Cascadia Code", Consolas, monospace; }
+
+/* GHキャンバス */
+.ng-canvas-bg { fill: #0c1526; stroke: #34406a; stroke-width: 1.4; }
+.ng-canvas-lbl{ fill: #9aa7cc; font-size: 11px; font-weight: 700; }
+
+/* 生成された GH Python3 ノード（緑） */
+.ng-node-bg   { fill: color-mix(in srgb, #34d399 20%, #0b1428); stroke: #34d399; stroke-width: 1.8; }
+.ng-node-tab  { fill: #34d399; }
+.ng-nodetxt   { fill: #eafff6; font-size: 10.5px; font-weight: 800; }
+.ng-port      { fill: #0b1428; stroke: #34d399; stroke-width: 1.2; }
+/* 概要パネル（黄） */
+.ng-panel-bg  { fill: color-mix(in srgb, #fbbf24 16%, #0b1428); stroke: #fbbf24; stroke-width: 1.6; }
+.ng-paneltxt  { fill: #ffe9b0; font-size: 10px; font-weight: 700; }
+/* 自動配線 */
+.ng-wire      { fill: none; stroke: #34d399; stroke-width: 2.2; stroke-dasharray: 100; opacity: .9; }
+.ng-src       { fill: #0b1428; stroke: var(--accent); stroke-width: 1.4; }
+.ng-srctxt    { fill: var(--accent); font-size: 9.5px; font-weight: 800; }
+
+/* 矢印＋データドット */
+.ng-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.6; opacity: .85; }
+.ng-arrow-head  { fill: var(--accent); }
+
+/* テキスト */
+.ng-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.ng-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.ng-prog-tr { fill: #223052; }
+.ng-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.ng-dialog { animation: ngDialog 10s infinite; }
+.ng-chk1   { animation: ngChk1 10s infinite; }
+.ng-chk2   { animation: ngChk2 10s infinite; }
+.ng-chk3   { animation: ngChk3 10s infinite; }
+.ng-btnA   { animation: ngBtn 10s infinite; }
+.ng-arrow  { animation: ngArrow 10s infinite; }
+.ng-fly1   { animation: ngFly1 10s infinite; }
+.ng-fly2   { animation: ngFly2 10s infinite; }
+.ng-fly3   { animation: ngFly3 10s infinite; }
+.ng-node1  { animation: ngNode1 10s infinite; }
+.ng-node2  { animation: ngNode2 10s infinite; }
+.ng-node3  { animation: ngNode3 10s infinite; }
+.ng-panel  { animation: ngPanel 10s infinite; }
+.ng-wireA  { animation: ngWire 10s infinite; }
+.ng-l1     { animation: ngL1 10s infinite; }
+.ng-l2     { animation: ngL2 10s infinite; }
+.ng-l3     { animation: ngL3 10s infinite; }
+.ng-prog   { animation: ngProg 10s linear infinite; }
+
+@keyframes ngDialog {
+  0%,2%   { opacity: 0; transform: translateX(-12px); }
+  8%      { opacity: 1; transform: translateX(0); }
+  56%     { opacity: 1; }
+  64%,100%{ opacity: .3; }
+}
+@keyframes ngChk1 { 0%,14%{opacity:0} 19%{opacity:1} 100%{opacity:1} }
+@keyframes ngChk2 { 0%,19%{opacity:0} 24%{opacity:1} 100%{opacity:1} }
+@keyframes ngChk3 { 0%,24%{opacity:0} 29%{opacity:1} 100%{opacity:1} }
+@keyframes ngBtn {
+  0%,34%  { opacity: .55; transform: scale(1); transform-box: fill-box; transform-origin: center; }
+  40%     { opacity: 1; transform: scale(.9); transform-box: fill-box; transform-origin: center; }
+  46%     { opacity: 1; transform: scale(1); transform-box: fill-box; transform-origin: center; }
+  56%     { opacity: 1; }
+  64%,100%{ opacity: .3; }
+}
+@keyframes ngArrow {
+  0%,40%  { opacity: 0; }
+  48%     { opacity: 1; }
+  62%     { opacity: 1; }
+  68%,100%{ opacity: 0; }
+}
+@keyframes ngFly1 {
+  0%,42%   { opacity: 0; transform: translate(0,0); }
+  46%      { opacity: 1; transform: translate(0,0); }
+  56%      { opacity: 1; transform: translate(300px,-40px); }
+  60%,100% { opacity: 0; transform: translate(300px,-40px); }
+}
+@keyframes ngFly2 {
+  0%,45%   { opacity: 0; transform: translate(0,0); }
+  49%      { opacity: 1; transform: translate(0,0); }
+  59%      { opacity: 1; transform: translate(300px,10px); }
+  63%,100% { opacity: 0; transform: translate(300px,10px); }
+}
+@keyframes ngFly3 {
+  0%,48%   { opacity: 0; transform: translate(0,0); }
+  52%      { opacity: 1; transform: translate(0,0); }
+  62%      { opacity: 1; transform: translate(300px,58px); }
+  66%,100% { opacity: 0; transform: translate(300px,58px); }
+}
+@keyframes ngNode1 { 0%,56%{opacity:0; transform:translateY(8px)} 62%{opacity:1; transform:translateY(0)} 100%{opacity:1} }
+@keyframes ngNode2 { 0%,62%{opacity:0; transform:translateY(8px)} 68%{opacity:1; transform:translateY(0)} 100%{opacity:1} }
+@keyframes ngNode3 { 0%,68%{opacity:0; transform:translateY(8px)} 74%{opacity:1; transform:translateY(0)} 100%{opacity:1} }
+@keyframes ngPanel { 0%,72%{opacity:0; transform:translateY(8px)} 79%{opacity:1; transform:translateY(0)} 100%{opacity:1} }
+@keyframes ngWire {
+  0%,74%  { stroke-dashoffset: 100; }
+  88%     { stroke-dashoffset: 0; }
+  100%    { stroke-dashoffset: 0; }
+}
+@keyframes ngL1 { 0%{opacity:0} 4%{opacity:1} 32%{opacity:1} 37%{opacity:0} 100%{opacity:0} }
+@keyframes ngL2 { 0%,37%{opacity:0} 41%{opacity:1} 56%{opacity:1} 61%{opacity:0} 100%{opacity:0} }
+@keyframes ngL3 { 0%,61%{opacity:0} 65%{opacity:1} 97%{opacity:1} 100%{opacity:0} }
+@keyframes ngProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ai">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">開発・AI基盤</span>
+    <h1 class="node-title">NodeGen <span style="opacity:.75;font-weight:700">rh_nodegen</span></h1>
+    <p class="catch">アイコンをぽちっと押すだけで、<span class="em">コードフォルダ</span>がそのまま<span class="em">GHノード群に化ける</span>——手貼りゼロのノード量産ランチャー。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中（コア＝実機検証済み）</span>
+      <span class="badge st-ver">Rhinoコマンド NODEGEN</span>
+      <span class="badge st-ver">エンジン＝ghkit.py</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg ng-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="コードフォルダを選んで生成ボタンを押すと、GHキャンバスに緑のPython3ノードと黄色い概要パネルが自動配線付きで並ぶアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="ng-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="ng-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① NodeGen ダイアログ ===== -->
+        <g class="ng-dialog">
+          <rect class="ng-dlg-bg"   x="46" y="70" width="228" height="270" rx="8"></rect>
+          <rect class="ng-dlg-head" x="46" y="70" width="228" height="30" rx="8"></rect>
+          <text class="ng-dlgtxt" x="60" y="90">🧩 NodeGen</text>
+
+          <!-- フォルダ選択 -->
+          <rect class="ng-folder" x="60" y="110" width="200" height="28" rx="5"></rect>
+          <text class="ng-foldertxt" x="70" y="128">📁 選択：my_gh_tools\ …参照</text>
+
+          <!-- .py 一覧＋チェック -->
+          <g>
+            <rect class="ng-pyrow" x="60" y="146" width="200" height="26" rx="4"></rect>
+            <rect class="ng-chk" x="66" y="152" width="14" height="14" rx="3"></rect>
+            <path class="ng-chkmark ng-chk1" d="M69,159 l3,4 l6,-8"></path>
+            <text class="ng-pytxt" x="90" y="164">beam_face.py</text>
+          </g>
+          <g>
+            <rect class="ng-pyrow" x="60" y="176" width="200" height="26" rx="4"></rect>
+            <rect class="ng-chk" x="66" y="182" width="14" height="14" rx="3"></rect>
+            <path class="ng-chkmark ng-chk2" d="M69,189 l3,4 l6,-8"></path>
+            <text class="ng-pytxt" x="90" y="194">grid_pick.py</text>
+          </g>
+          <g>
+            <rect class="ng-pyrow" x="60" y="206" width="200" height="26" rx="4"></rect>
+            <rect class="ng-chk" x="66" y="212" width="14" height="14" rx="3"></rect>
+            <path class="ng-chkmark ng-chk3" d="M69,219 l3,4 l6,-8"></path>
+            <text class="ng-pytxt" x="90" y="224">plate_placer.py</text>
+          </g>
+          <text class="ng-small" x="60" y="256">☑ 自動配線 ・ ☑ AI補正（Ollama）</text>
+
+          <!-- 生成ボタン -->
+          <rect class="ng-btn ng-btnA" x="60" y="272" width="200" height="40" rx="8"></rect>
+          <text class="ng-btntxt ng-btnA" x="160" y="297" text-anchor="middle">▶ 生成</text>
+        </g>
+
+        <!-- 矢印 -->
+        <g class="ng-arrow">
+          <line class="ng-arrow-shaft" x1="288" y1="205" x2="330" y2="205"></line>
+          <polygon class="ng-arrow-head" points="330,205 316,197 316,213"></polygon>
+        </g>
+
+        <!-- 飛んでいく .py アイコン -->
+        <g class="ng-fly1">
+          <rect class="ng-pyfly-bg" x="250" y="150" width="52" height="24" rx="5"></rect>
+          <text class="ng-pyfly-txt" x="258" y="166">.py</text>
+        </g>
+        <g class="ng-fly2">
+          <rect class="ng-pyfly-bg" x="250" y="192" width="52" height="24" rx="5"></rect>
+          <text class="ng-pyfly-txt" x="258" y="208">.py</text>
+        </g>
+        <g class="ng-fly3">
+          <rect class="ng-pyfly-bg" x="250" y="234" width="52" height="24" rx="5"></rect>
+          <text class="ng-pyfly-txt" x="258" y="250">.py</text>
+        </g>
+
+        <!-- ===== ③ GHキャンバスに生成 ===== -->
+        <rect class="ng-canvas-bg" x="352" y="74" width="424" height="300" rx="8"></rect>
+        <text class="ng-canvas-lbl" x="366" y="94">Grasshopper キャンバス</text>
+
+        <!-- 標準入力ソース（自動配線元） -->
+        <g class="ng-node1">
+          <rect class="ng-src" x="372" y="120" width="52" height="22" rx="5"></rect>
+          <text class="ng-srctxt" x="380" y="135">Slider</text>
+          <rect class="ng-src" x="372" y="176" width="52" height="22" rx="5"></rect>
+          <text class="ng-srctxt" x="380" y="191">Toggle</text>
+          <rect class="ng-src" x="372" y="232" width="52" height="22" rx="5"></rect>
+          <text class="ng-srctxt" x="380" y="247">Panel</text>
+        </g>
+
+        <!-- 自動配線 -->
+        <path class="ng-wire ng-wireA" pathLength="100" d="M424,131 C452,131 452,132 478,132"></path>
+        <path class="ng-wire ng-wireA" pathLength="100" d="M424,187 C452,187 452,188 478,188"></path>
+        <path class="ng-wire ng-wireA" pathLength="100" d="M424,243 C452,243 452,244 478,244"></path>
+
+        <!-- Python3 ノード（緑）×3 -->
+        <g class="ng-node1">
+          <rect class="ng-node-bg" x="480" y="112" width="120" height="42" rx="6"></rect>
+          <rect class="ng-node-tab" x="480" y="112" width="120" height="6" rx="3"></rect>
+          <circle class="ng-port" cx="480" cy="133" r="4"></circle>
+          <circle class="ng-port" cx="600" cy="133" r="4"></circle>
+          <text class="ng-nodetxt" x="490" y="138">beam_face（Py3）</text>
+        </g>
+        <g class="ng-node2">
+          <rect class="ng-node-bg" x="480" y="168" width="120" height="42" rx="6"></rect>
+          <rect class="ng-node-tab" x="480" y="168" width="120" height="6" rx="3"></rect>
+          <circle class="ng-port" cx="480" cy="189" r="4"></circle>
+          <circle class="ng-port" cx="600" cy="189" r="4"></circle>
+          <text class="ng-nodetxt" x="490" y="194">grid_pick（Py3）</text>
+        </g>
+        <g class="ng-node3">
+          <rect class="ng-node-bg" x="480" y="224" width="120" height="42" rx="6"></rect>
+          <rect class="ng-node-tab" x="480" y="224" width="120" height="6" rx="3"></rect>
+          <circle class="ng-port" cx="480" cy="245" r="4"></circle>
+          <circle class="ng-port" cx="600" cy="245" r="4"></circle>
+          <text class="ng-nodetxt" x="490" y="250">plate_placer（Py3）</text>
+        </g>
+
+        <!-- 概要パネル（黄）×1 -->
+        <g class="ng-panel">
+          <rect class="ng-panel-bg" x="622" y="112" width="140" height="154" rx="6"></rect>
+          <text class="ng-paneltxt" x="632" y="132">📝 概要パネル</text>
+          <text class="ng-paneltxt" x="632" y="152">beam_face:</text>
+          <text class="ng-paneltxt" x="632" y="168">　梁面を抽出</text>
+          <text class="ng-paneltxt" x="632" y="188">grid_pick:</text>
+          <text class="ng-paneltxt" x="632" y="204">　通り芯を拾う</text>
+          <text class="ng-paneltxt" x="632" y="224">plate_placer:</text>
+          <text class="ng-paneltxt" x="632" y="240">　板を配置</text>
+          <text class="ng-paneltxt" x="632" y="258">…入出力も自動記載</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="ng-cap ng-l1" x="400" y="430" text-anchor="middle">① コードフォルダを選んで、使う.pyにチェック</text>
+        <text class="ng-cap ng-l2" x="400" y="430" text-anchor="middle">② ［生成］ボタンひとつ押すだけ</text>
+        <text class="ng-cap ng-l3" x="400" y="430" text-anchor="middle">③ 緑のPython3ノード＋黄の概要パネルが並んで自動配線</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">コードフォルダを選んで.pyにチェックを入れ、［生成］ボタンひとつでGHキャンバスに緑のPython3ノードと黄色い概要パネルが並び、標準入力ソースまで自動配線される流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>Rhinoのツールバーアイコン、またはコマンド <kbd>NODEGEN</kbd> から起動する<strong>ランチャー</strong>です。Pythonコードの入ったフォルダを選ぶだけで、その中の<code>.py</code>ファイルを<strong>「配線済みのGH Python3ノード」として、開いているGrasshopperドキュメントへ一気に並べます</strong>。</p>
+    <p>ふつうはGrasshopperを開いてノードを1つずつ手で貼り、コードを貼り付け、入力端子を作って…と手間がかかりますが、NodeGenは<strong>GH側の操作を一切せずに</strong>、コードフォルダから即座にノード群を生成します。しかも各ノードには<strong>概要パネル</strong>が付き、型に合った<strong>標準入力ソース（スライダー・トグル・パネルなど）が自動で配線</strong>されるので、置いた瞬間から動かせる状態になります。実際の変換処理は共有エンジン <a href="ghai-components.html">ghkit.py</a> に任せた、薄いUI（入口）です。</p>
+    <p class="lead">※ GH Python3ノード＝Grasshopper上でPythonコードを動かす緑色のコンポーネント。／ 自動配線＝入力端子の型を見て、スライダー等の適切な「値の供給元」を自動でつないでくれる機能。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力（操作／結果） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>ダイアログの操作・結果</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>操作する（ダイアログ）</caption>
+        <thead><tr><th>操作</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">フォルダ選択</td><td>ノード化したい<code>.py</code>が入ったフォルダを「参照…」で指定。</td></tr>
+          <tr><td class="port">.py一覧のチェック</td><td>フォルダ内の<code>.py</code>が一覧表示される。ノード化する<strong>ファイルだけにチェック</strong>。</td></tr>
+          <tr><td class="port">お気に入りフォルダ</td><td>よく使うコードフォルダを登録しておき、次回からワンタッチで呼び出す。</td></tr>
+          <tr><td class="port">自動配線 / AI補正</td><td>入力ソースを自動で繋ぐか、Ollamaに型・要約を補正させるかのトグル。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>結果（GHキャンバス）</caption>
+        <thead><tr><th>結果</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Python3ノード群</td><td>選んだ<code>.py</code>ぶんの<strong>緑のPython3コンポーネント</strong>がキャンバスに出現。</td></tr>
+          <tr><td class="port">概要パネル</td><td>各ノードの役割・入出力をまとめた<strong>黄色い説明パネル</strong>。</td></tr>
+          <tr><td class="port">標準入力ソース</td><td>型に合ったスライダー／トグル／パネル等が<strong>自動配線</strong>された状態。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">GHドキュメントを開く</span><span class="step-body">ノードを置きたいGrasshopperドキュメントをアクティブにしておく（生成先になる）。</span></li>
+      <li><span class="step-title">NodeGenを起動する</span><span class="step-body">ツールバーの<strong>NodeGenアイコン</strong>をクリック、またはRhinoで <kbd>NODEGEN</kbd> と入力。</span></li>
+      <li><span class="step-title">フォルダを選ぶ</span><span class="step-body">ダイアログで<code>.py</code>の入ったフォルダを指定。中のファイルが一覧に並ぶ。</span></li>
+      <li><span class="step-title">ノード化する.pyにチェック</span><span class="step-body">必要なファイルだけチェック。<strong>自動配線</strong>をオンにしておくと入力ソースまで繋がる。</span></li>
+      <li><span class="step-title">［生成］を押す</span><span class="step-body">開いているGHキャンバスに、緑のPython3ノード＋黄の概要パネルが自動配線付きで一気に並ぶ。</span></li>
+      <li><span class="step-title">そのまま使う／微調整する</span><span class="step-body">置かれたノードはすぐ動く状態。必要なら入力値やスライダー範囲を手で調整する。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">エンジン</span>
+        <a class="chip chip-up" href="ghai-components.html">ghkit＋AIコンポーネント群</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">NodeGen rh_nodegen（このツール）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">生成先</span>
+        <span class="chip">アクティブなGHドキュメントへノード追加</span>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">NodeGenは入口（ランチャー）で、実際の解析・ノード生成は共有エンジン <a href="ghai-components.html">ghkit.py</a> が担当します。GHキャンバス上で同じことをしたい場合は、ghai_nodegen などのコンポーネント版が使えます。</p>
+  </div>
+</section>
+
+<!-- 7. 実際に試す -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実際に試すには</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧪</span> 手元のPythonフォルダをそのままノード化</span>
+      <p class="sample-desc">開発基盤ツールのため専用3dmサンプルはありません。GH用に書いた<code>.py</code>が数本入ったフォルダがあれば、すぐ試せます。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">お試しフォルダを用意</span><span class="step-body">簡単な<code>.py</code>（入力を受けて何か返すもの）を2〜3本フォルダに入れる。</span></li>
+        <li><span class="step-title">空のGHで生成してみる</span><span class="step-body">新規GHドキュメントで <kbd>NODEGEN</kbd> を起動し、その2〜3本にチェックして生成。</span></li>
+        <li><span class="step-title">配線と概要を確認</span><span class="step-body">ノードが並び、入力ソースが繋がり、概要パネルに役割が書かれていることを確認する。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> コア（生成処理）は実機検証済み／ダイアログUIは検証途上</div>
+        <p>ノードを実際に組み立てる中核（ghkit.pyの materialize）は実機で検証済みですが、<strong>Etoダイアログの実クリックやツールバー組み込み</strong>は検証途上です。ツールバー未整備の環境では、まずコマンド <kbd>NODEGEN</kbd> からの起動で試してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> GUID端子のヒントが「ghdoc」に巻き戻る症状（対策済み）</div>
+        <p>生成ノードのGUID入力端子が、更新のたびに<strong>ghdocヒントへ勝手に戻る</strong>という既知の罠があります（型処理が壊れる原因）。現在は生成側で <span class="port" style="color:var(--warn)">normalize_no_ghdoc</span> を呼んで修復済みですが、既存ドキュメントで再発したら全走査版の <span class="port" style="color:var(--warn)">fix_ghdoc_hints.py</span> をかけてください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> エンジン ghkit.py はGHに貼らない黒子。動かさない</div>
+        <p><a href="ghai-components.html">ghkit.py</a> は全ツールが共有する中核ライブラリで、GHキャンバスには貼りません。ファイルの移動・リネームをすると NodeGen を含む複数ツールが一斉に動かなくなるので触らないでください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> AI補正はローカルOllama前提</div>
+        <p>AI補正（型・要約の推定）は<strong>ローカルのOllama</strong>を使います（旧Claude API版は廃止済み）。Ollamaが動いていない環境ではAI補正はオフにして、自動配線のみで利用してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\gh_ai_nodegen\<span class="fp-accent">rh_nodegen.py</span>（エンジン＝ghkit.py ／ ツールバー＝NodeGenTools.rui）
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ai">開発・AI基盤の一覧</a>
+      <a href="ghai-components.html">エンジン ghkit＋AIコンポーネント群</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

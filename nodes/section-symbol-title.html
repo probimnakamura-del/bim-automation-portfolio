@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>断面符号＆タイトル抽出 GH_SectionSymbolTitle — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス sst- で衝突回避
+   ①図面の断面符号A-Aとタイトル → ②Runで丸囲みAをハイライト → ③タイトルとペアで抽出リストに積む
+   ============================================================ */
+.sst-svg text { font-family: var(--font); }
+
+/* 図面シート */
+.sst-sheet-bg    { fill: #0c1428; }
+.sst-sheet-frame { fill: none; stroke: #34406a; stroke-width: 1.6; }
+.sst-noise       { fill: none; stroke: #46527e; stroke-width: 1.3; opacity: .5; }
+
+/* 断面符号（丸囲みの文字＋切断線） */
+.sst-symring { fill: #0c1428; stroke: #8291c0; stroke-width: 1.8; }
+.sst-symtxt  { fill: #cfd7f2; font-size: 15px; font-weight: 800; }
+.sst-cutline { fill: none; stroke: #7f8dbe; stroke-width: 1.6; stroke-dasharray: 10 4 3 4; opacity: .8; }
+.sst-arrow   { fill: #8291c0; }
+/* タイトル文字＋アンダーライン */
+.sst-titletxt { fill: #b9c4ea; font-size: 15px; font-weight: 700; }
+.sst-titleul  { fill: none; stroke: #8291c0; stroke-width: 2; }
+
+/* 抽出ハイライト（シアン＝カテゴリ色） */
+.sst-hit-ring { fill: none; stroke: var(--accent); stroke-width: 3.2; }
+.sst-hit-line { fill: none; stroke: var(--accent); stroke-width: 2.6; opacity: .9; stroke-dasharray: 200; }
+.sst-hit-ul   { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 120; }
+
+/* 抽出リスト（右側にペアで積まれる） */
+.sst-list-bg  { fill: #101a30; stroke: var(--accent); stroke-width: 1.6; }
+.sst-list-hd  { fill: var(--accent); }
+.sst-list-hdtx{ fill: #06202a; font-size: 11px; font-weight: 800; }
+.sst-row      { fill: #16213c; stroke: #2a3352; stroke-width: 1; }
+.sst-row-sym  { fill: var(--accent); font-size: 12px; font-weight: 800; }
+.sst-row-ttl  { fill: #cfd7f2; font-size: 11px; font-weight: 600; }
+.sst-pair     { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 4 3; opacity: .7; }
+
+/* Runボタン */
+.sst-btn      { fill: var(--accent); }
+.sst-btn-txt  { fill: #06202a; font-size: 13px; font-weight: 800; }
+
+/* テキスト */
+.sst-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.sst-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+
+/* 進捗バー */
+.sst-prog-tr { fill: #223052; }
+.sst-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.sst-btn-g { animation: sstBtn 10s infinite; }
+.sst-hitA { animation: sstHit 10s infinite; }
+.sst-hitB { animation: sstHit 10s infinite; animation-delay: .3s; }
+.sst-hline { animation: sstHitLine 10s infinite; }
+.sst-hul   { animation: sstHitUl 10s infinite; }
+.sst-list-g { animation: sstList 10s infinite; }
+.sst-r1 { animation: sstRow 10s infinite; }
+.sst-r2 { animation: sstRow 10s infinite; animation-delay: .35s; }
+.sst-prog { animation: sstProg 10s linear infinite; }
+.sst-l1 { animation: sstL1 10s infinite; }
+.sst-l2 { animation: sstL2 10s infinite; }
+.sst-l3 { animation: sstL3 10s infinite; }
+
+@keyframes sstBtn {
+  0%,3%   { opacity: 0; }
+  8%      { opacity: 1; }
+  30%     { opacity: 1; transform: scale(1); }
+  33%     { transform: scale(.9); }
+  36%     { transform: scale(1); }
+  48%,100%{ opacity: .35; }
+}
+/* 丸囲み記号がシアンにポップ */
+@keyframes sstHit {
+  0%,33%  { opacity: 0; transform: scale(.5); }
+  40%     { opacity: 1; transform: scale(1.25); }
+  46%     { transform: scale(1); }
+  100%    { opacity: 1; transform: scale(1); }
+}
+/* 測定基準の水平線が染まる */
+@keyframes sstHitLine {
+  0%,36%  { opacity: 0; stroke-dashoffset: 200; }
+  46%     { opacity: .9; }
+  56%     { opacity: .9; stroke-dashoffset: 0; }
+  100%    { opacity: .9; stroke-dashoffset: 0; }
+}
+/* タイトルのアンダーラインが引かれる */
+@keyframes sstHitUl {
+  0%,40%  { opacity: 0; stroke-dashoffset: 120; }
+  52%     { opacity: 1; }
+  60%     { opacity: 1; stroke-dashoffset: 0; }
+  100%    { opacity: 1; stroke-dashoffset: 0; }
+}
+/* 抽出リスト枠が現れる */
+@keyframes sstList {
+  0%,60%  { opacity: 0; transform: translateX(10px); }
+  70%     { opacity: 1; transform: translateX(0); }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+/* 記号↔タイトルのペア行が積まれる */
+@keyframes sstRow {
+  0%,66%  { opacity: 0; transform: translateY(8px); }
+  76%     { opacity: 1; transform: translateY(0); }
+  96%     { opacity: 1; }
+  100%    { opacity: 0; }
+}
+@keyframes sstProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+@keyframes sstL1 { 0%{opacity:0} 5%{opacity:1} 28%{opacity:1} 33%{opacity:0} 100%{opacity:0} }
+@keyframes sstL2 { 0%,33%{opacity:0} 40%{opacity:1} 58%{opacity:1} 63%{opacity:0} 100%{opacity:0} }
+@keyframes sstL3 { 0%,63%{opacity:0} 70%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">断面符号＆タイトル抽出 <span style="opacity:.75;font-weight:700">GH_SectionSymbolTitle</span></h1>
+    <p class="catch">図面の<span class="em">「A-A」などの断面符号</span>と<span class="em">切断図タイトル</span>を、自動で見つけてペアにする。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">大文字専用（誤検知防止・厳格版）</span>
+      <span class="badge st-ver">GH Python ノード</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg sst-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="図面の断面符号を抽出しタイトルとペアにするアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="sst-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="sst-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- 図面シート -->
+        <rect class="sst-sheet-bg"    x="60" y="60" width="470" height="320" rx="6"></rect>
+        <rect class="sst-sheet-frame" x="60" y="60" width="470" height="320" rx="6"></rect>
+        <rect class="sst-sheet-frame" x="72" y="72" width="446" height="296"></rect>
+        <!-- ノイズ（図枠・部材線） -->
+        <line class="sst-noise" x1="100" y1="200" x2="400" y2="200"></line>
+        <line class="sst-noise" x1="250" y1="120" x2="250" y2="290"></line>
+
+        <!-- 断面切断線（A-A の切断位置）＋両端の符号円＋矢視 -->
+        <line class="sst-cutline" x1="120" y1="150" x2="380" y2="150"></line>
+        <g><circle class="sst-symring" cx="120" cy="150" r="17"></circle><text class="sst-symtxt" x="120" y="156" text-anchor="middle">A</text></g>
+        <g><circle class="sst-symring" cx="380" cy="150" r="17"></circle><text class="sst-symtxt" x="380" y="156" text-anchor="middle">A</text></g>
+        <polygon class="sst-arrow" points="120,132 113,120 127,120"></polygon>
+        <polygon class="sst-arrow" points="380,132 373,120 387,120"></polygon>
+
+        <!-- 切断図タイトル（下部） -->
+        <text class="sst-titletxt" x="250" y="322" text-anchor="middle">断面図 A-A</text>
+        <line class="sst-titleul" x1="196" y1="332" x2="304" y2="332"></line>
+
+        <!-- 抽出ハイライト: 符号円2つ＋水平線＋タイトル下線 -->
+        <g class="sst-hline">
+          <line class="sst-hit-line" pathLength="200" x1="120" y1="150" x2="380" y2="150"></line>
+        </g>
+        <g class="sst-hitA" style="transform-box:fill-box;transform-origin:center"><circle class="sst-hit-ring" cx="120" cy="150" r="20"></circle></g>
+        <g class="sst-hitB" style="transform-box:fill-box;transform-origin:center"><circle class="sst-hit-ring" cx="380" cy="150" r="20"></circle></g>
+        <g class="sst-hul">
+          <line class="sst-hit-ul" pathLength="120" x1="196" y1="332" x2="304" y2="332"></line>
+        </g>
+
+        <!-- Runボタン -->
+        <g class="sst-btn-g" style="transform-box:fill-box;transform-origin:center">
+          <rect class="sst-btn" x="416" y="86" width="96" height="34" rx="8"></rect>
+          <text class="sst-btn-txt" x="464" y="108" text-anchor="middle">Run ▶</text>
+        </g>
+
+        <!-- ペア接続の点線（符号 → リスト） -->
+        <g class="sst-list-g">
+          <path class="sst-pair" d="M400,150 C480,150 500,170 560,175"></path>
+          <path class="sst-pair" d="M304,332 C440,320 500,250 560,232"></path>
+        </g>
+
+        <!-- 抽出リスト（右側にペアで積む） -->
+        <g class="sst-list-g">
+          <rect class="sst-list-bg" x="560" y="120" width="200" height="150" rx="8"></rect>
+          <rect class="sst-list-hd" x="560" y="120" width="200" height="26" rx="8"></rect>
+          <rect class="sst-list-hd" x="560" y="133" width="200" height="13"></rect>
+          <text class="sst-list-hdtx" x="572" y="138">抽出リスト（符号 ↔ タイトル）</text>
+        </g>
+        <g class="sst-r1">
+          <rect class="sst-row" x="572" y="158" width="176" height="44" rx="5"></rect>
+          <text class="sst-row-sym" x="584" y="178">符号：A-A</text>
+          <text class="sst-row-ttl" x="584" y="194">タイトル：断面図 A-A</text>
+        </g>
+        <g class="sst-r2">
+          <rect class="sst-row" x="572" y="210" width="176" height="44" rx="5"></rect>
+          <text class="sst-row-sym" x="584" y="230">符号：B-B</text>
+          <text class="sst-row-ttl" x="584" y="246">タイトル：断面図 B-B</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="sst-cap sst-l1" x="400" y="428" text-anchor="middle">① 図面に散らばる断面符号（丸囲みA）と切断図タイトル</text>
+        <text class="sst-cap sst-l2" x="400" y="428" text-anchor="middle">② Runで丸囲みの符号と水平線・タイトルを自動抽出</text>
+        <text class="sst-cap sst-l3" x="400" y="428" text-anchor="middle">③ 符号とタイトルをペアにして抽出リストへ積む</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">図面上の丸で囲まれた断面符号（A-A）と、対応する切断図タイトル（断面図 A-A）をRunで見つけ出し、符号とタイトルをペアにして抽出リストへ積み上げる流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>製作図に散らばっている<strong>大文字の断面符号（A-A、B-Bなど）と、それに対応する切断図タイトルを一括で抽出する</strong>ツールです。断面符号は「丸で囲まれた文字」として図面に置かれ、切断位置を示す水平線や、どちら向きに見るかを示す矢視とセットになっています。このノードは、それらを見つけ出して<strong>符号（例：A-A）と切断図タイトル（例：断面図 A-A）をペアで束ねます</strong>。</p>
+    <p>ポイントは、英単語の中の連続文字（"TT" や "SS" など）をタイトルと誤認しないよう、<strong>厳格な誤検知防止ルール</strong>で拾っていること。それでも図面の書き方によっては取りこぼしが出るので、<span class="port" style="color:var(--accent)">AddIds</span> 端子に断面符号ブロックのGUIDを渡せば、<strong>ルールを無視して強制的に断面符号として追加</strong>できます。ここで拾った断面符号は、下流の <a href="section-data-json.html">統合JSON生成</a> に渡り、Make2Dの切断計画の材料になります。なお<strong>大文字専用</strong>で、小文字の断面（a, b…）は姉妹ツール <a href="section-lower.html">section_lower</a> が別ルールで担当します。</p>
+    <p class="lead">※ 断面符号＝「この位置でこう切って、この方向から見る」を表す図面記号（A-A など）。／ 切断図タイトル＝その断面図に付く見出し文字（「断面図 A-A」など）。両者をペアにすることで、どの符号がどの断面図に対応するかが機械的に分かります。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート（3）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Run</td><td>抽出を実行する。押した時だけスキャンし、結果はstickyに保持（Run=Falseでも前回結果を出し続ける）。<kbd>Button</kbd> 推奨。図面を開き直すと「未計算」に戻る。</td></tr>
+          <tr><td class="port">AddIds</td><td>任意。自動で取りこぼした断面符号ブロックのGUIDを渡すと、<strong>取得ルールを無視して強制的に断面符号として追加</strong>する。ピッカー（<a href="grid-extractor-v2.html">grid_extractor</a>／<a href="touch-finder.html">touch_picker</a>）を流用してGUIDを供給。</td></tr>
+          <tr><td class="port">SelectAdded</td><td>任意（<kbd>Toggle</kbd>/<kbd>Button</kbd> 推奨）。手動追加・分解検出で加えた断面符号の“元オブジェクト”をRhinoビューで実選択する。<strong>何が追加されたかの確認用</strong>（Run不要）。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート（2グループ）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Names / Points /<br>Symbols / Lines_H /<br>Lines_V</td><td><strong>断面符号側。</strong>抽出された断面名／文字の基準点／文字を囲む記号枠／測定基準の水平線／ブロック内の垂直線。</td></tr>
+          <tr><td class="port">Title_Names /<br>Title_Texts /<br>Title_Points /<br>Title_Lines /<br>Title_Symbols</td><td><strong>切断図タイトル側。</strong>タイトルから抽出したアルファベット／実際のタイトル文字列／基準点／下部のアンダーライン／タイトル群を囲む枠。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">図面を開いてノードを置く</span><span class="step-body">断面符号（丸囲みのA-Aなど）とタイトルが入った2D図面をRhinoで開き、GHにこのノードを配置する。</span></li>
+      <li><span class="step-title">Runで抽出</span><span class="step-body"><span class="port" style="color:var(--accent)">Run</span> に <kbd>Button</kbd> を付けて押す。断面符号と切断図タイトルが抽出され、符号側・タイトル側の各端子に出力される。</span></li>
+      <li><span class="step-title">符号とタイトルの対応を確認</span><span class="step-body"><span class="port" style="color:var(--accent)">Names</span> と <span class="port" style="color:var(--accent)">Title_Texts</span> を見て、A-A・B-B…がそれぞれのタイトルと揃っているか確認する。</span></li>
+      <li><span class="step-title">取りこぼしを手動追加</span><span class="step-body">拾えなかった符号があれば、ピッカーでブロックのGUIDを取って <span class="port" style="color:var(--accent)">AddIds</span> へ流す（ルール無視で強制追加）。</span></li>
+      <li><span class="step-title">追加分を目で確かめる</span><span class="step-body"><span class="port" style="color:var(--accent)">SelectAdded</span> をオンにすると、追加した符号の元オブジェクトがRhinoで選択され、何を足したか一目で分かる。</span></li>
+      <li><span class="step-title">統合JSONへ渡す</span><span class="step-body">符号・タイトルを <a href="section-data-json.html">GH_SectionDataJSON</a> に接続し、通り芯・レベル線と束ねて統合JSONにする。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <span class="flow-solo">なし（<b>2D図面から直接</b>抽出する起点ノード）</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">GH_SectionSymbolTitle（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="section-data-json.html">統合JSON生成 GH_SectionDataJSON</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">兄弟ツール：小文字断面（a, b…）は <a href="section-lower.html">section_lower</a> が担当。通り芯は <a href="grid-extractor-v2.html">grid_extractor_v2</a>。これらが <a href="section-data-json.html">統合JSON</a> に集約されます。全体像は <a href="../pipeline.html">Make2Dパイプライン詳細図</a> へ。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">📐</span> サンプルモデル\02_2D図面.3dm</span>
+      <p class="sample-desc">通り芯記号（X1, X2, Y1…）・断面符号（A-A）・タイトル文字入りの2D図面。断面符号抽出・通り芯抽出・統合JSONのデモ用。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">図面を開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\02_2D図面.3dm</span> を開く。</span></li>
+        <li><span class="step-title">ノードを置いてRun</span><span class="step-body">GHにこのノードを置き、<span class="port" style="color:var(--accent)">Run</span> のボタンを押す。断面符号 A-A と切断図タイトルが抽出される。</span></li>
+        <li><span class="step-title">符号とタイトルを確認</span><span class="step-body"><span class="port" style="color:var(--accent)">Names</span> に「A-A」、<span class="port" style="color:var(--accent)">Title_Texts</span> に「断面図 A-A」が出て、ペアになっていることを確認。</span></li>
+        <li><span class="step-title">統合JSONへつなぐ</span><span class="step-body">同じ図面から <a href="grid-extractor-v2.html">通り芯</a> も抽出し、両方を <a href="section-data-json.html">統合JSON生成</a> へ渡すとパイプラインの入口が完成する。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 大文字専用。小文字はsection_lowerへ</div>
+        <p>このノードが扱うのは<strong>大文字の断面符号（A-A、B-B…）だけ</strong>です。小文字断面（a, b, g…）は取得ルールが異なるため、専用の <a href="section-lower.html">section_lower</a> パイプラインが担当します。混在図面では両方を使い分けてください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 取得ルールは厳格。取りこぼしはAddIdsで救済</div>
+        <p>英単語内の連続文字（"TT" "SS" 等）をタイトルと誤認しないよう、あえて厳しめに拾います。その分、変則的な符号は自動で拾えないことがあります。<strong>自動ルールは崩さず</strong>、取りこぼしだけ <span class="port" style="color:var(--accent)">AddIds</span> にブロックGUIDを渡して強制追加してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Runは必ずButtonで・結果はドキュメント単位で保持</div>
+        <p><span class="port" style="color:var(--accent)">Run</span> は押した時だけ抽出する <strong>Button</strong> 運用が基本。結果は「このコンポーネント × このドキュメント」ごとに保持され、図面を開き直すと「未計算」に戻るので、その時はもう一度押してください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\図面整理\<span class="fp-accent">GH_SectionSymbolTitle.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

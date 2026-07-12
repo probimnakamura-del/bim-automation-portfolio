@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>曲面展開図 GH_Unroll — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス unr- で衝突回避
+   ①折れ曲がった曲げ板（3D） → ②パタパタと平面に開く → ③展開図＋折り線＋寸法
+   ============================================================ */
+.unr-svg text { font-family: var(--font); }
+
+/* 折り曲げソリッド（3D風・立体面） */
+.unr-face-top { fill: color-mix(in srgb, var(--accent) 22%, #0f1a30); stroke: var(--accent); stroke-width: 2.2; }
+.unr-face-mid { fill: color-mix(in srgb, var(--accent) 12%, #0f1a30); stroke: var(--accent); stroke-width: 2.2; }
+.unr-face-bot { fill: color-mix(in srgb, var(--accent) 30%, #0f1a30); stroke: var(--accent); stroke-width: 2.2; }
+.unr-fold3d   { stroke: var(--accent); stroke-width: 1.6; opacity: .55; stroke-dasharray: 6 4; }
+
+/* 折れる面（回転して開くパネル） */
+.unr-panelA { fill: color-mix(in srgb, var(--accent) 18%, #0f1a30); stroke: var(--accent); stroke-width: 2.2;
+              transform-box: fill-box; }
+.unr-panelB { fill: color-mix(in srgb, var(--accent) 18%, #0f1a30); stroke: var(--accent); stroke-width: 2.2;
+              transform-box: fill-box; }
+
+/* 展開図（フラット） */
+.unr-flat    { fill: #0f1a30; stroke: var(--accent); stroke-width: 2.6; }
+.unr-fold    { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-dasharray: 9 5; opacity: .9; }
+.unr-outline { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linejoin: round; }
+
+/* 寸法＋矢羽 */
+.unr-dim   { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
+.unr-tick  { stroke: var(--accent); stroke-width: 2; }
+.unr-dimtxt{ fill: #eafcff; font-size: 13px; font-weight: 700; }
+.unr-lbl   { fill: #9aa7cc; font-size: 12px; font-weight: 700; }
+
+/* テキスト */
+.unr-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+
+/* 進捗バー */
+.unr-prog-tr { fill: #223052; }
+.unr-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.unr-solid   { animation: unrSolid 10s infinite; }
+.unr-mid     { animation: unrMid 10s infinite; }
+.unr-pA      { animation: unrPanelA 10s infinite; transform-origin: center bottom; }
+.unr-pB      { animation: unrPanelB 10s infinite; transform-origin: center top; }
+.unr-flat-a  { animation: unrFlat 10s infinite; }
+.unr-fold-a  { animation: unrFold 10s infinite; }
+.unr-dim-a   { animation: unrDim 10s infinite; }
+.unr-l1      { animation: unrL1 10s infinite; }
+.unr-l2      { animation: unrL2 10s infinite; }
+.unr-l3      { animation: unrL3 10s infinite; }
+.unr-prog-a  { animation: unrProg 10s linear infinite; }
+
+/* ① 立体は序盤に見せ、②で消す */
+@keyframes unrSolid { 0%,3%{opacity:0} 8%{opacity:1} 30%{opacity:1} 40%,100%{opacity:0} }
+/* 中央ウェブ（開く間は固定表示、③で消す） */
+@keyframes unrMid { 0%,6%{opacity:0} 12%{opacity:1} 55%{opacity:1} 60%,100%{opacity:0} }
+/* ② 折れ面が開く（回転）→ ③ フラットへ。上パネルは上ヒンジ、下パネルは下ヒンジで開く */
+@keyframes unrPanelA {
+  0%,30% { opacity:0; transform: perspective(300px) rotateX(72deg); }
+  36%    { opacity:1; transform: perspective(300px) rotateX(72deg); }
+  55%    { opacity:1; transform: perspective(300px) rotateX(0deg); }
+  60%,100%{ opacity:0; transform: perspective(300px) rotateX(0deg); }
+}
+@keyframes unrPanelB {
+  0%,30% { opacity:0; transform: perspective(300px) rotateX(-72deg); }
+  36%    { opacity:1; transform: perspective(300px) rotateX(-72deg); }
+  55%    { opacity:1; transform: perspective(300px) rotateX(0deg); }
+  60%,100%{ opacity:0; transform: perspective(300px) rotateX(0deg); }
+}
+/* ③ 平面展開図が確定表示 */
+@keyframes unrFlat { 0%,56%{opacity:0} 62%{opacity:1} 100%{opacity:1} }
+@keyframes unrFold {
+  0%,62%  { opacity:0; stroke-dashoffset: 200; }
+  64%     { opacity:1; }
+  78%     { opacity:1; stroke-dashoffset: 0; }
+  100%    { opacity:1; stroke-dashoffset: 0; }
+}
+@keyframes unrDim { 0%,74%{opacity:0} 82%{opacity:1} 100%{opacity:1} }
+@keyframes unrL1 { 0%{opacity:0} 4%{opacity:1} 29%{opacity:1} 34%{opacity:0} 100%{opacity:0} }
+@keyframes unrL2 { 0%,34%{opacity:0} 39%{opacity:1} 56%{opacity:1} 61%{opacity:0} 100%{opacity:0} }
+@keyframes unrL3 { 0%,61%{opacity:0} 66%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes unrProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">曲面展開図 <span style="opacity:.75;font-weight:700">GH_Unroll</span></h1>
+    <p class="catch">折れ曲がった板金・チャンネル材を、<span class="em">1枚の展開図</span>にパタッと開く。<span class="em">折り線と外形寸法まで自動</span>。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">GH Python3 ノード</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg unr-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="折れ曲がった曲げ板がパタパタと平面に開き、折り線と外形寸法が付くアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="unr-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="unr-prog unr-prog-a" x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① 折れ曲がった曲げ板（3D風・コの字チャンネル） ===== -->
+        <g class="unr-solid">
+          <!-- 上フランジ（斜めの平行四辺形で立体感） -->
+          <polygon class="unr-face-top" points="300,150 470,150 500,132 330,132"></polygon>
+          <!-- 縦ウェブ -->
+          <polygon class="unr-face-mid" points="300,150 470,150 470,300 300,300"></polygon>
+          <!-- 下フランジ -->
+          <polygon class="unr-face-bot" points="300,300 470,300 500,282 330,282"></polygon>
+          <!-- 折り目 -->
+          <line class="unr-fold3d" x1="300" y1="150" x2="470" y2="150"></line>
+          <line class="unr-fold3d" x1="300" y1="300" x2="470" y2="300"></line>
+        </g>
+
+        <!-- ===== ② パタパタ開く（中央ウェブ固定＋上下パネルが回転して開く） ===== -->
+        <rect class="unr-face-mid unr-mid" x="300" y="150" width="170" height="150"></rect>
+        <!-- 上パネル（下辺をヒンジに開く） -->
+        <rect class="unr-panelA unr-pA" x="300" y="94" width="170" height="56"></rect>
+        <!-- 下パネル（上辺をヒンジに開く） -->
+        <rect class="unr-panelB unr-pB" x="300" y="300" width="170" height="56"></rect>
+
+        <!-- ===== ③ フラットな展開図（縦につながった1枚）＋折り線 ===== -->
+        <g class="unr-flat-a">
+          <rect class="unr-flat" x="520" y="96" width="150" height="258" rx="1"></rect>
+          <path class="unr-outline" d="M520,96 H670 V354 H520 Z"></path>
+        </g>
+        <!-- 折り線（破線・伸びて描かれる） -->
+        <path class="unr-fold unr-fold-a" pathLength="200" d="M520,168 H670"></path>
+        <path class="unr-fold unr-fold-a" pathLength="200" d="M520,282 H670"></path>
+
+        <!-- ③ 外形寸法＋矢羽 -->
+        <g class="unr-dim-a">
+          <!-- 全長（右・縦） -->
+          <line class="unr-dim" x1="694" y1="96" x2="694" y2="354"></line>
+          <line class="unr-tick" x1="688" y1="96" x2="700" y2="96"></line>
+          <line class="unr-tick" x1="688" y1="354" x2="700" y2="354"></line>
+          <text class="unr-dimtxt" x="705" y="229">L=520</text>
+          <!-- 幅（上・横） -->
+          <line class="unr-dim" x1="520" y1="80" x2="670" y2="80"></line>
+          <line class="unr-tick" x1="520" y1="74" x2="520" y2="86"></line>
+          <line class="unr-tick" x1="670" y1="74" x2="670" y2="86"></line>
+          <text class="unr-dimtxt" x="595" y="72" text-anchor="middle">W=300</text>
+          <!-- 折り位置ラベル -->
+          <text class="unr-lbl" x="524" y="162">折り線</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="unr-cap unr-l1" x="400" y="428" text-anchor="middle">① 折れ曲がった曲げ板・チャンネル材</text>
+        <text class="unr-cap unr-l2" x="400" y="428" text-anchor="middle">② パタパタと平面に開く（Unroll）</text>
+        <text class="unr-cap unr-l3" x="400" y="428" text-anchor="middle">③ 外形線・折り線・外形寸法を自動生成</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">折れ曲がった立体が平面へパタッと開き、折り線（破線）と外形寸法が付く流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>折れ曲がった曲面・板金部材を、<strong>1枚の平らな展開図（フラットパターン）</strong>に開いてくれるGrasshopperノードです。L字の曲げ板やコの字チャンネルのようなソリッドを選ぶと、Rhinoの展開（Unroll）機能で平面に開き、<strong>外形線・折り線・寸法（矢羽つき）・注記テキストまで一気に生成</strong>します。「この板、切り出す前は何mm×何mmで、どこで折るのか」がそのまま図になります。</p>
+    <p>複数の部材を一度に処理でき、<strong>同じ形（合同）の部材はグループにまとめて代表1個だけ展開</strong>します。何十枚も同形状があっても重い計算を繰り返さないので、<strong>フリーズを避けつつ速い</strong>のがポイント。Brep・Surface・PolySurfaceに加え、<strong>ブロックの中の面</strong>も対象にできます。</p>
+    <p class="lead">※ Unroll（展開）＝曲がった面を、伸び縮みさせずに平らに開くこと。板金や折り板の「切り出し形状」を求めるのに使います。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Ids / AddIds</td><td>展開する曲面・ソリッド（Brep/Surface/PolySurface／ブロック内部も可）。<strong>AddIds</strong>で対象を手動追加。</td></tr>
+          <tr><td class="port">BasePt</td><td>展開図を並べる基準点。ここを起点に展開図が配置される。</td></tr>
+          <tr><td class="port">Dim</td><td>外形寸法・矢羽を付けるかどうか。</td></tr>
+          <tr><td class="port">Gap</td><td>展開図どうしの間隔（部材が重ならないように空ける隙間）。</td></tr>
+          <tr><td class="port">MaxParts</td><td>一度に処理する最大部材数。重すぎる処理の安全弁。</td></tr>
+          <tr><td class="port">Run / Zoom / Reset</td><td>実行／展開図へズーム／状態リセット。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Flat</td><td>展開後のフラットなジオメトリ（面）。</td></tr>
+          <tr><td class="port">Outline</td><td>切り出し用の<strong>外形線</strong>。</td></tr>
+          <tr><td class="port">FoldLines</td><td><strong>折り線</strong>（どこで曲げるか）。</td></tr>
+          <tr><td class="port">DimCurves /<br>DimText / DimPts</td><td>外形寸法の線・寸法値・配置位置。</td></tr>
+          <tr><td class="port">Follow / Info</td><td>ズーム追従用の情報／部材数・合同グループなどの集計。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">対象を渡す</span><span class="step-body">展開したい曲げ板・チャンネル材を <span class="port" style="color:var(--accent)">Ids</span> へ。取りこぼしは <span class="port" style="color:var(--accent)">AddIds</span> で手動追加。ブロックの中の面もOK。</span></li>
+      <li><span class="step-title">配置と寸法を決める</span><span class="step-body"><span class="port" style="color:var(--accent)">BasePt</span> で並べ始める位置、<span class="port" style="color:var(--accent)">Gap</span> で部材間の隙間、<span class="port" style="color:var(--accent)">Dim</span> で寸法を付けるか指定。</span></li>
+      <li><span class="step-title">Runで展開</span><span class="step-body"><span class="port" style="color:var(--accent)">Run</span> を押すと、各部材が平面に開かれ、外形線・折り線・寸法が生成される。同形状は自動でまとめて代表だけ展開。</span></li>
+      <li><span class="step-title">展開図を確認</span><span class="step-body"><span class="port" style="color:var(--accent)">Zoom</span> で展開図へ寄って、外形寸法・折り位置をチェック。<span class="port" style="color:var(--accent)">Info</span> で部材数・合同グループ数を確認。</span></li>
+      <li><span class="step-title">図面へ流す</span><span class="step-body"><span class="port" style="color:var(--accent)">Outline / FoldLines / DimCurves</span> を出図やベイクへ回す。多すぎるときは <span class="port" style="color:var(--accent)">MaxParts</span> で分割処理。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="chip chip-self">GH_Unroll（このノード）</span>
+      </div>
+      <p class="flow-solo" style="margin-top:12px"><b>単独で使えます。</b>Make2Dパイプラインとは独立した便利ノードで、曲げ板・折り板の展開図が必要になったときに単体で呼び出します。展開結果はそのままベイクして出図に使えます。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\03_曲げ板.3dm</span>
+      <p class="sample-desc">L字曲げ板とチャンネル形の折り曲げソリッド。GH_Unrollの展開デモ用。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\03_曲げ板.3dm</span> を開く。L字曲げ板とチャンネル形が入っている。</span></li>
+        <li><span class="step-title">対象を選んで渡す</span><span class="step-body">曲げ板を選び、<span class="port" style="color:var(--accent)">Ids</span>（または <span class="port" style="color:var(--accent)">AddIds</span>）に渡す。</span></li>
+        <li><span class="step-title">Runで開く</span><span class="step-body"><span class="port" style="color:var(--accent)">Dim</span> をオンにして <span class="port" style="color:var(--accent)">Run</span>。平面に開かれ、折り線と外形寸法が付く。</span></li>
+        <li><span class="step-title">ズームして確認</span><span class="step-body"><span class="port" style="color:var(--accent)">Zoom</span> で展開図へ寄り、切り出し寸法・折り位置が正しいか見る。同形状はまとめられていることを <span class="port" style="color:var(--accent)">Info</span> で確認。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 同形状はまとめて処理（フリーズ回避のしくみ）</div>
+        <p>同じ形（合同）の部材は、面数・エッジ数・総エッジ長・面積のサインで<strong>グループ化して代表1個だけ展開</strong>します。何十枚も同形状があってもこの仕組みで速く安全に動きますが、逆に「1個ずつ全部展開したい」場合は形状に微差が要る点に注意してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 大量部材は MaxParts で区切る</div>
+        <p>対象が非常に多いと展開計算が重くなります。<span class="port" style="color:var(--accent)">MaxParts</span> で一度に処理する数を絞り、分割して回すとフリーズを避けられます。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> きれいに開けない面は元形状を疑う</div>
+        <p>展開（Unroll）は、単純にひとつなぎに開ける面が前提です。二重に湾曲した面や不正な面が混じると、期待どおり1枚に開けないことがあります。うまくいかないときは元のソリッドの面構成を確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> RH8のPython3ノード</div>
+        <p>Rhino8の新しいPython3コンポーネント前提です。Rhino7の旧Python（IronPython 2.7）では動きません。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\図面整理\<span class="fp-accent">GH_Unroll.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

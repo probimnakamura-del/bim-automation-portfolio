@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>最終選択ハブ GH_FinalSelect — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス fs- で衝突回避
+   ①3種の入力（自動=赤・追加=緑・除外=バツ） → ②ハブで合流し集合演算 → ③確定セットだけ残して中継
+   ============================================================ */
+.fs-svg text { font-family: var(--font); }
+
+/* 入力ボックス */
+.fs-in-auto { fill: color-mix(in srgb, #f87171 15%, transparent); stroke:#f87171; stroke-width:2.2; }
+.fs-in-add  { fill: color-mix(in srgb, #34d399 15%, transparent); stroke:#34d399; stroke-width:2.2; }
+.fs-in-del  { fill: #14203a; stroke:#7c88b4; stroke-width:2.2; }
+.fs-delx    { stroke:#94a3c8; stroke-width:2.6; stroke-linecap:round; }
+.fs-lbl-a { fill:#f87171; font-size:12.5px; font-weight:700; }
+.fs-lbl-g { fill:#34d399; font-size:12.5px; font-weight:700; }
+.fs-lbl-x { fill:#94a3c8; font-size:12.5px; font-weight:700; }
+
+.fs-in1 { animation: fsIn1 10s infinite; }
+.fs-in2 { animation: fsIn2 10s infinite; }
+.fs-in3 { animation: fsIn3 10s infinite; }
+@keyframes fsIn1 { 0%{opacity:0;transform:translateX(-14px)} 6%{opacity:1;transform:translateX(0)} 92%{opacity:1} 100%{opacity:0} }
+@keyframes fsIn2 { 0%,4%{opacity:0;transform:translateX(-14px)} 10%{opacity:1;transform:translateX(0)} 92%{opacity:1} 100%{opacity:0} }
+@keyframes fsIn3 { 0%,8%{opacity:0;transform:translateX(-14px)} 14%{opacity:1;transform:translateX(0)} 92%{opacity:1} 100%{opacity:0} }
+
+/* 合流の矢印＋流れるドット */
+.fs-arrow { fill:none; stroke:#4a5680; stroke-width:2; opacity:.7; }
+.fs-flow  { fill:#e6ecff; }
+.fs-flow1 { animation: fsFlow 10s infinite; }
+.fs-flow2 { animation: fsFlow 10s infinite 0.5s; }
+.fs-flow3 { animation: fsFlow 10s infinite 1.0s; }
+@keyframes fsFlow {
+  0%,30%   { opacity:0; offset-distance:0%; }
+  34%      { opacity:1; }
+  55%      { opacity:1; offset-distance:100%; }
+  58%,100% { opacity:0; offset-distance:100%; }
+}
+
+/* 競合除去（追加と除外がぶつかり除外が勝つ） */
+.fs-conflict { animation: fsConflict 10s infinite; }
+@keyframes fsConflict {
+  0%,40%  { opacity:1; }
+  50%     { opacity:1; }
+  56%     { opacity:0; }
+  100%    { opacity:0; }
+}
+.fs-conflict-x { stroke:#f87171; stroke-width:3; stroke-linecap:round; animation: fsConflictX 10s infinite; }
+@keyframes fsConflictX {
+  0%,42%  { opacity:0; }
+  48%     { opacity:1; }
+  55%     { opacity:1; }
+  58%,100%{ opacity:0; }
+}
+
+/* 中央ハブ */
+.fs-hub-box { fill:#0e1830; stroke:var(--accent); stroke-width:2; }
+.fs-hub-glow{ fill:none; stroke:var(--accent); stroke-width:2; opacity:0; animation: fsHubGlow 10s infinite; }
+@keyframes fsHubGlow {
+  0%,32%  { opacity:0; }
+  40%     { opacity:.55; }
+  62%     { opacity:0; }
+  100%    { opacity:0; }
+}
+.fs-hub-txt { fill:#e6ecff; font-size:13px; font-weight:800; }
+.fs-hub-sub { fill:#9aa7cc; font-size:11px; font-weight:600; }
+
+/* 確定セット（シアン）＋中継 */
+.fs-out { fill: color-mix(in srgb, var(--accent) 18%, transparent); stroke:var(--accent); stroke-width:2.4; }
+.fs-out-grp { animation: fsOut 10s infinite; }
+@keyframes fsOut {
+  0%,60%  { opacity:0; transform: scale(.85); }
+  68%     { opacity:1; transform: scale(1); }
+  96%     { opacity:1; }
+  100%    { opacity:0; }
+}
+.fs-relay-arrow { fill:none; stroke:var(--accent); stroke-width:2.4; }
+.fs-relay-head  { fill:var(--accent); }
+.fs-relay { animation: fsRelay 10s infinite; }
+@keyframes fsRelay {
+  0%,66%  { opacity:0; }
+  74%     { opacity:1; }
+  96%     { opacity:1; }
+  100%    { opacity:0; }
+}
+.fs-dest-box { fill:#0b1428; stroke:#34406a; stroke-width:1.3; }
+.fs-dest-txt { fill:#cdd6f4; font-size:11.5px; font-weight:700; }
+
+/* 3拍ラベル */
+.fs-cap { fill:#e6ecff; font-size:17px; font-weight:700; }
+.fs-l1 { animation: fsL1 10s infinite; }
+.fs-l2 { animation: fsL2 10s infinite; }
+.fs-l3 { animation: fsL3 10s infinite; }
+@keyframes fsL1 { 0%{opacity:0} 5%{opacity:1} 30%{opacity:1} 35%{opacity:0} 100%{opacity:0} }
+@keyframes fsL2 { 0%,35%{opacity:0} 40%{opacity:1} 60%{opacity:1} 65%{opacity:0} 100%{opacity:0} }
+@keyframes fsL3 { 0%,65%{opacity:0} 70%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+
+/* 進捗バー */
+.fs-prog-tr { fill:#223052; }
+.fs-prog { fill:var(--accent); transform-box: fill-box; transform-origin: left center; animation: fsProg 10s linear infinite; }
+@keyframes fsProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="m2d">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">図面化パイプライン (Make2D)</span>
+    <h1 class="node-title">最終選択ハブ <span style="opacity:.75;font-weight:700">GH_FinalSelect</span></h1>
+    <p class="catch">あちこちのツールの選択結果を<span class="em">1本にまとめて</span>、<span class="em">これが最終セット</span>と言い切る合流点。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">最終セット = (Ids∪Geos∪AddIds) − DelIds</span>
+      <span class="badge st-ver">GH Python3 ノード</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg fs-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="自動・追加・除外の3種の選択を合流させ、確定セットだけを中継するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="fs-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="fs-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① 3種の入力 ===== -->
+        <!-- 自動（赤） -->
+        <g class="fs-in1">
+          <text class="fs-lbl-a" x="40" y="96">自動 Ids / Geos</text>
+          <rect class="fs-in-auto" x="40"  y="104" width="26" height="26" rx="2"></rect>
+          <rect class="fs-in-auto" x="72"  y="104" width="26" height="26" rx="2"></rect>
+          <rect class="fs-in-auto" x="104" y="104" width="26" height="26" rx="2"></rect>
+        </g>
+        <!-- 追加（緑）※2個目は除外と競合して消える -->
+        <g class="fs-in2">
+          <text class="fs-lbl-g" x="40" y="206">追加 AddIds</text>
+          <rect class="fs-in-add" x="40" y="214" width="26" height="26" rx="2"></rect>
+          <g class="fs-conflict">
+            <rect class="fs-in-add" x="72" y="214" width="26" height="26" rx="2"></rect>
+          </g>
+          <line class="fs-conflict-x" x1="75" y1="217" x2="95" y2="237"></line>
+          <line class="fs-conflict-x" x1="95" y1="217" x2="75" y2="237"></line>
+        </g>
+        <!-- 除外（バツ） -->
+        <g class="fs-in3">
+          <text class="fs-lbl-x" x="40" y="316">除外 DelIds（最優先）</text>
+          <rect class="fs-in-del" x="40" y="324" width="26" height="26" rx="2"></rect>
+          <line class="fs-delx" x1="43" y1="327" x2="63" y2="347"></line>
+          <line class="fs-delx" x1="63" y1="327" x2="43" y2="347"></line>
+        </g>
+
+        <!-- ===== 合流の矢印 ===== -->
+        <path class="fs-arrow" id="fs-path1" d="M138,117 C220,117 240,215 300,215" fill="none"></path>
+        <path class="fs-arrow" id="fs-path2" d="M110,227 C200,227 240,220 300,220" fill="none"></path>
+        <path class="fs-arrow" id="fs-path3" d="M180,337 C240,337 250,250 300,240" fill="none"></path>
+        <!-- 流れるドット -->
+        <circle class="fs-flow fs-flow1" r="4" style="offset-path:path('M138,117 C220,117 240,215 300,215')"></circle>
+        <circle class="fs-flow fs-flow2" r="4" style="offset-path:path('M110,227 C200,227 240,220 300,220')"></circle>
+        <circle class="fs-flow fs-flow3" r="4" style="offset-path:path('M180,337 C240,337 250,250 300,240')"></circle>
+
+        <!-- ===== 中央ハブ ===== -->
+        <rect class="fs-hub-glow" x="300" y="176" width="150" height="98" rx="14"></rect>
+        <rect class="fs-hub-box"  x="300" y="176" width="150" height="98" rx="14"></rect>
+        <text class="fs-hub-txt" x="375" y="216" text-anchor="middle">GH_FinalSelect</text>
+        <text class="fs-hub-sub" x="375" y="236" text-anchor="middle">∪ してから</text>
+        <text class="fs-hub-sub" x="375" y="252" text-anchor="middle">DelIds を最優先で − </text>
+
+        <!-- ===== ③ 確定セット（シアン）＋中継 ===== -->
+        <g class="fs-out-grp">
+          <rect class="fs-out" x="486" y="188" width="26" height="26" rx="2"></rect>
+          <rect class="fs-out" x="518" y="188" width="26" height="26" rx="2"></rect>
+          <rect class="fs-out" x="486" y="220" width="26" height="26" rx="2"></rect>
+          <rect class="fs-out" x="518" y="220" width="26" height="26" rx="2"></rect>
+          <text class="fs-hub-sub" x="512" y="180" text-anchor="middle" style="fill:var(--accent);font-weight:800">確定セット OutIds ×4</text>
+        </g>
+
+        <!-- 中継の3先 -->
+        <g class="fs-relay">
+          <line class="fs-relay-arrow" x1="556" y1="217" x2="600" y2="217"></line>
+          <polygon class="fs-relay-head" points="600,217 588,211 588,223"></polygon>
+          <rect class="fs-dest-box" x="606" y="150" width="150" height="26" rx="6"></rect>
+          <text class="fs-dest-txt" x="616" y="167">🖥 画面に強調表示</text>
+          <rect class="fs-dest-box" x="606" y="204" width="150" height="26" rx="6"></rect>
+          <text class="fs-dest-txt" x="616" y="221">◉ Rhinoで実選択</text>
+          <rect class="fs-dest-box" x="606" y="258" width="150" height="26" rx="6"></rect>
+          <text class="fs-dest-txt" x="616" y="275">→ Make2D実行へ</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="fs-cap fs-l1" x="400" y="428" text-anchor="middle">① 自動（赤）・追加（緑）・除外（バツ）の3種が入力</text>
+        <text class="fs-cap fs-l2" x="400" y="428" text-anchor="middle">② ハブで合流 → ∪ してから DelIds を最優先で引く</text>
+        <text class="fs-cap fs-l3" x="400" y="428" text-anchor="middle">③ 確定セットだけ残して 画面・実選択・Make2Dへ中継</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">3種の選択（自動・追加・除外）を合流 → 和集合を作ってから除外を最優先で引く → 確定セットだけを画面表示・Rhino実選択・Make2D実行へ中継、という流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>接触検出やピッカーなど<strong>あちこちのツールが出した「選択結果」を、1つの端子にまとめて最終セットを確定する中継ハブ</strong>です。自動で拾ったもの・手で足したもの・手で外したもの——バラバラの選択を一箇所に集めて、「結局これが対象部材のすべて」と言い切れる状態を作ります。</p>
+    <p>合流のルールはシンプルです。<strong>最終セット =（自動結果 ∪ 手動追加）− 手動除外</strong>。<strong>除外（DelIds）が最優先</strong>で、GUID（部材の識別番号）が一致するものに加えて形状の一致でも二段構えで取り除きます。確定したセットは、画面上への強調表示・Rhinoでの実選択・そして下流の <a href="make2d-executor.html">Make2D実行</a> へ、同時に中継されます。何がいくつ残ったかは <span class="port" style="color:var(--accent)">Count</span> で常に見えるので、選択の“流量”が一目で分かります。</p>
+    <p class="lead">※ ∪（和集合）＝重複を除いて足し合わせること。／ DelIds最優先＝「追加」と「除外」で同じ部材がぶつかったら、必ず除外が勝つ、という意味です。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（GHノードの端子）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力ポート（3系統）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">Ids / Geos</td><td>自動スキャンの結果。<a href="touch-finder.html">接触検出</a>のGUIDと形状をそのまま受ける、合流の土台。</td></tr>
+          <tr><td class="port">AddIds</td><td>手で足したい部材（追加ピッカー由来）。土台に和集合で足す。</td></tr>
+          <tr><td class="port">DelIds</td><td>手で外したい部材（除外ピッカー由来）。<strong>最優先</strong>で引く。追加とぶつかれば除外が勝つ。</td></tr>
+          <tr><td class="port">Highlight /<br>Select / Zoom</td><td>確定セットを画面で強調／Rhinoで実選択／ズームするスイッチ。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力ポート（2系統）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">OutIds /<br>OutGeos</td><td>確定した最終セットのGUIDと形状。<a href="make2d-executor.html">Make2D実行</a>の TouchGeo へそのまま渡せる。</td></tr>
+          <tr><td class="port">Count /<br>Report</td><td>最終セットの点数と内訳ログ。足し引きの結果がここで見える。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">自動結果を土台に置く</span><span class="step-body"><a href="touch-finder.html">接触検出</a>の <span class="port" style="color:var(--accent)">TouchIds / RefIds</span>（と形状）を <span class="port" style="color:var(--accent)">Ids / Geos</span> へつなぐ。</span></li>
+      <li><span class="step-title">手動の足し引きをつなぐ</span><span class="step-body">追加ピッカーの出力を <span class="port" style="color:var(--accent)">AddIds</span> へ、除外ピッカーの出力を <span class="port" style="color:var(--accent)">DelIds</span> へ。<a href="touch-finder.html">touch_picker</a> を2個立てて役割分担させる。</span></li>
+      <li><span class="step-title">合流結果を確認する</span><span class="step-body">solveすると確定セットが計算される。<span class="port" style="color:var(--accent)">Count</span> で点数、<span class="port" style="color:var(--accent)">Highlight</span> で画面の色を見て過不足をチェック。</span></li>
+      <li><span class="step-title">実選択して見比べる</span><span class="step-body"><span class="port" style="color:var(--accent)">Select</span> をオンにするとRhino上で実際に選択される。取りこぼしがあれば AddIds／DelIds を調整。</span></li>
+      <li><span class="step-title">Make2Dへ渡す</span><span class="step-body">確定した <span class="port" style="color:var(--accent)">OutGeos</span> を <a href="make2d-executor.html">GH_Make2DExecutor</a> の TouchGeo へ。背景の見え線として図面に描かれる。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <a class="chip chip-up" href="touch-finder.html">接触検出ファミリー</a>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">GH_FinalSelect（このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="make2d-executor.html">Make2D実行 GH_Make2DExecutor</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px"><a href="touch-finder.html">接触検出</a>の自動結果と手動ピッカーの足し引きを受けて、<a href="make2d-executor.html">Make2D実行</a>の背景見え線（TouchGeo）へ渡す“選択の関所”です。全体像は <a href="../pipeline.html">パイプライン詳細図</a> で確認できます。</p>
+  </div>
+</section>
+
+<!-- 7. サンプルモデルでデモ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>サンプルモデルでデモ</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> サンプルモデル\01_柱梁フレーム.3dm</span>
+      <p class="sample-desc">2×1スパンの柱梁フレーム＋通り芯線＋ガセット／浮きピース入り。合流と足し引きの練習に使えます。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">モデルを開く</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">サンプルモデル\01_柱梁フレーム.3dm</span> を開く。</span></li>
+        <li><span class="step-title">自動結果を流す</span><span class="step-body"><a href="touch-finder.html">接触検出</a>で柱1本まわりのセットを作り、<span class="port" style="color:var(--accent)">Ids / Geos</span> へ接続。</span></li>
+        <li><span class="step-title">1つ足して1つ外す</span><span class="step-body">追加ピッカーで隣のブレースを足し、除外ピッカーで余計な浮きピースを外す。AddIds／DelIds を効かせる。</span></li>
+        <li><span class="step-title">除外が勝つのを確認</span><span class="step-body">わざと同じ部材を「追加」と「除外」の両方に入れてみる。<span class="port" style="color:var(--accent)">Count</span> が示すとおり除外側が勝つのを確認。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 除外（DelIds）は必ず最優先</div>
+        <p>同じ部材が「追加」と「除外」の両方に入っていると、<strong>除外が勝ちます</strong>。GUID一致に加えて形状一致でも二段で除去するため、追加したはずのものが消えるときは除外側に紛れていないか確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 選択の関所＝ここで流量を必ず見る</div>
+        <p>このノードは複数ツールの結果が合流する要（かなめ）です。<span class="port" style="color:var(--accent)">Count</span> と <span class="port" style="color:var(--accent)">Report</span> で「いくつ入っていくつ残ったか」を必ず確認する習慣にすると、下流のMake2Dでの過不足を早く発見できます。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> Conduit（画面描画）の後始末</div>
+        <p>強調表示はConduitで画面に描かれます。GHのダイアログを×で閉じたりコンポーネントを作り直すと描画が画面に残る（孤児化）ことがあります。表示が消えないときはノードを一度無効化→有効化してリセットしてください。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\図面整理\<span class="fp-accent">GH_FinalSelect.py</span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-m2d">図面化パイプライン（Make2D）の一覧</a>
+      <a href="../pipeline.html">パイプライン詳細図</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

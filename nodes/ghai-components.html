@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>ghkit＋AIコンポーネント群 — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス ghai- で衝突回避
+   ①手持ちの.pyコード（or 日本語プロンプト）
+   →②ghkitエンジンが解析（AST→型推論→組立）
+   →③型付きGH Python3ノード誕生＋標準入力を自動配線
+   ============================================================ */
+.ghai-svg text { font-family: var(--font); }
+
+/* コードカード */
+.ghai-card    { fill: #0f1a30; stroke: var(--accent); stroke-width: 2; }
+.ghai-cardbar { fill: #1b2338; }
+.ghai-codeln  { fill: var(--accent); opacity: .55; }
+.ghai-codeln2 { fill: #6f7db0; opacity: .7; }
+
+/* エンジン */
+.ghai-engine-box { fill: #0e1730; stroke: var(--accent); stroke-width: 2; }
+.ghai-gear   { fill: none; stroke: #8b96c4; stroke-width: 3.4; }
+.ghai-gear-c { fill: #0e1730; stroke: #8b96c4; stroke-width: 2.4; }
+.ghai-gear1  { transform-origin: 318px 258px; animation: ghaiSpin 5.5s linear infinite; }
+.ghai-gear2  { transform-origin: 346px 271px; animation: ghaiSpinR 5.5s linear infinite; }
+
+/* 3ステージのピル */
+.ghai-pill    { fill: #16203a; stroke: #33406a; stroke-width: 1.3; }
+.ghai-pilltxt { fill: #9aa7cc; font-size: 12px; font-weight: 700; }
+.ghai-p1 { animation: ghaiP1 10s infinite; }
+.ghai-p2 { animation: ghaiP2 10s infinite; }
+.ghai-p3 { animation: ghaiP3 10s infinite; }
+
+/* 流れるコード片・データドット */
+.ghai-frag    { fill: var(--accent); }
+.ghai-fragtxt { fill: #0b1020; font-size: 11px; font-weight: 800; }
+.ghai-flow    { fill: #ffffff; }
+
+/* 矢印 */
+.ghai-arrow-shaft { fill: none; stroke: var(--accent); stroke-width: 2.4; opacity: .8; }
+.ghai-arrow-head  { fill: var(--accent); }
+
+/* 生成されたGHノード */
+.ghai-node    { fill: #0f1a30; stroke: var(--accent); stroke-width: 2.2; }
+.ghai-nodebar { fill: var(--accent); opacity: .9; }
+.ghai-port    { fill: var(--accent); }
+.ghai-portlbl { fill: #9aa7cc; font-size: 10.5px; font-weight: 700; }
+.ghai-innerln { fill: #6f7db0; opacity: .6; }
+
+/* 自動配線される標準入力ソース */
+.ghai-src     { fill: #16203a; stroke: var(--accent); stroke-width: 1.4; }
+.ghai-srctxt  { fill: #e6ecff; font-size: 11px; font-weight: 700; }
+.ghai-wire    { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-dasharray: 60; }
+
+/* テキスト */
+.ghai-cap   { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+.ghai-small { fill: #9aa7cc; font-size: 12px; font-weight: 600; }
+.ghai-eng-title { fill: #e6ecff; font-size: 12.5px; font-weight: 800; }
+
+/* 進捗バー */
+.ghai-prog-tr { fill: #223052; }
+.ghai-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション（全て10秒周期・infinite） ---- */
+.ghai-anim-code { animation: ghaiCode 10s infinite; }
+.ghai-anim-eng  { animation: ghaiEng  10s infinite; }
+.ghai-anim-frag { animation: ghaiFrag 10s infinite; }
+.ghai-anim-flow { animation: ghaiFlow 10s infinite; }
+.ghai-anim-node { animation: ghaiNode 10s infinite; }
+.ghai-anim-src  { animation: ghaiSrc  10s infinite; }
+.ghai-anim-wire { animation: ghaiWire 10s infinite; }
+.ghai-l1 { animation: ghaiL1 10s infinite; }
+.ghai-l2 { animation: ghaiL2 10s infinite; }
+.ghai-l3 { animation: ghaiL3 10s infinite; }
+.ghai-prog { animation: ghaiProg 10s linear infinite; }
+
+@keyframes ghaiSpin  { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+@keyframes ghaiSpinR { from{transform:rotate(0)} to{transform:rotate(-360deg)} }
+
+@keyframes ghaiCode {
+  0%,3%   { opacity:0; transform:translateX(-10px); }
+  8%      { opacity:1; transform:translateX(0); }
+  60%     { opacity:1; }
+  72%,90% { opacity:.4; }
+  97%,100%{ opacity:0; }
+}
+@keyframes ghaiEng {
+  0%,26%  { opacity:0; transform:translateY(6px); }
+  32%     { opacity:1; transform:translateY(0); }
+  66%     { opacity:1; }
+  78%,100%{ opacity:.35; }
+}
+/* コード片がカード→エンジン→ノードへ流れる */
+@keyframes ghaiFrag {
+  0%,28%   { opacity:0; transform:translate(0,0); }
+  33%      { opacity:1; transform:translate(0,0); }
+  46%      { opacity:1; transform:translate(120px,0); }
+  60%      { opacity:1; transform:translate(300px,-58px); }
+  64%,100% { opacity:0; transform:translate(300px,-58px); }
+}
+@keyframes ghaiFlow {
+  0%,9%    { opacity:0; transform:translateX(0); }
+  13%      { opacity:1; transform:translateX(0); }
+  24%      { opacity:1; transform:translateX(52px); }
+  28%,100% { opacity:0; transform:translateX(52px); }
+}
+@keyframes ghaiNode {
+  0%,60%  { opacity:0; transform:scale(.86); }
+  68%     { opacity:1; transform:scale(1); }
+  96%     { opacity:1; }
+  100%    { opacity:0; }
+}
+@keyframes ghaiSrc {
+  0%,72%  { opacity:0; transform:translateX(-8px); }
+  80%     { opacity:1; transform:translateX(0); }
+  96%     { opacity:1; }
+  100%    { opacity:0; }
+}
+@keyframes ghaiWire {
+  0%,76%  { stroke-dashoffset:60; opacity:0; }
+  80%     { opacity:1; }
+  90%     { stroke-dashoffset:0; opacity:1; }
+  96%     { opacity:1; }
+  100%    { opacity:0; }
+}
+/* ステージのハイライト（順番に点灯） */
+@keyframes ghaiP1 { 0%,33%{fill:#16203a} 38%{fill:color-mix(in srgb,var(--accent) 40%,#16203a)} 48%,100%{fill:#16203a} }
+@keyframes ghaiP2 { 0%,44%{fill:#16203a} 49%{fill:color-mix(in srgb,var(--accent) 40%,#16203a)} 58%,100%{fill:#16203a} }
+@keyframes ghaiP3 { 0%,55%{fill:#16203a} 60%{fill:color-mix(in srgb,var(--accent) 40%,#16203a)} 70%,100%{fill:#16203a} }
+
+@keyframes ghaiL1 { 0%{opacity:0} 4%{opacity:1} 27%{opacity:1} 32%{opacity:0} 100%{opacity:0} }
+@keyframes ghaiL2 { 0%,32%{opacity:0} 37%{opacity:1} 60%{opacity:1} 65%{opacity:0} 100%{opacity:0} }
+@keyframes ghaiL3 { 0%,65%{opacity:0} 70%{opacity:1} 96%{opacity:1} 100%{opacity:0} }
+@keyframes ghaiProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ai">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">開発・AI基盤</span>
+    <h1 class="node-title">ghkit ＋ AIコンポーネント群 <span style="opacity:.75;font-weight:700">ghai_studio 他</span></h1>
+    <p class="catch">書いたPythonコードを、<span class="em">AIの力も借りて</span>そのまま<span class="em">「使えるGHノード」に一発で仕立てる</span>——ツール量産の土台。</p>
+    <div class="badges">
+      <span class="badge st-live">稼働中</span>
+      <span class="badge st-ver">GH Python3 コンポーネント群</span>
+      <span class="badge st-ver">エンジン ghkit 1387行</span>
+      <span class="badge st-ver">AI＝ローカル Ollama</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg ghai-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Pythonコードをghkitエンジンで解析してGH Python3ノードへ変換するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="ghai-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="ghai-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== ① 手持ちのコードカード ===== -->
+        <g class="ghai-anim-code">
+          <rect class="ghai-card"    x="40" y="150" width="170" height="175" rx="8"></rect>
+          <rect class="ghai-cardbar" x="40" y="150" width="170" height="26" rx="8"></rect>
+          <rect class="ghai-cardbar" x="40" y="164" width="170" height="12"></rect>
+          <text class="ghai-small" x="54" y="168">▸ my_tool.py</text>
+          <rect class="ghai-codeln2" x="56" y="192" width="52" height="7" rx="2"></rect>
+          <rect class="ghai-codeln"  x="112" y="192" width="70" height="7" rx="2"></rect>
+          <rect class="ghai-codeln"  x="56" y="208" width="96" height="7" rx="2"></rect>
+          <rect class="ghai-codeln2" x="72" y="224" width="46" height="7" rx="2"></rect>
+          <rect class="ghai-codeln"  x="122" y="224" width="66" height="7" rx="2"></rect>
+          <rect class="ghai-codeln"  x="72" y="240" width="86" height="7" rx="2"></rect>
+          <rect class="ghai-codeln2" x="56" y="256" width="70" height="7" rx="2"></rect>
+          <text class="ghai-small" x="54" y="304" style="font-size:11px">コード or 日本語プロンプト</text>
+        </g>
+
+        <!-- 矢印 カード→エンジン ＋ データドット -->
+        <g class="ghai-anim-eng">
+          <line class="ghai-arrow-shaft" x1="214" y1="238" x2="264" y2="238"></line>
+          <polygon class="ghai-arrow-head" points="266,238 253,231 253,245"></polygon>
+        </g>
+        <circle class="ghai-anim-flow ghai-flow" cx="214" cy="238" r="4.5"></circle>
+
+        <!-- ===== ② ghkit エンジン（AST→型推論→組立） ===== -->
+        <g class="ghai-anim-eng">
+          <rect class="ghai-engine-box" x="270" y="172" width="180" height="132" rx="12"></rect>
+          <text class="ghai-eng-title" x="360" y="192" text-anchor="middle">ghkit エンジン</text>
+          <!-- 歯車 -->
+          <g class="ghai-gear1">
+            <circle class="ghai-gear"   cx="318" cy="258" r="20"></circle>
+            <circle class="ghai-gear-c" cx="318" cy="258" r="8"></circle>
+            <line class="ghai-gear" x1="318" y1="234" x2="318" y2="282"></line>
+            <line class="ghai-gear" x1="294" y1="258" x2="342" y2="258"></line>
+            <line class="ghai-gear" x1="301" y1="241" x2="335" y2="275"></line>
+            <line class="ghai-gear" x1="301" y1="275" x2="335" y2="241"></line>
+          </g>
+          <g class="ghai-gear2">
+            <circle class="ghai-gear"   cx="346" cy="271" r="13"></circle>
+            <circle class="ghai-gear-c" cx="346" cy="271" r="5"></circle>
+            <line class="ghai-gear" x1="346" y1="256" x2="346" y2="286"></line>
+            <line class="ghai-gear" x1="331" y1="271" x2="361" y2="271"></line>
+          </g>
+          <!-- 3ステージのピル -->
+          <g>
+            <rect class="ghai-pill ghai-p1" x="358" y="204" width="84" height="20" rx="10"></rect>
+            <text class="ghai-pilltxt" x="400" y="218" text-anchor="middle">① AST解析</text>
+          </g>
+          <g>
+            <rect class="ghai-pill ghai-p2" x="358" y="228" width="84" height="20" rx="10"></rect>
+            <text class="ghai-pilltxt" x="400" y="242" text-anchor="middle">② 型推論</text>
+          </g>
+          <g>
+            <rect class="ghai-pill ghai-p3" x="358" y="252" width="84" height="20" rx="10"></rect>
+            <text class="ghai-pilltxt" x="400" y="266" text-anchor="middle">③ ノード組立</text>
+          </g>
+        </g>
+
+        <!-- 流れるコード片 -->
+        <g class="ghai-anim-frag">
+          <rect class="ghai-frag" x="218" y="228" width="46" height="20" rx="6"></rect>
+          <text class="ghai-fragtxt" x="241" y="242" text-anchor="middle">def()</text>
+        </g>
+
+        <!-- ===== ③ 生成された GH Python3 ノード ===== -->
+        <g class="ghai-anim-node">
+          <rect class="ghai-node"    x="600" y="150" width="168" height="158" rx="8"></rect>
+          <rect class="ghai-nodebar" x="600" y="150" width="168" height="24" rx="8"></rect>
+          <rect class="ghai-nodebar" x="600" y="162" width="168" height="12"></rect>
+          <text x="684" y="167" text-anchor="middle" style="fill:#0b1020;font-size:12px;font-weight:800">GH Python3 ノード</text>
+          <!-- 内部のコード行 -->
+          <rect class="ghai-innerln" x="628" y="196" width="96" height="6" rx="2"></rect>
+          <rect class="ghai-innerln" x="628" y="212" width="72" height="6" rx="2"></rect>
+          <rect class="ghai-innerln" x="628" y="248" width="86" height="6" rx="2"></rect>
+          <rect class="ghai-innerln" x="628" y="264" width="60" height="6" rx="2"></rect>
+          <!-- 入力ポート -->
+          <circle class="ghai-port" cx="600" cy="206" r="5"></circle>
+          <circle class="ghai-port" cx="600" cy="234" r="5"></circle>
+          <circle class="ghai-port" cx="600" cy="262" r="5"></circle>
+          <text class="ghai-portlbl" x="610" y="210">x</text>
+          <text class="ghai-portlbl" x="610" y="238">n</text>
+          <text class="ghai-portlbl" x="610" y="266">opt</text>
+          <!-- 出力ポート -->
+          <circle class="ghai-port" cx="768" cy="234" r="5"></circle>
+        </g>
+
+        <!-- 自動配線される標準入力ソース（Wire_Inputs） -->
+        <g class="ghai-anim-src">
+          <path class="ghai-wire ghai-anim-wire" pathLength="60" d="M584,204 L600,206"></path>
+          <path class="ghai-wire ghai-anim-wire" pathLength="60" d="M584,232 L600,234"></path>
+          <path class="ghai-wire ghai-anim-wire" pathLength="60" d="M584,260 L600,262"></path>
+          <g>
+            <rect class="ghai-src" x="486" y="194" width="98" height="22" rx="11"></rect>
+            <text class="ghai-srctxt" x="535" y="209" text-anchor="middle">▭ Slider</text>
+          </g>
+          <g>
+            <rect class="ghai-src" x="486" y="222" width="98" height="22" rx="11"></rect>
+            <text class="ghai-srctxt" x="535" y="237" text-anchor="middle">◉ Toggle</text>
+          </g>
+          <g>
+            <rect class="ghai-src" x="486" y="250" width="98" height="22" rx="11"></rect>
+            <text class="ghai-srctxt" x="535" y="265" text-anchor="middle">▤ Panel</text>
+          </g>
+          <text class="ghai-small" x="535" y="288" text-anchor="middle" style="font-size:11px">標準入力を自動配線</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="ghai-cap ghai-l1" x="400" y="428" text-anchor="middle">① 手持ちの .py コード（または日本語プロンプト）</text>
+        <text class="ghai-cap ghai-l2" x="400" y="428" text-anchor="middle">② ghkit エンジンが解析（AST → 型推論 → ノード組立）</text>
+        <text class="ghai-cap ghai-l3" x="400" y="428" text-anchor="middle">③ 型付き GH Python3 ノード誕生 ＋ 標準入力を自動配線</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">Pythonコード（や日本語の指示）を ghkit エンジンが解析して、型が付いた「使えるGH Python3ノード」に組み立てるまでを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p>コードを書いても、それをGrasshopperで<strong>「使えるノード」にするのは地味に手間</strong>——入力端子を作り、型を設定し、標準の入力ソース（スライダやトグル）をつなぐ…。この一連を<strong>自動化する開発基盤</strong>です。手持ちの <code>.py</code> ファイルを渡すだけで、端子付きのGH Python3ノードが一気にキャンバスへ並びます。</p>
+    <p>心臓部は共有エンジン <strong>ghkit.py（1387行）</strong>。コードを<strong>3段階（AST解析／宣言コメント／AIによる補正）</strong>で読み解いて入出力端子を推論し、実際のGHノードとして組み立てます。実際にGHに貼って使うのは、この土台を呼ぶ<strong>薄いラッパー6種</strong>——全部入りの <code>ghai_studio</code>、コード→ノードの <code>ghai_nodegen</code>、「こういう処理がしたい」の日本語からコードを作る <code>ghnl_codegen</code>、モデル一覧の <code>ghollama_models</code>、ファイル選択の <code>ghfile_picker</code>、型ヒント修復の <code>fix_ghdoc_hints</code> です。</p>
+    <p class="lead">※ AI補正は<strong>ローカルのOllama</strong>（PC内で動く無料のAI・既定 qwen2.5-coder）を使います。クラウドのAPIには一切つながず、完全オフラインで動くのが特徴です。／ AST＝コードの構造を機械が読める形に分解したもの。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力（コンポーネント一覧＋代表端子） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>顔ぶれ（エンジン＋コンポーネント）</h2>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>共有エンジン＋GHコンポーネント6種</caption>
+        <thead><tr><th>名前</th><th>役割</th></tr></thead>
+        <tbody>
+          <tr><td class="port">ghkit</td><td>全部の頭脳。コード解析→端子推論→ノード組立を担う黒子（GHには貼らない）。</td></tr>
+          <tr><td class="port">ghai_studio</td><td>生成・プレビュー・承認・改修・修正・比較を1ノードで全部こなす統合版。</td></tr>
+          <tr><td class="port">ghai_nodegen</td><td>手持ちの <code>.py</code> を流し込むだけでGHノード化。AI補正・自動配線つき。</td></tr>
+          <tr><td class="port">ghnl_codegen</td><td>日本語の指示からPythonコードを生成。出力をそのままノード化できる。</td></tr>
+          <tr><td class="port">ghollama_models</td><td>使えるAIモデルの一覧をドロップダウンで用意する小道具。</td></tr>
+          <tr><td class="port">ghfile_picker</td><td>ファイル選択ダイアログをノード化。<code>.py</code> を選んでパスを渡す。</td></tr>
+          <tr><td class="port">fix_ghdoc_hints</td><td>型ヒントが勝手に戻る不具合を一括修復するユーティリティ。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>代表的な端子（ghai_nodegen の例）</caption>
+        <thead><tr><th>端子</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port"><span class="io-dir in">入</span>Code_Text / Files</td><td>ノード化したいPythonコード本文、またはファイルのパス群。</td></tr>
+          <tr><td class="port"><span class="io-dir in">入</span>Use_AI / Model</td><td>Ollamaに型・要約を補正させるか、どのモデルを使うか。</td></tr>
+          <tr><td class="port"><span class="io-dir in">入</span>Wire_Inputs</td><td>型に合う標準入力ソース（スライダ等）を自動配線するかどうか。</td></tr>
+          <tr><td class="port"><span class="io-dir in">入</span>Generate</td><td>生成を実行するトリガ（ボタン）。</td></tr>
+          <tr><td class="port"><span class="io-dir out">出</span>Created</td><td>実際にキャンバスへ生成されたノード群。</td></tr>
+          <tr><td class="port"><span class="io-dir out">出</span>Info / Summary</td><td>処理ログと、各コードの要約テキスト。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">コンポーネントを用意する</span><span class="step-body">GHキャンバスに <code>ghai_nodegen</code>（または全部入りの <code>ghai_studio</code>）を配置。コードフォルダから一括生成したいなら <a href="nodegen.html">NodeGenランチャー</a> を <kbd>NODEGEN</kbd> で起動しても良い。</span></li>
+      <li><span class="step-title">材料を渡す</span><span class="step-body">手持ちの <code>.py</code> を <span class="port" style="color:var(--accent)">Files</span> へ（<code>ghfile_picker</code> で選ぶと楽）、またはコードを <span class="port" style="color:var(--accent)">Code_Text</span> へ。日本語で書きたいときは <code>ghnl_codegen</code> に指示文を入れてコードを作る。</span></li>
+      <li><span class="step-title">AI補正を選ぶ（任意）</span><span class="step-body">端子の型やリスト判定、要約をAIに整えさせたいなら <span class="port" style="color:var(--accent)">Use_AI</span> をオン。<strong>Ollamaを起動</strong>しておく（未起動なら補正なしで動く）。</span></li>
+      <li><span class="step-title">生成する</span><span class="step-body"><span class="port" style="color:var(--accent)">Generate</span> を押すと、端子付きのGH Python3ノードがキャンバスに現れる。<span class="port" style="color:var(--accent)">Wire_Inputs</span> をオンにしておけば、スライダ・トグル・パネルなどの入力ソースも自動でつながる。</span></li>
+      <li><span class="step-title">型ヒントが戻ったら直す</span><span class="step-body">入力端子のヒントが「ghdoc Object」に勝手に戻ってしまったら、<code>fix_ghdoc_hints</code> の <span class="port" style="color:var(--accent)">Run</span> で全ノードを一括修復する。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="chip chip-self">ghkit ＋ AIコンポーネント群（このツール）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">土台として使う</span>
+        <a class="chip chip-down" href="nodegen.html">NodeGen ランチャー</a>
+        <a class="chip chip-down" href="section-lower.html">小文字断面 section_lower</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">この基盤は「使う」というより<strong>他ツールの土台</strong>です。<a href="nodegen.html">NodeGenランチャー</a> や <a href="section-lower.html">section_lower</a> のAI部品など、複数のツールが内部で ghkit を呼んでいます。だからこそ<strong>フォルダ移動・改名は厳禁</strong>（下の注意点を参照）。</p>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> フォルダ移動・改名は複数システムを同時に壊す</div>
+        <p><code>ghkit.py</code> は多くのツールが<strong>絶対パスで参照</strong>しています（各ラッパーの先頭、<code>make2d_system</code> の SystemBuilder、<code>section_lower</code> のAI部品ほか）。<code>C:\Python1\gh_ai_nodegen\</code> を移動・改名すると、それらが一斉にimportエラーで止まります。動かす場合は各参照側のパスを直す必要があります。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> AIはローカルOllama専用（クラウドAPIは使わない）</div>
+        <p>AI補正は<strong>PC内のOllama</strong>（<code>http://localhost:11434</code>・既定 qwen2.5-coder）を直接叩きます。過去にあったClaude API版は廃止済みで、現行にAPI連携はありません。<span class="port" style="color:var(--accent)">Use_AI</span> を使うときは<strong>Ollamaを起動</strong>してください（未起動でもAI無しで生成自体は動きます）。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 型ヒントが「ghdoc Object」に勝手に戻る</div>
+        <p>GHの仕様で、入力端子の型ヒントを設定し直した直後に「ghdoc Object」へ巻き戻ることがあります。エンジン側（<code>materialize</code> 内）で修復を入れていますが、それでも戻ってしまったら <code>fix_ghdoc_hints</code> で全ドキュメントを一括修復してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> RH8 Python3 専用。ランチャーはツールバー設定が要る</div>
+        <p>これらは Rhino8 のPython3コンポーネント前提です（IronPythonでは動きません）。また <code>NODEGEN</code> ランチャーは <code>rh_nodegen.py</code> と <code>NodeGenTools.rui</code> を絶対パスで参照するため、移動時はセットアップスクリプトの再実行が必要です。</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル（エンジン）</span>
+      C:\Python1\gh_ai_nodegen\<span class="fp-accent">ghkit.py</span>　＋　ghai_studio.py / ghai_nodegen.py / ghnl_codegen.py / ghollama_models.py / ghfile_picker.py / fix_ghdoc_hints.py
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ai">開発・AI基盤の一覧</a>
+      <a href="nodegen.html">NodeGen ランチャー</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

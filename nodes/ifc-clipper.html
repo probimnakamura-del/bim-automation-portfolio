@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>IFC範囲抽出 IFC編集ツール（IFC_Clipper） — Python1 ツールカタログ</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+/* ============================================================
+   このページ専用: GIF風アニメデモ（10秒ループ・3拍構成）
+   クラスは slug プレフィックス ifcl- で衝突回避
+   ①巨大IFC → ②bbox範囲をドラッグ指定 → ③範囲内だけの軽量IFC
+   ============================================================ */
+.ifcl-svg text { font-family: var(--font); }
+
+/* 巨大モデルの部材（グレー・密） */
+.ifcl-mem  { fill: #243352; stroke: #3a4a72; stroke-width: 1.1; }
+/* 抽出範囲のハイライト */
+.ifcl-hi   { fill: var(--accent); opacity: .55; }
+
+/* bboxクリップ枠 */
+.ifcl-bboxface { fill: var(--accent); opacity: .10; }
+.ifcl-bboxedge { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-dasharray: 8 5; }
+.ifcl-handle   { fill: var(--accent); }
+
+/* 出力の軽量IFCカード */
+.ifcl-card   { fill: #0f1a30; stroke: var(--accent); stroke-width: 2.2; }
+.ifcl-outmem { fill: #2a2340; stroke: var(--accent); stroke-width: 1.6; }
+.ifcl-tag    { fill: #0c1428; stroke: #34406a; stroke-width: 1.3; }
+.ifcl-tagtxt { fill: var(--accent); font-size: 11px; font-weight: 700; }
+
+/* サイズ収縮チップ */
+.ifcl-size-old { fill: #241a0d; stroke: #fbbf24; stroke-width: 1.4; }
+.ifcl-size-new { fill: #12332a; stroke: #34d399; stroke-width: 1.4; }
+.ifcl-sz-otxt  { fill: #fbbf24; font-size: 11px; font-weight: 800; }
+.ifcl-sz-ntxt  { fill: #86efac; font-size: 11px; font-weight: 800; }
+
+/* 抽出矢印 */
+.ifcl-arrow     { fill: none; stroke: var(--accent); stroke-width: 2.6; opacity: .9; }
+.ifcl-arrowhead { fill: var(--accent); }
+
+.ifcl-lbl  { fill: #e6ecff; font-size: 14px; font-weight: 700; }
+.ifcl-note { fill: var(--accent); font-size: 12px; font-weight: 700; }
+.ifcl-cap  { fill: #e6ecff; font-size: 17px; font-weight: 700; }
+
+.ifcl-prog-tr { fill: #223052; }
+.ifcl-prog    { fill: var(--accent); transform-box: fill-box; transform-origin: left center; }
+
+/* ---- アニメーション ---- */
+.ifcl-model { animation: ifclModel 10s infinite; }
+.ifcl-bbox  { animation: ifclBbox  10s infinite; }
+.ifcl-hi    { animation: ifclHi    10s infinite; }
+.ifcl-arw   { animation: ifclArw   10s infinite; }
+.ifcl-card  { animation: ifclCard  10s infinite; }
+.ifcl-l1    { animation: ifclL1 10s infinite; }
+.ifcl-l2    { animation: ifclL2 10s infinite; }
+.ifcl-l3    { animation: ifclL3 10s infinite; }
+.ifcl-prog  { animation: ifclProg 10s linear infinite; }
+
+@keyframes ifclModel { 0%,2%{opacity:0} 8%{opacity:1} 62%{opacity:1} 68%,100%{opacity:0} }
+@keyframes ifclBbox {
+  0%,32%  { opacity:0; transform: translate(30px,-6px); }
+  40%     { opacity:1; transform: translate(0,0); }
+  62%     { opacity:1; }
+  66%,100%{ opacity:0; }
+}
+@keyframes ifclHi   { 0%,40%{opacity:0} 48%{opacity:.55} 62%{opacity:.55} 66%,100%{opacity:0} }
+@keyframes ifclArw  { 0%,58%{opacity:0} 63%{opacity:1} 68%{opacity:1} 72%,100%{opacity:0} }
+@keyframes ifclCard {
+  0%,64%  { opacity:0; transform: translateY(8px); }
+  72%     { opacity:1; transform: translateY(0); }
+  97%     { opacity:1; }
+  100%    { opacity:0; }
+}
+@keyframes ifclL1 { 0%{opacity:0} 3%{opacity:1} 30%{opacity:1} 34%{opacity:0} 100%{opacity:0} }
+@keyframes ifclL2 { 0%,34%{opacity:0} 38%{opacity:1} 62%{opacity:1} 66%{opacity:0} 100%{opacity:0} }
+@keyframes ifclL3 { 0%,66%{opacity:0} 70%{opacity:1} 97%{opacity:1} 100%{opacity:0} }
+@keyframes ifclProg { 0%{transform:scaleX(0)} 100%{transform:scaleX(1)} }
+</style>
+</head>
+<body data-cat="ifc">
+
+<!-- 上部ナビ -->
+<header class="site-header">
+  <a class="back-link" href="../index.html">← カタログへ戻る</a>
+  <span class="brand"><b>Python1</b> ツールカタログ</span>
+</header>
+
+<!-- 1. ヘッダ帯 -->
+<section class="node-hero">
+  <div class="wrap">
+    <span class="node-cat-tag">IFC・データ連携</span>
+    <h1 class="node-title">IFC範囲抽出 <span style="opacity:.75;font-weight:700">IFC編集ツール（IFC_Clipper）</span></h1>
+    <p class="catch">数GBの<span class="em">巨大IFC</span>から、画面でクリップして<span class="em">必要な部分だけ</span>を軽く抜き出す。</p>
+    <div class="badges">
+      <span class="badge st-exp">実験的（開発途上）</span>
+      <span class="badge st-ver">PyQt6 + PyVista</span>
+      <span class="badge st-ver">デスクトップGUI</span>
+    </div>
+  </div>
+</section>
+
+<!-- 開発途上の注意帯 -->
+<section class="section" style="padding-top:22px;padding-bottom:0;border-bottom:none">
+  <div class="wrap">
+    <div class="trap-box" style="margin-bottom:0">
+      <div class="trap-title"><span class="ico">⚠</span> これは開発途上の実験的ツールです</div>
+      <p>クラッシュ再現用のテスト（<code>test_ui_crash.py</code> ほか）や <code>error.log</code> が同居しており、安定性の作り込みが継続中です。重い形状計算を別プロセスへ逃がすタイムアウト対策は入っていますが、<strong>大きなファイルでは落ちることがあります</strong>。本番作業の前に小さなファイルで挙動を確かめ、元IFCは必ず別に残してください。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 2. GIF風アニメデモ -->
+<section class="section">
+  <div class="wrap">
+    <p class="sec-kicker">MOTION PREVIEW</p>
+    <h2>動作デモ</h2>
+    <div class="demo-wrap">
+      <div class="demo-bar"><span class="dbar-dots"><i></i><i></i><i></i></span><span class="dbar-label">PREVIEW</span><span class="dbar-loop">⟲ LOOP 10s</span></div>
+      <svg class="demo-svg ifcl-svg" viewBox="0 0 800 450" preserveAspectRatio="xMidYMid meet" role="img" aria-label="巨大IFCからbbox範囲を指定して軽量IFCを抽出するアニメーション">
+
+        <!-- 進捗バー -->
+        <rect class="ifcl-prog-tr" x="300" y="22" width="200" height="6" rx="3"></rect>
+        <rect class="ifcl-prog"    x="300" y="22" width="200" height="6" rx="3"></rect>
+
+        <!-- ===== 巨大IFC（密な部材群） ===== -->
+        <g class="ifcl-model">
+          <!-- 縦の柱 6本 -->
+          <rect class="ifcl-mem" x="120" y="120" width="12" height="200" rx="1"></rect>
+          <rect class="ifcl-mem" x="180" y="120" width="12" height="200" rx="1"></rect>
+          <rect class="ifcl-mem" x="240" y="120" width="12" height="200" rx="1"></rect>
+          <rect class="ifcl-mem" x="300" y="120" width="12" height="200" rx="1"></rect>
+          <rect class="ifcl-mem" x="360" y="120" width="12" height="200" rx="1"></rect>
+          <rect class="ifcl-mem" x="420" y="120" width="12" height="200" rx="1"></rect>
+          <!-- 横の梁 3段 -->
+          <rect class="ifcl-mem" x="120" y="122" width="312" height="10" rx="1"></rect>
+          <rect class="ifcl-mem" x="120" y="218" width="312" height="10" rx="1"></rect>
+          <rect class="ifcl-mem" x="120" y="310" width="312" height="10" rx="1"></rect>
+          <text class="ifcl-lbl" x="276" y="352" text-anchor="middle">巨大IFC（数GB・重い）</text>
+        </g>
+
+        <!-- ===== 抽出範囲のハイライト（bbox内の部材） ===== -->
+        <g class="ifcl-hi">
+          <rect x="240" y="120" width="12" height="108" rx="1"></rect>
+          <rect x="300" y="120" width="12" height="108" rx="1"></rect>
+          <rect x="240" y="122" width="72" height="10" rx="1"></rect>
+          <rect x="240" y="218" width="72" height="10" rx="1"></rect>
+        </g>
+
+        <!-- ===== bboxクリップ枠 ===== -->
+        <g class="ifcl-bbox">
+          <rect class="ifcl-bboxface" x="228" y="110" width="98" height="130" rx="2"></rect>
+          <rect class="ifcl-bboxedge" x="228" y="110" width="98" height="130" rx="2"></rect>
+          <rect class="ifcl-handle" x="223" y="105" width="9" height="9"></rect>
+          <rect class="ifcl-handle" x="322" y="105" width="9" height="9"></rect>
+          <rect class="ifcl-handle" x="223" y="236" width="9" height="9"></rect>
+          <rect class="ifcl-handle" x="322" y="236" width="9" height="9"></rect>
+          <text class="ifcl-note" x="277" y="98" text-anchor="middle">bbox でドラッグ選択</text>
+        </g>
+
+        <!-- 抽出矢印 -->
+        <g class="ifcl-arw">
+          <line class="ifcl-arrow" x1="470" y1="215" x2="560" y2="215"></line>
+          <polygon class="ifcl-arrowhead" points="560,215 544,207 544,223"></polygon>
+        </g>
+
+        <!-- ===== 出力：軽量IFCカード ===== -->
+        <g class="ifcl-card">
+          <rect class="ifcl-card" x="560" y="120" width="200" height="170" rx="6"></rect>
+          <!-- 範囲内だけの部材 -->
+          <rect class="ifcl-outmem" x="620" y="150" width="14" height="96" rx="1"></rect>
+          <rect class="ifcl-outmem" x="686" y="150" width="14" height="96" rx="1"></rect>
+          <rect class="ifcl-outmem" x="620" y="150" width="80" height="12" rx="1"></rect>
+          <rect class="ifcl-outmem" x="620" y="212" width="80" height="10" rx="1"></rect>
+          <!-- ファイル名タグ -->
+          <rect class="ifcl-tag" x="572" y="258" width="176" height="22" rx="4"></rect>
+          <text class="ifcl-tagtxt" x="580" y="273">…_clip_20260712.ifc</text>
+          <text class="ifcl-lbl" x="660" y="308" text-anchor="middle">軽量IFC（範囲内だけ）</text>
+        </g>
+        <!-- サイズ収縮チップ -->
+        <g class="ifcl-card">
+          <rect class="ifcl-size-old" x="560" y="322" width="82" height="24" rx="12"></rect>
+          <text class="ifcl-sz-otxt" x="601" y="338" text-anchor="middle">数GB</text>
+          <text class="ifcl-note" x="662" y="338" text-anchor="middle">→</text>
+          <rect class="ifcl-size-new" x="678" y="322" width="82" height="24" rx="12"></rect>
+          <text class="ifcl-sz-ntxt" x="719" y="338" text-anchor="middle">数十MB</text>
+        </g>
+
+        <!-- ===== 3拍の見出しラベル ===== -->
+        <text class="ifcl-cap ifcl-l1" x="400" y="428" text-anchor="middle">① 数GB級の巨大IFCを開く</text>
+        <text class="ifcl-cap ifcl-l2" x="400" y="428" text-anchor="middle">② 3Dビューで bbox 範囲をドラッグ指定</text>
+        <text class="ifcl-cap ifcl-l3" x="400" y="428" text-anchor="middle">③ 範囲内だけの軽量IFCを書き出し</text>
+      </svg>
+
+      <button class="replay-btn" type="button" onclick="replay(this)">
+        <span class="ico">⟲</span> REPLAY
+      </button>
+    </div>
+    <p class="demo-caption">数GB級の巨大IFC → 3Dビュー上でバウンディングボックス範囲を指定 → 範囲内の部材だけを含む軽量IFCを書き出す流れを10秒でループ再生しています。</p>
+  </div>
+</section>
+
+<!-- 3. なにをするツール？ -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">1</span>なにをするツール？</h2>
+    <p><strong>巨大なIFCから、必要な範囲だけを切り出して軽くするデスクトップアプリ</strong>です。建物まるごと数GBのIFCは、そのままだと開くだけで重く、ビューアや変換も苦しくなります。このツールは、<strong>3Dビューの上でバウンディングボックス（直方体の範囲）をドラッグ指定</strong>し、その中に入る部材だけを抜き出して<strong>新しい軽量IFC</strong>として書き出します。</p>
+    <p>PyQt6＋PyVista製で、マルチタブで複数ファイルを同時に開けます。読み込み時はまず<strong>AABB（軸並行の外形箱）だけの軽いプレビュー</strong>を表示して素早く範囲を決められるようにし、重い形状の実処理は <code>core/geom_worker.py</code> で<strong>別プロセスに逃がしてタイムアウト対策</strong>しています。exe化する場合の想定名が「IFC_Clipper」です。</p>
+    <p class="lead">※ bbox（バウンディングボックス）＝対象を囲む直方体の範囲。ここでは「この箱に入る部材だけ残す」フィルタとして使う。／ AABB＝座標軸に平行な外形箱で、素早く当たり判定できる。</p>
+  </div>
+</section>
+
+<!-- 4. 入出力 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">2</span>入出力（入れるファイル・出るファイル）</h2>
+    <p class="lead" style="margin:-6px 0 16px">GHノードではなく、IFCを開いて範囲抽出するGUIアプリです。</p>
+    <div class="io-grid">
+      <div class="io-scroll"><table class="io-table">
+        <caption>入力</caption>
+        <thead><tr><th>操作</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port">.ifc を開く</td><td>任意のIFCファイル（数GB級の巨大モデルでも可）。マルチタブで複数同時に開ける。</td></tr>
+          <tr><td class="port">bbox をドラッグ</td><td>3Dビュー上で残したい範囲を直方体で指定する。</td></tr>
+        </tbody>
+      </table></div>
+      <div class="io-scroll"><table class="io-table">
+        <caption>出力</caption>
+        <thead><tr><th>結果</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td class="port" style="white-space:normal">&lt;元名&gt;_clip_&lt;timestamp&gt;.ifc</td><td>指定範囲に入る要素だけを含む<strong>軽量IFC</strong>。元名＋日時のファイル名で保存される。</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. 使い方 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">3</span>使い方</h2>
+    <ol class="steps">
+      <li><span class="step-title">アプリを起動</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">IFC編集ツール\main.py</span> を実行してGUIを開く（PyQt6＋PyVista）。</span></li>
+      <li><span class="step-title">巨大IFCを開く</span><span class="step-body">切り出したいIFCを読み込む。まずAABBの軽いプレビューが出るので、重いモデルでも範囲決めがしやすい。</span></li>
+      <li><span class="step-title">残す範囲をドラッグ指定</span><span class="step-body">3Dビュー上でバウンディングボックスを引き、<strong>残したい部分</strong>を囲む。</span></li>
+      <li><span class="step-title">抽出を実行</span><span class="step-body">範囲内の要素だけを取り出す。重い形状計算は別プロセスで処理され、固まりにくいよう配慮されている。</span></li>
+      <li><span class="step-title">軽量IFCを保存</span><span class="step-body"><span class="port" style="color:var(--accent)">&lt;元名&gt;_clip_&lt;timestamp&gt;.ifc</span> として書き出される。数GBが数十MB級に軽くなる。</span></li>
+      <li><span class="step-title">後工程へ</span><span class="step-body">軽くしたIFCを <a href="ifc-converter.html">IFC_Converter</a> でIFC4化したり、<a href="ifc2rhino.html">ifc2rhino</a> で.3dm変換したりの前処理に使える。</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- 6. つながり（ワークフロー） -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">4</span>つながり（ワークフロー）</h2>
+    <div class="flow-nav">
+      <div class="flow-row">
+        <span class="flow-label">前工程</span>
+        <span class="flow-solo">特になし（巨大IFCを直接開きます）。パイプラインの<strong>いちばん最初の軽量化</strong>役として使えます。</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-arrow">↓</span>
+        <span class="chip chip-self">IFC編集ツール（IFC_Clipper・このノード）</span>
+        <span class="flow-arrow">↓</span>
+      </div>
+      <div class="flow-row" style="margin-top:12px">
+        <span class="flow-label">後工程</span>
+        <a class="chip chip-down" href="ifc-converter.html">IFCスキーマ変換 IFC_Converter</a>
+        <a class="chip chip-down" href="ifc2rhino.html">IFC⇔Rhino変換 ifc2rhino</a>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:16px">「重すぎて扱えないIFC」を<strong>まず軽くする</strong>前処理。ここで小さくしてから変換・結合に流すのが賢い使い方です。</p>
+  </div>
+</section>
+
+<!-- 7. 実データでためす -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">5</span>実データでためす</h2>
+    <div class="sample-box">
+      <span class="sample-file"><span class="ico">🧩</span> 重くて開けないIFC</span>
+      <p class="sample-desc">専用のサンプル.3dmはありません。実務で「重すぎるIFC」を1つ用意して、まず<strong>小さめのファイルで挙動確認</strong>してから本番に使ってください（開発途上のため）。</p>
+      <ol class="steps" style="margin-top:14px">
+        <li><span class="step-title">小さいIFCで練習</span><span class="step-body">最初は軽いIFCで、開く→bbox指定→書き出しの一連が通るかを確認。</span></li>
+        <li><span class="step-title">範囲を絞って抽出</span><span class="step-body">たとえば「1フロアだけ」「特定の通り芯まわりだけ」をbboxで囲んで抽出。</span></li>
+        <li><span class="step-title">サイズと中身を確認</span><span class="step-body">出力IFCのファイルサイズが小さくなり、狙った部材が残っているかをビューアで確認。</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- 8. 注意点・既知の罠 -->
+<section class="section">
+  <div class="wrap">
+    <h2><span class="num">6</span>注意点・既知の罠</h2>
+    <ul class="trap-list">
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 開発途上。大きいファイルは落ちることがある</div>
+        <p>クラッシュ再現テストやerror.logが同居する実験段階のツールです。重いファイルで固まる・落ちる可能性があるので、<strong>こまめに保存</strong>し、元IFCは必ず別に残してください。まず小さなファイルで動作確認を。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 重い形状はタイムアウトで打ち切られることがある</div>
+        <p>形状計算は <code>core/geom_worker.py</code> で別プロセス＋タイムアウト付きで走ります。処理が重すぎると<strong>一部が打ち切られて抽出漏れ</strong>が起きうるため、出力に狙った部材が全部入っているかを確認してください。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> bboxは「軸並行の箱」。斜め・またぎに注意</div>
+        <p>選択範囲はAABB（座標軸に平行な直方体）です。斜めに配置された部材や、箱の境界を<strong>またぐ部材</strong>の扱いは直感と違うことがあります。境界付近は少し広めに囲むと取りこぼしを防げます。</p>
+      </li>
+      <li class="trap-box">
+        <div class="trap-title"><span class="ico">⚠</span> 出力が増えるので整理を</div>
+        <p>書き出しは <code>&lt;元名&gt;_clip_&lt;timestamp&gt;.ifc</code> という名前で毎回増えていきます。作業フォルダが散らからないよう、不要なclipファイルは適宜整理してください。</p>
+      </li>
+    </ul>
+    <p class="lead" style="margin-top:14px">💡 この機能は統合版 <a href="ifc-merger.html">IFCMerger</a> にも搭載されています（本ツールは単体で引き続き使用可）。</p>
+  </div>
+</section>
+
+<!-- 9. フッタ -->
+<footer class="section site-footer">
+  <div class="wrap">
+    <div class="file-path">
+      <span class="fp-label">実体ファイル</span>
+      C:\Python1\IFC編集ツール\<span class="fp-accent">main.py</span>（形状処理は core\geom_worker.py・想定exe名 IFC_Clipper）
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">← カタログへ戻る</a>
+      <a href="../index.html#cat-ifc">IFC・データ連携の一覧</a>
+      <a href="ifc-converter.html">IFC_Converter へ</a>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/app.js"></script>
+</body>
+</html>

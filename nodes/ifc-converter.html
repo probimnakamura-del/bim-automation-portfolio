@@ -233,7 +233,7 @@
     <h2><span class="num">3</span>使い方</h2>
     <ol class="steps">
       <li><span class="step-title">変換対象のIFC2X3を用意</span><span class="step-body">古い規格のIFC（バージョンが2X3のもの）を手元に置く。</span></li>
-      <li><span class="step-title">ツールを起動</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">IFC_Converter\start.bat</span> を実行（共有venv <code>C:\Python1\.venv</code> をアクティブ化して起動）。CLI版・GUI版どちらでも使える。</span></li>
+      <li><span class="step-title">ツールを起動</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">IFC_Converter\start.bat</span> を実行（共有venv <code>.venv</code> をアクティブ化して起動）。CLI版・GUI版どちらでも使える。</span></li>
       <li><span class="step-title">入力ファイルを指定</span><span class="step-body">変換したい <span class="port" style="color:var(--accent)">input.ifc</span> を選ぶ。</span></li>
       <li><span class="step-title">変換を実行</span><span class="step-body"><b>①</b> entity_patchesで非対応クラスを事前置換 → <b>②</b> Migratorでスキーマ移行 → <b>③</b> validateで検証、が自動で走る。</span></li>
       <li><span class="step-title">レポートを確認</span><span class="step-body">出力 <span class="port" style="color:var(--accent)">output_IFC4.ifc</span> と一緒に出る<strong>警告・エラー</strong>に目を通す。警告が多い場合は元データを見直す。</span></li>
@@ -298,7 +298,7 @@
       </li>
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> 共有venv（.venv）に依存</div>
-        <p>ifcopenshellなどを含む共有仮想環境 <code>C:\Python1\.venv</code> を使います。この環境が壊れる／消えると起動できません。start.batが失敗するときはvenvの状態を先に確認してください。</p>
+        <p>ifcopenshellなどを含む共有仮想環境 <code>.venv</code> を使います。この環境が壊れる／消えると起動できません。start.batが失敗するときはvenvの状態を先に確認してください。</p>
       </li>
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> 変換後の検証は必ず目視</div>

@@ -261,7 +261,7 @@
   <div class="wrap">
     <h2><span class="num">1</span>なにをするツール？</h2>
     <p>鉄骨製作図の自動化ツール群（部材カット・かさ上げ鋼材・部材記号など）を、<strong>人に説明するための「使い方ガイド」スライドをコードから自動生成する</strong>補助ツールです。PowerPointを手で1枚ずつ作る代わりに、<strong>スライドの中身をコードに書いておき、コマンド1回で .pptx を書き出します</strong>。</p>
-    <p>中身は Node.js の <strong>pptxgenjs</strong>（プレゼンをコードで作るライブラリ）を使った <kbd>build_pptx.js</kbd> 1本だけ。タイトル・配色・図解・説明文がスクリプト内に定義してあり、<kbd>node build_pptx.js</kbd> を走らせると <strong>C:\Python1 直下に「ポートフォリオ_使い方ガイド.pptx」が生成</strong>されます。資料を作り直したいときは、コードを直して再実行するだけで毎回同じ体裁のスライドが出来上がります。</p>
+    <p>中身は Node.js の <strong>pptxgenjs</strong>（プレゼンをコードで作るライブラリ）を使った <kbd>build_pptx.js</kbd> 1本だけ。タイトル・配色・図解・説明文がスクリプト内に定義してあり、<kbd>node build_pptx.js</kbd> を走らせると <strong>プロジェクトのルート直下に「ポートフォリオ_使い方ガイド.pptx」が生成</strong>されます。資料を作り直したいときは、コードを直して再実行するだけで毎回同じ体裁のスライドが出来上がります。</p>
     <p class="lead">※ BIM自動化パイプライン本体ではなく、その<strong>説明資料をつくるためのツール</strong>です。他のツールとファイルをやりとりする連携はありません。／ pptx＝PowerPointのファイル形式。</p>
   </div>
 </section>
@@ -285,7 +285,7 @@
         <caption>結果（出力）</caption>
         <thead><tr><th>結果</th><th>説明</th></tr></thead>
         <tbody>
-          <tr><td class="port">ポートフォリオ_<br>使い方ガイド.pptx</td><td><strong>C:\Python1 直下</strong>に生成される PowerPoint ファイル。鉄骨自動化ツールの使い方ガイド。</td></tr>
+          <tr><td class="port">ポートフォリオ_<br>使い方ガイド.pptx</td><td><strong>プロジェクトのルート直下</strong>に生成される PowerPoint ファイル。鉄骨自動化ツールの使い方ガイド。</td></tr>
           <tr><td class="port">（毎回同じ体裁）</td><td>コードから作るので、再実行すれば同じレイアウト・配色で作り直せる。手作業のばらつきが出ない。</td></tr>
         </tbody>
       </table></div>
@@ -298,11 +298,11 @@
   <div class="wrap">
     <h2><span class="num">3</span>使い方</h2>
     <ol class="steps">
-      <li><span class="step-title">フォルダへ移動</span><span class="step-body">ターミナルで <span class="port" style="color:var(--accent)">C:\Python1\_portfolio_build</span> に移動する。</span></li>
+      <li><span class="step-title">フォルダへ移動</span><span class="step-body">ターミナルで <span class="port" style="color:var(--accent)">_portfolio_build</span> に移動する。</span></li>
       <li><span class="step-title">依存をそろえる（初回のみ）</span><span class="step-body"><kbd>npm install</kbd> を実行して pptxgenjs 等をインストール（<kbd>node_modules</kbd> が既にあればスキップ可）。</span></li>
       <li><span class="step-title">内容を編集する（必要なら）</span><span class="step-body">スライドのタイトル・配色・図解を変えたいときは <kbd>build_pptx.js</kbd> のスライド定義を書き換える。</span></li>
       <li><span class="step-title">ビルドする</span><span class="step-body"><kbd>node build_pptx.js</kbd> を実行。数秒で <span class="port" style="color:var(--accent)">ポートフォリオ_使い方ガイド.pptx</span> が生成される。</span></li>
-      <li><span class="step-title">できあがりを開く</span><span class="step-body">C:\Python1 直下に出た .pptx を PowerPoint で開いて確認。体裁を直したければ手順3〜4を繰り返す。</span></li>
+      <li><span class="step-title">できあがりを開く</span><span class="step-body">プロジェクトのルート直下に出た .pptx を PowerPoint で開いて確認。体裁を直したければ手順3〜4を繰り返す。</span></li>
     </ol>
   </div>
 </section>
@@ -329,7 +329,7 @@
       <p class="sample-desc">3Dモデルを扱うツールではないため .3dm のサンプルはありません。スライドの中身はコードに書いてあるので、コマンドを1回走らせれば結果が確認できます。</p>
       <ol class="steps" style="margin-top:14px">
         <li><span class="step-title">まずそのまま実行</span><span class="step-body"><kbd>_portfolio_build</kbd> フォルダで <kbd>node build_pptx.js</kbd> を実行し、既定のスライドが出ることを確かめる。</span></li>
-        <li><span class="step-title">出力を開く</span><span class="step-body">C:\Python1 直下の <span class="port" style="color:var(--accent)">ポートフォリオ_使い方ガイド.pptx</span> を開いて中身を確認する。</span></li>
+        <li><span class="step-title">出力を開く</span><span class="step-body">プロジェクトのルート直下の <span class="port" style="color:var(--accent)">ポートフォリオ_使い方ガイド.pptx</span> を開いて中身を確認する。</span></li>
         <li><span class="step-title">1枚だけ変えてみる</span><span class="step-body"><kbd>build_pptx.js</kbd> のタイトル文字などを少し書き換えて再実行し、変更が反映されることを体感する。</span></li>
       </ol>
     </div>
@@ -350,7 +350,7 @@
         <p>タイトルや図解は <kbd>build_pptx.js</kbd> の中に直書きされています。GUIで編集する仕組みはないため、<strong>内容を変えるにはコードを編集</strong>する必要があります。</p>
       </li>
       <li class="trap-box">
-        <div class="trap-title"><span class="ico">⚠</span> 出力先は C:\Python1 直下（上書きに注意）</div>
+        <div class="trap-title"><span class="ico">⚠</span> 出力先は プロジェクトのルート直下（上書きに注意）</div>
         <p>生成される <kbd>ポートフォリオ_使い方ガイド.pptx</kbd> は毎回<strong>同じ場所に同じ名前で書き出され上書き</strong>されます。手で編集した版があるときは、実行前に別名で退避してください。</p>
       </li>
       <li class="trap-box">

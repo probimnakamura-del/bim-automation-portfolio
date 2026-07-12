@@ -265,7 +265,7 @@
   <div class="wrap">
     <h2><span class="num">1</span>なにをするツール？</h2>
     <p>3Dモデル側にある<strong>通り芯どうしの交わり（交点）を、名前付きで拾い出す</strong>ノードです。「X1」と「Y3」の通り芯が交わる所を <code>X1-Y3</code>、フロアも付ければ <code>1FL_X1-Y3</code> という名前で出力します。この名前付き交点が、あとで<strong>2D図面と3Dモデルの位置をぴったり合わせるための「目印」</strong>になります。</p>
-    <p>読み取り元は、主に<strong>ワークセッションで参照している3Dモデル</strong>の「フロアごとに仕分けられた通り芯レイヤー」です。<code>Pick</code> ボタンを押すと<strong>「モデル → レイヤー → フロア」の3段ポップアップ</strong>が開き、どのモデルのどのレイヤーを対象にするかを設定できます。設定は <code>C:\Python1\gridx_settings.json</code> へ<strong>コンポーネントごとに保存</strong>されるので、Rhinoを再起動しても選び直す必要はありません。<code>GH_ModelPicker</code>・<code>GH_LayerPicker</code> も同じ働きの姉妹ノードです。</p>
+    <p>読み取り元は、主に<strong>ワークセッションで参照している3Dモデル</strong>の「フロアごとに仕分けられた通り芯レイヤー」です。<code>Pick</code> ボタンを押すと<strong>「モデル → レイヤー → フロア」の3段ポップアップ</strong>が開き、どのモデルのどのレイヤーを対象にするかを設定できます。設定は <code>gridx_settings.json</code> へ<strong>コンポーネントごとに保存</strong>されるので、Rhinoを再起動しても選び直す必要はありません。<code>GH_ModelPicker</code>・<code>GH_LayerPicker</code> も同じ働きの姉妹ノードです。</p>
     <p class="lead">※ 通り芯＝建物の基準線（X1, Y1…）。／ ワークセッション＝複数の.3dmを参照として重ねて扱うRhinoの仕組み。他ファイルのモデルを下敷きにできます。</p>
   </div>
 </section>
@@ -362,7 +362,7 @@
       </li>
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> 設定はコンポーネントIDごとに gridx_settings.json へ保存</div>
-        <p>Pickで選んだ設定は <code>C:\Python1\gridx_settings.json</code> に<strong>コンポーネント単位</strong>で保存され、Rhino再起動後も保持されます。裏を返すと、<strong>ノードを作り直すと別IDになり設定が引き継がれない</strong>ことがあります。その場合は Pick からもう一度選び直してください。</p>
+        <p>Pickで選んだ設定は <code>gridx_settings.json</code> に<strong>コンポーネント単位</strong>で保存され、Rhino再起動後も保持されます。裏を返すと、<strong>ノードを作り直すと別IDになり設定が引き継がれない</strong>ことがあります。その場合は Pick からもう一度選び直してください。</p>
       </li>
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> 参照モデルのレイヤーが選択肢に出ないとき</div>

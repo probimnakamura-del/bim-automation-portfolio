@@ -253,7 +253,7 @@
   <div class="wrap">
     <h2><span class="num">1</span>なにをするツール？</h2>
     <p>Make2D図面化パイプラインは<strong>9個ものノードを正しい順番でつなぐ</strong>必要があり、毎回手で並べて配線するのは大変です。このツールは、その面倒な組み立てを<strong>ボタン1つで肩代わり</strong>します。空のGrasshopperキャンバスにこのノードを置いて <span class="port" style="color:var(--accent)">Build</span> を押すだけで、通り芯交点抽出・プランナー・IFC属性検索・接触検出・追加/除外ピッカー・最終選択・Make2D実行・部材記号・寸法注記の<strong>全ノードと配線、グループ枠まで一気に生成</strong>されます。</p>
-    <p>各ノードは「正本の.pyを1行で読み込むスタブ（ローダー）」として置かれるので、あとからコードを直したいときは <span class="file-path" style="display:inline-block;white-space:nowrap;padding:2px 8px">C:\Python1\図面整理\</span> の正本を編集するだけでOK。全ノードに貼り直す必要はありません。さらに、Grasshopperのキャンバスを開かなくても操作できる<strong>常時表示のコントロールパネル</strong>もポップアップし、「通り芯を拾う→断面を決める→Make2D→書き戻す」の手順をパネル上のボタンから順に実行できます。</p>
+    <p>各ノードは「正本の.pyを1行で読み込むスタブ（ローダー）」として置かれるので、あとからコードを直したいときは <span class="file-path" style="display:inline-block;white-space:nowrap;padding:2px 8px">図面整理\</span> の正本を編集するだけでOK。全ノードに貼り直す必要はありません。さらに、Grasshopperのキャンバスを開かなくても操作できる<strong>常時表示のコントロールパネル</strong>もポップアップし、「通り芯を拾う→断面を決める→Make2D→書き戻す」の手順をパネル上のボタンから順に実行できます。</p>
     <p class="lead">※ スタブ（ローダー）＝本体のコードを別ファイルから読み込むだけの短いつなぎ。中身は正本1か所に集約されるので、更新が全ノードへ一発で反映されます。／ このページで扱う旧配布形態「Make2D共有版.zip」については <a href="#note-zip">下の注記</a> を参照してください。</p>
   </div>
 </section>
@@ -292,7 +292,7 @@
       <li><span class="step-title">ビルダーノードを置く</span><span class="step-body">Python 3 Script コンポーネントを1つ置き、<span class="file-path" style="display:inline-block;white-space:nowrap;padding:2px 8px">make2d_system\GH_SystemBuilder.py</span> の内容を貼り付け、入力 <span class="port" style="color:var(--accent)">Build</span>（bool）と出力 <span class="port" style="color:var(--accent)">Report</span> を作る。</span></li>
       <li><span class="step-title">Buildを押す</span><span class="step-body"><span class="port" style="color:var(--accent)">Build</span> に <kbd>Button</kbd> を接続して押す。キャンバスにパイプライン一式（9ノード・全配線・グループ枠）が生成され、Rhino画面に操作パネルが現れる。</span></li>
       <li><span class="step-title">パネルから順に実行</span><span class="step-body">ポップアップした操作パネルの「① 通り芯 → ② 断面プラン → ③ Make2D実行 → ④ 記号・注記」を上から順に実行していく。キャンバスを直接触らなくても回せる。</span></li>
-      <li><span class="step-title">コード修正は正本だけ</span><span class="step-body">ノードの挙動を直したくなったら、貼り直しは不要。<span class="file-path" style="display:inline-block;white-space:nowrap;padding:2px 8px">C:\Python1\図面整理\</span> の正本.pyを編集すれば全ノードに反映される。</span></li>
+      <li><span class="step-title">コード修正は正本だけ</span><span class="step-body">ノードの挙動を直したくなったら、貼り直しは不要。<span class="file-path" style="display:inline-block;white-space:nowrap;padding:2px 8px">図面整理\</span> の正本.pyを編集すれば全ノードに反映される。</span></li>
       <li><span class="step-title">配線が切れたら再Build</span><span class="step-body">誤って配線を消しても、もう一度 <span class="port" style="color:var(--accent)">Build</span> を押せば足りない配線だけ張り直される（既存は温存）。</span></li>
     </ol>
   </div>
@@ -351,7 +351,7 @@
     <ul class="trap-list">
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> Rhino 8（Python 3）専用</div>
-        <p>このシステムは <strong>Rhino 8 の Python 3 コンポーネント</strong>で動きます。共有エンジン <span class="port" style="color:var(--accent)">ghkit</span>（<span class="file-path" style="display:inline-block;white-space:nowrap;padding:2px 8px">C:\Python1\gh_ai_nodegen\ghkit.py</span>）とスタブ置き場（make2d_system\stubs\）が前提です。Rhino 7 / IronPython 環境では動きません。</p>
+        <p>このシステムは <strong>Rhino 8 の Python 3 コンポーネント</strong>で動きます。共有エンジン <span class="port" style="color:var(--accent)">ghkit</span>（<span class="file-path" style="display:inline-block;white-space:nowrap;padding:2px 8px">gh_ai_nodegen\ghkit.py</span>）とスタブ置き場（make2d_system\stubs\）が前提です。Rhino 7 / IronPython 環境では動きません。</p>
       </li>
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> スタブ方式＝正本の場所を動かさない</div>

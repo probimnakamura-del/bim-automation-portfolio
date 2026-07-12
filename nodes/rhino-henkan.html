@@ -335,7 +335,7 @@
         <a class="chip chip-down" href="bim-dashboard.html">BIM Dashboard（進捗・競合監視）</a>
       </div>
     </div>
-    <p class="lead" style="margin-top:16px">前段にIFCの結合・スキーマ変換（<a href="join-ifc-model.html">Join_IFC_model</a> / <a href="ifc-converter.html">IFC_Converter</a> 等）を置くこともできます。実処理本体（<span class="rhk-mono">gh_python_logic.py</span>）と通知先（BIM_Dashboard）は C:\Python1 直下にあり、フォルダ単体では完結しません。</p>
+    <p class="lead" style="margin-top:16px">前段にIFCの結合・スキーマ変換（<a href="join-ifc-model.html">Join_IFC_model</a> / <a href="ifc-converter.html">IFC_Converter</a> 等）を置くこともできます。実処理本体（<span class="rhk-mono">gh_python_logic.py</span>）と通知先（BIM_Dashboard）は プロジェクトのルート直下にあり、フォルダ単体では完結しません。</p>
   </div>
 </section>
 
@@ -362,7 +362,7 @@
     <ul class="trap-list">
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> フォルダ単体で完結しない</div>
-        <p>実処理本体 <span class="rhk-mono">gh_python_logic.py</span>（C:\Python1直下）、通知先 <span class="rhk-mono">BIM_Dashboard</span>、<span class="rhk-mono">.venv</span>（ifcopenshell入り）、Rhino.exeのパスに依存します。<strong>フォルダごと移動すると動かなくなる</strong>ので注意。</p>
+        <p>実処理本体 <span class="rhk-mono">gh_python_logic.py</span>（プロジェクトのルート直下）、通知先 <span class="rhk-mono">BIM_Dashboard</span>、<span class="rhk-mono">.venv</span>（ifcopenshell入り）、Rhino.exeのパスに依存します。<strong>フォルダごと移動すると動かなくなる</strong>ので注意。</p>
       </li>
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> パスが固定されている</div>

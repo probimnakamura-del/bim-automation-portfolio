@@ -285,7 +285,7 @@
         <thead><tr><th>入力</th><th>説明</th></tr></thead>
         <tbody>
           <tr><td class="port">Gmail 受信メール</td><td>対象ラベルの付いた特定案件のメール（スレッド単位で取得）。監視の起点。</td></tr>
-          <tr><td class="port">credentials.json /<br>token.json</td><td>Google API（Gmail/Drive/Sheets）にアクセスするための認証情報。<strong>C:\Python1 直下</strong>から読み込む。</td></tr>
+          <tr><td class="port">credentials.json /<br>token.json</td><td>Google API（Gmail/Drive/Sheets）にアクセスするための認証情報。<strong>プロジェクトのルート直下</strong>から読み込む。</td></tr>
           <tr><td class="port">添付ファイル /<br>Box 共有URL</td><td>メールに付いた図面・書類や、本文中のBox共有リンク。ダウンロードして解析・保存する。</td></tr>
         </tbody>
       </table></div>
@@ -308,7 +308,7 @@
   <div class="wrap">
     <h2><span class="num">3</span>使い方</h2>
     <ol class="steps">
-      <li><span class="step-title">認証情報を置く</span><span class="step-body">Google API の <kbd>credentials.json</kbd> と <kbd>token.json</kbd> を <span class="port" style="color:var(--accent)">C:\Python1 直下</span> に置く（初回はブラウザ認証で token を発行）。</span></li>
+      <li><span class="step-title">認証情報を置く</span><span class="step-body">Google API の <kbd>credentials.json</kbd> と <kbd>token.json</kbd> を <span class="port" style="color:var(--accent)">プロジェクトのルート直下</span> に置く（初回はブラウザ認証で token を発行）。</span></li>
       <li><span class="step-title">設定を確認する</span><span class="step-body"><kbd>config.py</kbd> で監視ラベル・転送先・AIバックエンド（既定 <span class="port" style="color:var(--accent)">ollama</span>）などを確認。ローカルAIを使うなら Ollama を起動しておく。</span></li>
       <li><span class="step-title">起動する</span><span class="step-body">ランチャースクリプトを実行。以降は<strong>20分ごとに自動巡回</strong>し続ける常駐モードに入る。</span></li>
       <li><span class="step-title">まず空振りで試す</span><span class="step-body">いきなり本番転送が不安なときは <kbd>dry_run.py</kbd> を使う。副作用なしで取得・要約だけを確認できる。</span></li>
@@ -353,7 +353,7 @@
     <h2><span class="num">6</span>注意点・既知の罠</h2>
     <ul class="trap-list">
       <li class="trap-box">
-        <div class="trap-title"><span class="ico">⚠</span> 認証情報は C:\Python1 直下から読む</div>
+        <div class="trap-title"><span class="ico">⚠</span> 認証情報は プロジェクトのルート直下から読む</div>
         <p><kbd>credentials.json</kbd> と <kbd>token.json</kbd> は <strong>アプリのルート直下</strong>から読み込まれます。フォルダ内に置いても認識されないので配置場所に注意してください。</p>
       </li>
       <li class="trap-box">
@@ -370,7 +370,7 @@
       </li>
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> 起動用の .bat はリポジトリ外にある可能性</div>
-        <p>起動用の .bat（例：メール転送.bat）が C:\Python1 配下に見当たらないため、実運用の起動元は別の場所（タスクスケジューラ等）の可能性があります。常駐が動いていないときは起動元の在り処を確認してください。</p>
+        <p>起動用の .bat（例：メール転送.bat）が プロジェクト内に見当たらないため、実運用の起動元は別の場所（タスクスケジューラ等）の可能性があります。常駐が動いていないときは起動元の在り処を確認してください。</p>
       </li>
     </ul>
   </div>

@@ -378,7 +378,7 @@
     <ul class="trap-list">
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> フォルダ移動・改名は複数システムを同時に壊す</div>
-        <p><code>ghkit.py</code> は多くのツールが<strong>絶対パスで参照</strong>しています（各ラッパーの先頭、<code>make2d_system</code> の SystemBuilder、<code>section_lower</code> のAI部品ほか）。<code>C:\Python1\gh_ai_nodegen\</code> を移動・改名すると、それらが一斉にimportエラーで止まります。動かす場合は各参照側のパスを直す必要があります。</p>
+        <p><code>ghkit.py</code> は多くのツールが<strong>絶対パスで参照</strong>しています（各ラッパーの先頭、<code>make2d_system</code> の SystemBuilder、<code>section_lower</code> のAI部品ほか）。<code>gh_ai_nodegen\</code> を移動・改名すると、それらが一斉にimportエラーで止まります。動かす場合は各参照側のパスを直す必要があります。</p>
       </li>
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> AIはローカルOllama専用（クラウドAPIは使わない）</div>

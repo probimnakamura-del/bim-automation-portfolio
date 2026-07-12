@@ -291,7 +291,7 @@
   <div class="wrap">
     <h2><span class="num">3</span>使い方</h2>
     <ol class="steps">
-      <li><span class="step-title">サーバを起動する</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">C:\Python1\BIM_Dashboard\webhook_server.py</span> を実行。ローカルの <kbd>localhost:8765</kbd> で待ち受け開始。</span></li>
+      <li><span class="step-title">サーバを起動する</span><span class="step-body"><span class="file-path" style="display:inline-block;white-space:nowrap">BIM_Dashboard\webhook_server.py</span> を実行。ローカルの <kbd>localhost:8765</kbd> で待ち受け開始。</span></li>
       <li><span class="step-title">ダッシュボードを開く</span><span class="step-body">ブラウザで <kbd>http://localhost:8765/</kbd> を開く。ここが状態表示の画面。</span></li>
       <li><span class="step-title">変換パイプラインを回す</span><span class="step-body"><a href="rhino-henkan.html">「ライノセラスに変換」</a> 側を実行すると、処理のたびに <code>notify_dashboard()</code> が状態をPOSTしてくる。</span></li>
       <li><span class="step-title">状態を見る</span><span class="step-body">状態円が<strong>緑（完了）／黄（実行中）／赤（失敗）</strong>に切り替わり、イベント履歴が積み上がる。<code>/api/status</code> で機械的に取得も可能。</span></li>
@@ -325,7 +325,7 @@
     <ul class="trap-list">
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> フォルダ名・場所を変えると送信側が壊れる</div>
-        <p>別プロジェクト「ライノセラスに変換」が <code>from BIM_Dashboard.webhook_sender import notify_dashboard, notify_progress</code> と<strong>パッケージimport</strong>しています。<code>C:\Python1\BIM_Dashboard\</code> を移動・改名すると、そちらのimportが即エラーになります。<code>progress.json</code> / <code>events.json</code> / <code>pipeline_state.json</code> も相対パスで初期化される対象なので消さないこと。</p>
+        <p>別プロジェクト「ライノセラスに変換」が <code>from BIM_Dashboard.webhook_sender import notify_dashboard, notify_progress</code> と<strong>パッケージimport</strong>しています。<code>BIM_Dashboard\</code> を移動・改名すると、そちらのimportが即エラーになります。<code>progress.json</code> / <code>events.json</code> / <code>pipeline_state.json</code> も相対パスで初期化される対象なので消さないこと。</p>
       </li>
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> Teams通知は未設定（そのままでは飛ばない）</div>

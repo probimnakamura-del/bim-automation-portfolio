@@ -105,7 +105,7 @@
 <section class="node-hero">
   <div class="wrap">
     <span class="node-cat-tag">運用・監視・事務</span>
-    <h1 class="node-title">メール要約転送システム <span style="opacity:.7;font-weight:700;font-size:.5em">sannomiya</span></h1>
+    <h1 class="node-title">メール要約転送システム</h1>
     <p class="catch">特定案件のメールを<span class="em">AIが自動で要約</span>して、添付ごと<span class="em">社内へ転送・記録</span>してくれる常駐アシスタント。</p>
     <div class="badges">
       <span class="badge st-live">稼働中（20分ごとに監視）</span>
@@ -309,10 +309,10 @@
     <h2><span class="num">3</span>使い方</h2>
     <ol class="steps">
       <li><span class="step-title">認証情報を置く</span><span class="step-body">Google API の <kbd>credentials.json</kbd> と <kbd>token.json</kbd> を <span class="port" style="color:var(--accent)">C:\Python1 直下</span> に置く（初回はブラウザ認証で token を発行）。</span></li>
-      <li><span class="step-title">設定を確認する</span><span class="step-body"><kbd>sannomiya\config.py</kbd> で監視ラベル・転送先・AIバックエンド（既定 <span class="port" style="color:var(--accent)">ollama</span>）などを確認。ローカルAIを使うなら Ollama を起動しておく。</span></li>
-      <li><span class="step-title">起動する</span><span class="step-body">ランチャー <kbd>sannomiya_pro_sync.py</kbd> を実行（<kbd>py sannomiya_pro_sync.py</kbd>）。以降は<strong>20分ごとに自動巡回</strong>し続ける常駐モードに入る。</span></li>
-      <li><span class="step-title">まず空振りで試す</span><span class="step-body">いきなり本番転送が不安なときは <kbd>sannomiya\dry_run.py</kbd> を使う。副作用なしで取得・要約だけを確認できる。</span></li>
-      <li><span class="step-title">結果を見る</span><span class="step-body">社内への転送メール・スプレッドシートの追記行・Obsidianのログで処理結果を確認。エラーは <kbd>sannomiya\error.log</kbd> に残る。</span></li>
+      <li><span class="step-title">設定を確認する</span><span class="step-body"><kbd>config.py</kbd> で監視ラベル・転送先・AIバックエンド（既定 <span class="port" style="color:var(--accent)">ollama</span>）などを確認。ローカルAIを使うなら Ollama を起動しておく。</span></li>
+      <li><span class="step-title">起動する</span><span class="step-body">ランチャースクリプトを実行。以降は<strong>20分ごとに自動巡回</strong>し続ける常駐モードに入る。</span></li>
+      <li><span class="step-title">まず空振りで試す</span><span class="step-body">いきなり本番転送が不安なときは <kbd>dry_run.py</kbd> を使う。副作用なしで取得・要約だけを確認できる。</span></li>
+      <li><span class="step-title">結果を見る</span><span class="step-body">社内への転送メール・スプレッドシートの追記行・Obsidianのログで処理結果を確認。エラーは <kbd>error.log</kbd> に残る。</span></li>
     </ol>
   </div>
 </section>
@@ -339,9 +339,9 @@
       <p class="sample-desc">3Dモデルを使うツールではないため .3dm のサンプルはありません。動作確認は本物のGmailに対して、まず副作用のないドライランで行うのが安全です。</p>
       <ol class="steps" style="margin-top:14px">
         <li><span class="step-title">テスト用ラベルで試す</span><span class="step-body">本番の転送先を触らずに済むよう、config で監視ラベルをテスト用に切り替えるか、自分宛のメールで確認する。</span></li>
-        <li><span class="step-title">ドライラン</span><span class="step-body"><kbd>sannomiya\dry_run.py</kbd> を実行。取得・要約までを副作用なしで確認できる。</span></li>
+        <li><span class="step-title">ドライラン</span><span class="step-body"><kbd>dry_run.py</kbd> を実行。取得・要約までを副作用なしで確認できる。</span></li>
         <li><span class="step-title">AIバックエンドを切り替えて比較</span><span class="step-body">要約品質を見たいときは config の <span class="port" style="color:var(--accent)">AI_BACKEND</span> を ollama / gemini で切り替えて出力を比べる。</span></li>
-        <li><span class="step-title">本番監視へ</span><span class="step-body">問題なければ <kbd>sannomiya_pro_sync.py</kbd> を常駐起動し、20分ごとの自動巡回に任せる。</span></li>
+        <li><span class="step-title">本番監視へ</span><span class="step-body">問題なければ ランチャースクリプトを常駐起動し、20分ごとの自動巡回に任せる。</span></li>
       </ol>
     </div>
   </div>
@@ -354,7 +354,7 @@
     <ul class="trap-list">
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> 認証情報は C:\Python1 直下から読む</div>
-        <p><kbd>credentials.json</kbd> と <kbd>token.json</kbd> は <strong>sannomiya フォルダの1つ上（C:\Python1 直下）</strong>から読み込まれます。フォルダ内に置いても認識されないので配置場所に注意してください。</p>
+        <p><kbd>credentials.json</kbd> と <kbd>token.json</kbd> は <strong>アプリのルート直下</strong>から読み込まれます。フォルダ内に置いても認識されないので配置場所に注意してください。</p>
       </li>
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> 本番転送は不可逆。まずドライランで確認</div>
@@ -366,7 +366,7 @@
       </li>
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> error.log は自動で消えず溜まり続ける</div>
-        <p>実行エラーは <kbd>sannomiya\error.log</kbd> に追記され続けます（ローテーションなし）。長期常駐で肥大化することがあるので、ときどき中身を確認・整理してください。</p>
+        <p>実行エラーは <kbd>error.log</kbd> に追記され続けます（ローテーションなし）。長期常駐で肥大化することがあるので、ときどき中身を確認・整理してください。</p>
       </li>
       <li class="trap-box">
         <div class="trap-title"><span class="ico">⚠</span> 起動用の .bat はリポジトリ外にある可能性</div>
@@ -379,11 +379,7 @@
 <!-- 9. フッタ -->
 <footer class="section site-footer">
   <div class="wrap">
-    <div class="file-path">
-      <span class="fp-label">実体ファイル（ランチャー）</span>
-      C:\Python1\<span class="fp-accent">sannomiya_pro_sync.py</span>　→　C:\Python1\sannomiya\<span class="fp-accent">main.py / config.py / ai_analyzer.py / storage.py</span>
-    </div>
-    <div class="foot-links">
+<div class="foot-links">
       <a href="../index.html">← カタログへ戻る</a>
       <a href="../index.html#cat-ops">運用・監視・事務の一覧</a>
     </div>
